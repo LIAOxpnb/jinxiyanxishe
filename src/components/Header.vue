@@ -36,19 +36,43 @@
         <el-icon><Bell /></el-icon>
         <span>消息</span>
       </router-link>
-      <router-link to="/login" class="user-action">
+      <div class="user-action" @click="handleLogout">
         <img src="../assets/img/u84.svg" alt="">
-        <span>用户姓名</span>
-      </router-link>
+        <span>退出登录</span>
+      </div>
     </div>
   </el-header>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Setting, School, User, Bell } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const searchQuery = ref('')
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    
+    // 清除本地存储的登录信息
+    localStorage.removeItem('token')
+    localStorage.removeItem('tokenName')
+    
+    ElMessage.success('退出登录成功')
+    
+    // 跳转到登录页面
+    router.push({ name: 'Login' })
+  } catch {
+    // 用户取消操作，不做任何处理
+  }
+}
 </script>
 
 <style scoped>

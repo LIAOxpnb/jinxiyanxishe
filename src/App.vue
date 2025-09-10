@@ -1,16 +1,23 @@
 <template>
   <div id="app">
-    <Header />
-    <main class="app-main-content">
+    <Header v-if="!isLoginPage" />
+    <main class="app-main-content" :class="{ 'login-page': isLoginPage }">
       <router-view />
     </main>
-    <PageFooter />
+    <PageFooter v-if="!isLoginPage" />
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Header from './components/Header.vue';
 import PageFooter from './components/PageFooter.vue';
+
+const route = useRoute()
+
+// 检查当前是否为登录页面
+const isLoginPage = computed(() => route.name === 'Login')
 </script>
 
 <style>
@@ -34,5 +41,9 @@ body {
   flex-grow: 1;
   /* 只保留左右内边距，去掉顶部间隙以使页面头部背景贴近页面顶部 */
   padding: 0 px;
+}
+
+.app-main-content.login-page {
+  padding: 0;
 }
 </style>

@@ -44,7 +44,15 @@ import Login from '../views/Login.vue'
 // - 模块页面（如教学中心、系统管理）使用 `Layout.vue` 作为父级 layout，并在其 children 中注册子页面。
 // - 子页面的 name 建议加模块前缀（例如：TeachingCenter-Classes、System-Dashboard），避免同名冲突。
 const routes = [
-  { path: '/', name: 'Home', component: Home },
+  // 根路径重定向：如果用户已登录则进入首页，否则进入登录页
+  { 
+    path: '/', 
+    redirect: (to) => {
+      const token = localStorage.getItem('token')
+      return token ? '/home' : '/login'
+    }
+  },
+  { path: '/home', name: 'Home', component: Home },
   {
     path: '/teaching-center',
     name: 'TeachingCenter',
@@ -100,6 +108,36 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// 路由守卫：检查用户登录状态
+router.beforeEach((to, from, next) => {
+  // 检查用户是否已登录（通过localStorage中的token判断）
+  const token = localStorage.getItem('token')
+  const isLoggedIn = !!token
+  
+  // 如果访问登录页面
+  if (to.name === 'Login') {
+    // 如果已经登录，重定向到首页
+    if (isLoggedIn) {
+      next({ name: 'Home' })
+    } else {
+      next()
+    }
+  } else {
+    // 访问其他页面时，检查是否已登录
+    if (isLoggedIn) {
+      next()
+    } else {
+      // 未登录，重定向到登录页面
+      // 保存用户想要访问的页面，登录后可以跳转回去
+      const redirectPath = to.fullPath !== '/' ? to.fullPath : '/home'
+      next({ 
+        name: 'Login', 
+        query: { redirect: redirectPath }
+      })
+    }
+  }
 })
 
 export default router

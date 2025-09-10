@@ -62,9 +62,9 @@
       </div>
     </div>
 
-    <div class="page-footer">
+    <!-- <div class="page-footer">
       <span>重庆市公安局信通总队</span>&nbsp;&nbsp;|&nbsp;&nbsp;<span>产品研发部</span>
-    </div>
+    </div> -->
   </div>
 </template>
 
