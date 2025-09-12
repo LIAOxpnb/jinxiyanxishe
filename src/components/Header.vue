@@ -8,7 +8,7 @@
       <router-link :to="{ name: 'Home' }" class="nav-item">首页</router-link>
       <router-link :to="{ name: 'Courses' }" class="nav-item">课程</router-link>
       <router-link :to="{ name: 'Practice' }" class="nav-item">练习</router-link>
-      <router-link :to="{ name: 'Exams' }" class="nav-item">考试</router-link>
+      <router-link :to="{ name: 'Student-Exams' }" class="nav-item">考试</router-link>
       <router-link :to="{ name: 'ShootingRange' }" class="nav-item">靶场</router-link>
       <router-link :to="{ name: 'Classes' }" class="nav-item">班级</router-link>
     </div>
@@ -61,9 +61,13 @@ const handleLogout = async () => {
       type: 'warning'
     })
     
-    // 清除本地存储的登录信息
-    localStorage.removeItem('token')
-    localStorage.removeItem('tokenName')
+    // 清除本地或会话存储中的登录信息
+    try {
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('tokenName')
+    } catch (e) {
+      // ignore
+    }
     
     ElMessage.success('退出登录成功')
     

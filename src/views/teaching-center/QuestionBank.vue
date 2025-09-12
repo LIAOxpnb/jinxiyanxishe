@@ -33,8 +33,8 @@
 
     <el-main class="right-panel">
       <h1 class="page-title">题库</h1>
-      <el-alert title="【新】新增三种模式：手动新增（可点击查看原型）、AI新增（可点击查看原型）、批量导入（见下方批量管理）" type="error" :closable="false" class="custom-alert"></el-alert>
-      <FilterBar create-button-text="新增试题" :fields="questionFilterFields" @create="handleCreateQuestion" @filter="handleFilterQuestions" />
+      <!-- <el-alert title="【新】新增三种模式：手动新增（可点击查看原型）、AI新增（可点击查看原型）、批量导入（见下方批量管理）" type="error" :closable="false" class="custom-alert"></el-alert> -->
+  <FilterBar create-button-text="新增试题" :fields="questionFilterFields" :createOptions="createOptions" @create="handleCreateQuestion" @filter="handleFilterQuestions" />
 
       <el-table v-loading="tableLoading" :data="tableData" style="width: 100%" :header-cell-style="{ background: '#f5f7fa', color: '#606266' }">
         <el-table-column type="selection" width="55" />
@@ -117,6 +117,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { ArrowDown, Delete, More } from '@element-plus/icons-vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import FilterBar from '@/components/FilterBar.vue'; // 确保您有这个子组件
 
@@ -128,7 +129,8 @@ import {
   getQuestionList,
   saveQuestionList,
   updateQuestion,
-  getQuestionDetail
+  getQuestionDetail,
+  deleteQuestion
 } from '../../api/teaching-center/QuestionBank'; // 确保路径正确
 
 // --- 左侧分组状态 ---
@@ -151,10 +153,18 @@ const questionFilterFields = ref([
   { type: 'select', model: 'difficulty', placeholder: '难度', options: [ { label: '简单', value: 'easy' }, { label: '中等', value: 'medium' }, { label: '困难', value: 'hard' } ] },
 ]);
 
+// 创建按钮的下拉选项
+const createOptions = ref([
+  { label: '手动新增', value: 'manual' },
+  { label: 'AI新增', value: 'ai' },
+  { label: '批量导入', value: 'batch' }
+]);
+
 // --- 新增/编辑弹窗的状态 ---
 const dialogVisible = ref(false);
 const dialogMode = ref('add'); // 'add' 或 'edit'
-const dialogTitle = computed(() => dialogMode.value === 'add' ? '新增试题' : '编辑试题');
+// 可写的弹窗标题（根据不同创建模式/编辑状态调整）
+const dialogTitle = ref('新增试题');
 const questionForm = reactive({ // 弹窗表单的数据模型
   id: null,
   title: '',
@@ -164,6 +174,8 @@ const questionForm = reactive({ // 弹窗表单的数据模型
   difficulty: '',
   analysis: '',
 });
+
+const router = useRouter();
 
 // --- API 调用与事件处理 ---
 
@@ -288,18 +300,30 @@ const handleFilterQuestions = (filterData) => {
     fetchQuestions();
 };
 
-// 点击“新增试题”按钮
-const handleCreateQuestion = () => {
-  // 重置表单
-  Object.keys(questionForm).forEach(key => {
-    questionForm[key] = null;
-  });
-  // 如果当前在某个分组下，可以默认带上分组ID
-  if (activeGroupId.value !== 'all') {
-    questionForm.groupId = activeGroupId.value;
-  }
-  dialogMode.value = 'add';
+// 新的创建入口：接收命令（'manual' | 'ai' | 'batch'）
+const handleCreateQuestion = (command) => {
+  if (command === 'manual') {
+    // 跳转到产品指定的“手动新增”页面（产品会提供该页面）
+    // 将当前分组 id 作为 query 传递，方便页面自动带入分组
+    const query = {};
+    if (activeGroupId.value && activeGroupId.value !== 'all') query.groupId = activeGroupId.value;
+    router.push({ path: '/teaching-center/question/manual-add', query });
+  } else if (command === 'ai') {
+    // 跳转或打开 AI 新增 的页面/弹窗（此处简单示例为打开弹窗并预设模式）
+    Object.keys(questionForm).forEach(key => { questionForm[key] = null; });
+    if (activeGroupId.value !== 'all') questionForm.groupId = activeGroupId.value;
+    dialogMode.value = 'add';
+  dialogTitle.value = 'AI 新增试题';
   dialogVisible.value = true;
+  } else if (command === 'batch') {
+    // 跳转到批量导入/管理区域（如果页面下方有批量管理组件，可以跳到那里）
+    // 这里我们简单滚动到表格底部，提示用户使用批量管理
+    ElMessage.info('请在下方批量管理区域执行导入操作');
+    // 可选：滚动到页面底部
+    setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50);
+  } else {
+    console.warn('未知的创建命令：', command);
+  }
 };
 
 // 点击“编辑”按钮或标题
@@ -308,8 +332,9 @@ const handleEditQuestion = async (row) => {
     const res = await getQuestionDetail(row.id);
     if (res.code === 200 && res.data) {
       Object.assign(questionForm, res.data);
-      dialogMode.value = 'edit';
-      dialogVisible.value = true;
+  dialogMode.value = 'edit';
+  dialogTitle.value = '编辑试题';
+  dialogVisible.value = true;
     } else {
       ElMessage.error(res.msg || '获取题目详情失败');
     }
@@ -336,7 +361,7 @@ const handleDeleteQuestion = (row) => {
   }).then(async () => {
     try {
       // 这里需要调用删除试题的API，假设API函数名为 deleteQuestion
-      // await deleteQuestion(row.id);
+      await deleteQuestion(row.id);
       ElMessage.success('删除成功！');
       fetchQuestions(); // 刷新表格数据
     } catch (error) {

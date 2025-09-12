@@ -1,6 +1,20 @@
 <template>
   <div class="filter-bar">
-    <el-button type="primary" @click="onCreate">{{ createButtonText }}</el-button>
+    <template v-if="props.createOptions && props.createOptions.length">
+        <el-dropdown @command="onCreateOption">
+          <el-button type="primary">
+            {{ createButtonText }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-for="opt in props.createOptions" :key="opt.value" :command="opt.value">{{ opt.label }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </template>
+    <template v-else>
+      <el-button type="primary" @click="onCreate">{{ createButtonText }}</el-button>
+    </template>
 
     <template v-for="field in fields" :key="field.model">
       <el-input
@@ -31,6 +45,7 @@
 
 <script setup>
 import { reactive, watch } from 'vue';
+import { ArrowDown } from '@element-plus/icons-vue';
 
 // 定义组件接收的 props
 const props = defineProps({
@@ -44,6 +59,12 @@ const props = defineProps({
     type: Array,
     required: true,
     // validator: (value) => { ... } // 可以在这里添加复杂的校验逻辑
+  }
+  ,
+  // 可选：创建按钮的下拉选项数组，格式：[{ label: '手动新增', value: 'manual' }, ...]
+  createOptions: {
+    type: Array,
+    default: null
   }
 });
 
@@ -71,6 +92,12 @@ watch(() => props.fields, (newFields) => {
 // “创建”按钮点击事件
 const onCreate = () => {
   emit('create');
+};
+
+// 下拉创建项选择
+const onCreateOption = (command) => {
+  // 发出 create 事件并携带所选命令
+  emit('create', command);
 };
 
 // “筛选”按钮点击事件

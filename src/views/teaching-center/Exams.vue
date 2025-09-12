@@ -14,123 +14,398 @@
         create-button-text="创建考试"
         :fields="examFilterFields"
         @create="handleCreateExam"
-        @filter="handleFilterExams"
+        @filter="handleFilter"
       />
 
       <el-table 
+        v-loading="loading"
         :data="tableData" 
         style="width: 100%"
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
+        @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="examName" label="考试名称" min-width="120" />
-        <el-table-column prop="publishStatus" label="发布" width="90">
+        <el-table-column prop="name" label="考试名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="status" label="发布" width="90">
           <template #default="scope">
             <el-tag
-              :type="scope.row.publishStatus === '已发布' ? 'success' : 'danger'"
+              :type="scope.row.status === 1 ? 'success' : 'danger'"
               disable-transitions
-            >{{ scope.row.publishStatus }}</el-tag>
+            >{{ scope.row.status === 1 ? '已发布' : '未发布' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="examTime" label="考试时间" width="210">
+        <el-table-column label="考试时间" width="210">
            <template #default="scope">
-            <div v-html="scope.row.examTime"></div>
+            <div v-if="scope.row.examDate === 0">不限时</div>
+            <div v-else>
+              <div>开始 {{ scope.row.startTime }}</div>
+              <div>结束 {{ scope.row.endTime }}</div>
+            </div>
            </template>
         </el-table-column>
-        <el-table-column prop="duration" label="考试时长" width="90" />
-        <el-table-column prop="category" label="分类" min-width="100" />
+        <el-table-column prop="duration" label="考试时长" width="100">
+           <template #default="scope">
+            {{ scope.row.duration === -1 ? '不限制' : `${scope.row.duration}分钟` }}
+           </template>
+        </el-table-column>
+        <el-table-column prop="examCategoryName" label="分类" min-width="100" />
         <el-table-column prop="questionCount" label="试题数" width="80" />
         <el-table-column prop="totalScore" label="总分数" width="80" />
-        <el-table-column prop="passCount" label="交卷数" width="80" />
-        <el-table-column prop="passRate" label="合格数" width="80" />
-        <el-table-column prop="grade" label="班级" width="80" />
-        <el-table-column prop="creator" label="创建人" width="100" />
-        <el-table-column prop="creationTime" label="创建时间" width="160" />
+        <el-table-column prop="submitCount" label="交卷数" width="80" />
+        <el-table-column prop="qualifiedCount" label="合格数" width="80" />
+        <el-table-column prop="creatorName" label="创建人" width="120" />
+        <el-table-column prop="createTime" label="创建时间" width="160" />
         <el-table-column label="操作" width="180" fixed="right">
-          <template #default>
-            <el-button link type="primary" size="small">考试设置</el-button>
-            <el-button link type="primary" size="small">阅卷</el-button>
-            <el-button link type="primary" size="small">问卷</el-button>
+          <template #default="scope">
+            <el-button link type="primary" size="small" @click="handleEdit(scope.row)">考试设置</el-button>
+            
+            <el-button link type="primary" size="small" @click="handleMarking(scope.row)">阅卷</el-button>
+            
+            <el-dropdown trigger="click" @command="(command) => handleMoreActions(command, scope.row)">
+              <span class="el-dropdown-link">
+                <el-button link type="primary" size="small">
+                  <el-icon><More /></el-icon>
+                </el-button>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :command="scope.row.status === 1 ? 'cancelPublish' : 'publish'">
+                    {{ scope.row.status === 1 ? '取消发布' : '发布' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="entry">入口</el-dropdown-item>
+                  <el-dropdown-item command="quoteClass">引用班级</el-dropdown-item>
+                  <el-dropdown-item command="copy">复制</el-dropdown-item>
+                  <el-dropdown-item command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
 
       <div class="table-footer">
-        <el-dropdown>
-          <el-button>
-            批量操作<el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item>批量删除</el-dropdown-item>
-              <el-dropdown-item>批量发布</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div>
+          <el-button @click="handleBatchDelete" :disabled="selectedExams.length === 0">批量删除</el-button>
+        </div>
         
         <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          layout="total, prev, pager, next, jumper"
-          :total="102"
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pagination.total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
           background
         >
         </el-pagination>
       </div>
     </div>
+
+    <el-dialog
+      v-model="createDialogVisible"
+      title="创建考试"
+      width="500px"
+      @close="resetCreateForm"
+    >
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="考试名称" prop="name">
+          <el-input 
+            v-model="createForm.name" 
+            placeholder="请输入考试名称"
+            maxlength="30"
+            show-word-limit 
+          />
+          <div class="form-item-hint">【备注】考试名称重复性校验</div>
+        </el-form-item>
+        <el-form-item label="考试分类" prop="examCategory">
+          <el-select v-model="createForm.examCategory" placeholder="请选择分类" style="width: 100%;">
+            <el-option
+              v-for="item in categoryOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCreateExam">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { ArrowDown } from '@element-plus/icons-vue';
-// 引入 FilterBar 组件
+import { ref, reactive, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ArrowDown, More } from '@element-plus/icons-vue'; // [修改] 引入 More 图标
 import FilterBar from '@/components/FilterBar.vue';
+import { getExamList, addExam, deleteExam } from '../../api/teaching-center/Exams.js';
+import { getDictData } from '@/api/system-management/dictionary';
 
-// FilterBar 的配置 (无改动)
+const router = useRouter();
+
+const loading = ref(true);
+const tableData = ref([]);
+const selectedExams = ref([]);
+const filterParams = reactive({
+  name: '',
+  examCategory: '',
+  status: '',
+  isMe: true,
+});
+const pagination = reactive({
+  page: 1,
+  size: 10,
+  total: 0,
+});
+const categoryOptions = ref([]);
+
 const examFilterFields = ref([
-  { type: 'input', model: 'examName', placeholder: '考试名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
-  { type: 'select', model: 'category', placeholder: '分类', options: [] },
+  { type: 'input', model: 'name', placeholder: '考试名称' },
+  { type: 'select', model: 'examCategory', placeholder: '分类', options: categoryOptions },
   { 
     type: 'select', 
     model: 'status', 
     placeholder: '发布状态', 
     options: [
-        { label: '已发布', value: 'published' },
-        { label: '未发布', value: 'unpublished' },
+        { label: '已发布', value: 1 },
+        { label: '未发布', value: 0 },
     ]
   },
-  { type: 'select', model: 'myExam', placeholder: '我的考试', options: [] },
+  { 
+    type: 'select', 
+    model: 'isMe', 
+    placeholder: '范围', 
+    options: [
+        { label: '我的考试', value: true },
+        { label: '全部考试', value: false },
+    ]
+  },
 ]);
 
-// 事件处理函数 (无改动)
+// --- 创建考试对话框相关 ---
+const createDialogVisible = ref(false);
+const createFormRef = ref(null);
+const createForm = reactive({
+  name: '',
+  examCategory: '',
+});
+const createFormRules = reactive({
+  name: [{ required: true, message: '请输入考试名称', trigger: 'blur' }],
+  examCategory: [{ required: true, message: '请选择考试分类', trigger: 'change' }],
+});
+
+const resetCreateForm = () => {
+  if (createFormRef.value) {
+    createFormRef.value.resetFields();
+  }
+};
+
+const fetchExams = async () => {
+  loading.value = true;
+  try {
+    const payload = {
+      ...filterParams,
+      page: pagination.page,
+      size: pagination.size,
+    };
+    const res = await getExamList(payload);
+    if (res.code === 200) {
+      tableData.value = res.data.records || [];
+      pagination.total = res.data.total || 0;
+    } else {
+      ElMessage.error(res.msg || '获取列表失败');
+    }
+  } catch (error) {
+    ElMessage.error('获取列表失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const fetchCategories = async () => {
+  try {
+    const res = await getDictData('exam_category');
+    if (res.code === 200) {
+      categoryOptions.value = res.data.map(item => ({
+        label: item.dictLabel,
+        value: item.dictValue,
+      }));
+    }
+  } catch (error) { 
+    console.error("获取考试分类失败", error);
+    ElMessage.error('获取考试分类选项失败');
+  }
+};
+
+const handleFilter = (data) => {
+  Object.assign(filterParams, data);
+  pagination.page = 1;
+  fetchExams();
+};
+
+const handleSizeChange = (newSize) => {
+  pagination.size = newSize;
+  fetchExams();
+};
+
+const handleCurrentChange = (newPage) => {
+  pagination.page = newPage;
+  fetchExams();
+};
+
 const handleCreateExam = () => {
-  console.log('触发了“创建考试”事件');
+  createDialogVisible.value = true;
 };
 
-const handleFilterExams = (filterData) => {
-  console.log('触发了“筛选”事件，数据为:', filterData);
+const submitCreateExam = async () => {
+  if (!createFormRef.value) return;
+  await createFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        const res = await addExam(createForm);
+        if (res.code === 200) {
+          ElMessage.success('创建成功！');
+          createDialogVisible.value = false;
+          fetchExams();
+        } else {
+          ElMessage.error(res.msg || '创建失败');
+        }
+      } catch (error) {
+        ElMessage.error('创建失败');
+      }
+    }
+  });
 };
 
-// 表格模拟数据 (无改动)
-const tableData = ref([
-  { examName: '考试名称', publishStatus: '未发布', examTime: '不限时', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 0, passRate: 0, grade: 1, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 0, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 2, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 2, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 1, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 1, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-  { examName: '考试名称', publishStatus: '已发布', examTime: '开始 YY-MM-DD HH:mm<br>结束 YY-MM-DD HH:mm', duration: '100分钟', category: '分类名称', questionCount: 100, totalScore: 100, passCount: 100, passRate: 80, grade: 1, creator: '用户名', creationTime: 'YY-MM-DD HH:mm:ss' },
-]);
+const handleEdit = (row) => {
+  // 使用 router.push 按名称跳转到我们新配置的路由
+  router.push({
+    name: 'TeachingCenter-ExamSettings', // 对应步骤二中配置的路由 name
+    params: {
+      id: row.id // 将当前行的考试ID作为参数传递
+    }
+  });
+};
 
-// 分页数据 (pageSize 现在是固定的)
-const currentPage = ref(1);
-const pageSize = ref(10); // 您可以根据需要设置默认的每页条数
+const handleMarking = (row) => {
+  // 使用 router.push 按名称跳转到我们新配置的路由
+  router.push({
+    name: 'TeachingCenter-ExamMarking', // 对应步骤二中配置的路由 name
+    params: {
+      id: row.id // 将当前行的考试ID作为参数传递
+    }
+  });
+};
+
+const handleDelete = (row) => {
+  ElMessageBox.confirm(`确定要删除考试 “${row.name}” 吗？`, '删除提示', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+  }).then(async () => {
+    try {
+      const res = await deleteExam(row.id);
+      if (res.code === 200) {
+        ElMessage.success('删除成功！');
+        fetchExams();
+      } else {
+        ElMessage.error(res.msg || '删除失败');
+      }
+    } catch (error) {
+      ElMessage.error('删除失败');
+    }
+  }).catch(() => {});
+};
+
+const handleSelectionChange = (selection) => {
+  selectedExams.value = selection;
+};
+
+const handleBatchDelete = () => {
+    if (selectedExams.value.length === 0) {
+        ElMessage.warning('请至少选择一项进行删除');
+        return;
+    }
+    ElMessageBox.confirm(`确定要删除选中的 ${selectedExams.value.length} 项考试吗？`, '批量删除确认', {
+        type: 'warning'
+    }).then(async () => {
+        const ids = selectedExams.value.map(item => item.id);
+        try {
+            for (const id of ids) {
+                await deleteExam(id);
+            }
+            ElMessage.success('批量删除成功！');
+            fetchExams();
+        } catch (error) {
+            ElMessage.error('批量删除失败');
+        }
+    }).catch(() => {});
+};
+
+const handleMoreActions = async (command, row) => {
+  switch (command) {
+    case 'publish':
+    case 'cancelPublish':
+      handlePublishCancel(row, command === 'publish' ? 1 : 0);
+      break;
+    case 'entry':
+      ElMessage.info(`跳转到考试入口页面: ${row.id}`);
+      break;
+    case 'quoteClass':
+      ElMessage.info(`引用班级功能: ${row.id}`);
+      break;
+    case 'copy':
+      ElMessage.info(`复制考试功能: ${row.id}`);
+      break;
+    case 'delete':
+      handleDelete(row);
+      break;
+    default:
+      break;
+  }
+};
+
+const handlePublishCancel = async (row, targetStatus) => {
+  const actionText = targetStatus === 1 ? '发布' : '取消发布';
+  ElMessageBox.confirm(`确定要${actionText}考试 “${row.name}” 吗？`, `${actionText}提示`, {
+    type: 'warning',
+    confirmButtonText: actionText,
+    cancelButtonText: '取消',
+  }).then(async () => {
+    try {
+      const res = await updateExamStatus({ id: row.id, status: targetStatus });
+      if (res.code === 200) {
+        ElMessage.success(`${actionText}成功！`);
+        fetchExams();
+      } else {
+        ElMessage.error(res.msg || `${actionText}失败`);
+      }
+    } catch (error) {
+      ElMessage.error(`${actionText}失败`);
+    }
+  }).catch(() => {});
+};
+
+onMounted(() => {
+  fetchExams();
+  fetchCategories();
+});
 </script>
 
 <style scoped>
-/* 样式 (无改动) */
 .page-wrapper {
   background-color: #f0f2f5;
   padding: 20px;
@@ -148,31 +423,27 @@ const pageSize = ref(10); // 您可以根据需要设置默认的每页条数
   font-weight: 600;
 }
 .custom-alert {
-  background-color: #fef0f0;
-  color: #f56c6c;
-  border: 1px solid #fde2e2;
   margin-bottom: 20px;
 }
 .el-table {
   margin-top: 20px;
 }
-.el-tag {
-  border-radius: 4px;
-}
-.el-tag--danger {
-  background-color: #fef0f0;
-  color: #f56c6c;
-  border: 1px solid #fde2e2;
-}
-.el-tag--success {
-  background-color: #f0f9eb;
-  color: #67c23a;
-  border: 1px solid #e1f3d8;
-}
 .table-footer {
   margin-top: 20px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+.form-item-hint {
+  color: #f56c6c;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.el-dropdown-link {
+  cursor: pointer;
+  color: var(--el-color-primary);
+  display: flex;
   align-items: center;
 }
 </style>

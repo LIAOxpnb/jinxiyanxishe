@@ -1,0 +1,300 @@
+<template>
+  <el-container class="batch-add-page">
+    <el-main>
+      <div class="page-header">
+        <h2>批量新增试题</h2>
+        <el-dropdown @command="addQuestion">
+          <el-button type="primary">
+            新增试题<el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="SINGLE_CHOICE">单选题</el-dropdown-item>
+              <el-dropdown-item command="MULTIPLE_CHOICE">多选题</el-dropdown-item>
+              <el-dropdown-item command="TRUE_FALSE">判断题</el-dropdown-item>
+              <el-dropdown-item command="FILL_IN_BLANK">填空题</el-dropdown-item>
+              <el-dropdown-item command="ESSAY">论述题</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+
+      <el-form :model="batchInfo" label-width="100px" class="batch-info-form">
+        <el-row>
+          <el-col :span="8">
+            <el-form-item label="归属分类" prop="questionCategory" required>
+              <el-select v-model="batchInfo.questionCategory" placeholder="请选择">
+                <el-option
+                  v-for="item in categoryOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="试题分组" prop="groupId">
+              <el-select v-model="batchInfo.groupId" placeholder="未分组" style="width: 150px; margin-right: 8px;">
+                <el-option label="未分组" :value="null" />
+                <el-option
+                  v-for="item in groupOptions"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+              <el-button :icon="Refresh" circle @click="fetchGroups" />
+              <el-button :icon="Plus" circle @click="addGroup" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <div class="question-list">
+        <QuestionEditor
+          v-for="(question, index) in questionList"
+          :key="question.uid"
+          :index="index"
+          v-model="questionList[index]"
+          @delete="deleteQuestion(index)"
+          @copy="copyQuestion(index)"
+        />
+        <el-empty v-if="questionList.length === 0" description="请点击右上角按钮新增试题" />
+      </div>
+
+    </el-main>
+    <el-footer class="page-footer">
+      <span>共 {{ questionList.length }} 道题</span>
+      <div>
+        <el-button @click="onCancel">取消</el-button>
+        <el-button type="primary" @click="onSubmit" :disabled="questionList.length === 0">确定</el-button>
+      </div>
+    </el-footer>
+  </el-container>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ArrowDown, Refresh, Plus } from '@element-plus/icons-vue';
+import { saveQuestionList, getQuestionGroupList, addQuestionGroup } from '@/api/teaching-center/QuestionBank';
+import { getDictData } from '@/api/system-management/dictionary';
+import QuestionEditor from '@/components/QuestionEditor.vue';
+import { v4 as uuidv4 } from 'uuid';
+
+const router = useRouter();
+const route = useRoute();
+const questionList = ref([]);
+
+const batchInfo = ref({
+  questionCategory: '',
+  groupId: null,
+});
+
+const categoryOptions = ref([]);
+const groupOptions = ref([]);
+
+const fetchCategories = async () => {
+  try {
+    const res = await getDictData('question_category');
+    if (res.code === 200) {
+      categoryOptions.value = res.data.map(item => ({
+        label: item.dictLabel,
+        value: item.dictValue,
+      }));
+    } else { ElMessage.error('获取分类失败'); }
+  } catch (error) { ElMessage.error('获取分类失败'); }
+};
+
+const fetchGroups = async () => {
+  try {
+    const res = await getQuestionGroupList();
+    if (res.code === 200) {
+      groupOptions.value = res.data;
+    } else { ElMessage.error('获取分组列表失败'); }
+  } catch (error) { ElMessage.error('获取分组列表失败'); }
+};
+
+const addGroup = () => {
+  ElMessageBox.prompt('请输入新分组的名称', '新增分组', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    inputValidator: (value) => {
+      if (!value || value.trim() === '') return '分组名称不能为空';
+      return true;
+    },
+  }).then(async ({ value }) => {
+    try {
+      const res = await addQuestionGroup(value);
+      if (res.code === 200) {
+        ElMessage.success('新增分组成功');
+        await fetchGroups();
+      } else { ElMessage.error(res.msg || '新增分组失败'); }
+    } catch (error) { ElMessage.error('新增分组失败'); }
+  }).catch(() => {});
+};
+
+onMounted(() => {
+  fetchCategories();
+  fetchGroups();
+  if (route.query.groupId && route.query.groupId !== 'all') {
+    batchInfo.value.groupId = parseInt(route.query.groupId, 10);
+  }
+});
+
+// [修改] 前端内部状态与后端中文名称的映射
+const questionTypeMap = {
+  SINGLE_CHOICE: '单选',
+  MULTIPLE_CHOICE: '多选',
+  TRUE_FALSE: '判断',
+  FILL_IN_BLANK: '填空',
+  ESSAY: '论述',
+};
+
+// [修改] 基础试题模板
+const createBaseQuestion = (type) => ({
+  uid: uuidv4(),
+  title: '',
+  details: '',
+  questionType: type,
+  difficulty: 1, // 默认难度为1 (中等)
+  analysisType: 'NO_ANALYSIS',
+  analysisContent: '',
+  options: [{ content: '' }],
+  answer: null,
+  editMode: 'simple', // [新增] 为每个题目增加编辑模式，默认为 'simple'
+    // [新增] 答题限制相关字段
+  answerLimit: 'unlimited',
+  wordCountRange: '',
+  attachmentRequired: 'no',
+});
+
+// [修改] 新增一道题到列表
+const addQuestion = (type) => {
+  const base = createBaseQuestion(type);
+  switch (type) {
+    case 'MULTIPLE_CHOICE':
+      base.answer = [];
+      break;
+    case 'TRUE_FALSE':
+      base.answer = '1';
+      break;
+    case 'FILL_IN_BLANK':
+      base.answer = ['']; // 默认为一个答案空
+      base.options = [];
+      break;
+    case 'ESSAY':
+      base.answer = '';
+      base.options = [];
+      break;
+  }
+  questionList.value.push(base);
+};
+
+const deleteQuestion = (index) => {
+  ElMessageBox.confirm('确定要删除这道题吗?', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    .then(() => {
+      questionList.value.splice(index, 1);
+      ElMessage.success('删除成功');
+    }).catch(() => {});
+};
+
+const copyQuestion = (index) => {
+  const originalQuestion = questionList.value[index];
+  const copiedQuestion = JSON.parse(JSON.stringify(originalQuestion));
+  copiedQuestion.uid = uuidv4();
+  questionList.value.splice(index + 1, 0, copiedQuestion);
+  ElMessage.success('复制成功');
+};
+
+const onCancel = () => {
+  router.back();
+};
+
+// [重点修改] 提交整个列表，完全重写数据转换逻辑
+const onSubmit = async () => {
+  if (questionList.value.length === 0) {
+    ElMessage.warning('请至少添加一道试题');
+    return;
+  }
+  if (!batchInfo.value.questionCategory) {
+    ElMessage.warning('请选择归属分类');
+    return;
+  }
+
+  try {
+    // 核心转换逻辑：将前端的数据结构转换为后端需要的格式
+    const payload = questionList.value.map(q => {
+      const backendQuestion = {
+        questionType: questionTypeMap[q.questionType] || '',
+        title: q.title,
+        groupId: batchInfo.value.groupId || 0,
+        questionCategory: batchInfo.value.questionCategory,
+        details: '',
+        answer: '',
+        difficulty: q.difficulty,
+        analysis: q.analysisType === 'HAS_ANALYSIS' ? q.analysisContent : '',
+        wordLimit: 0,
+        fileUpload: 0,
+        fileName: "",
+        filePath: ""
+      };
+
+      // 根据不同题型，格式化 details 和 answer 字段
+      switch (q.questionType) {
+        case 'SINGLE_CHOICE':
+        case 'MULTIPLE_CHOICE': {
+          const detailsArray = q.options.map((opt, index) => ({
+            option: String.fromCharCode(65 + index),
+            value: opt.content,
+          }));
+          backendQuestion.details = JSON.stringify(detailsArray);
+          
+          if (q.questionType === 'SINGLE_CHOICE' && q.answer !== null) {
+            backendQuestion.answer = String.fromCharCode(65 + q.answer);
+          } else if (q.questionType === 'MULTIPLE_CHOICE' && q.answer && q.answer.length > 0) {
+            backendQuestion.answer = [...q.answer].sort((a,b) => a - b)
+              .map(index => String.fromCharCode(65 + index))
+              .join('#@#');
+          }
+          break;
+        }
+        case 'TRUE_FALSE':
+          backendQuestion.answer = q.answer;
+          break;
+        case 'FILL_IN_BLANK':
+          backendQuestion.answer = q.answer.join('#@#');
+          break;
+        case 'ESSAY':
+          backendQuestion.answer = q.answer;
+          break;
+      }
+      return backendQuestion;
+    });
+
+    console.log('即将发送到后端的数据(Payload):', JSON.stringify(payload, null, 2));
+
+    const res = await saveQuestionList(payload);
+    if (res && res.code === 200) {
+      ElMessage.success('批量新增试题成功');
+      router.push({ path: '/teaching-center/question-bank' });
+    } else {
+      ElMessage.error(res?.msg || '保存失败');
+    }
+  } catch (e) {
+    console.error('提交失败:', e);
+    ElMessage.error('提交失败，请检查网络或联系管理员');
+  }
+};
+</script>
+
+<style scoped>
+/* style 部分无需修改 */
+.batch-add-page { display: flex; flex-direction: column; height: calc(100vh - 88px); }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.batch-info-form { margin-bottom: 20px; padding: 20px 10px 0; background-color: #fcfcfc; border: 1px solid #ebeef5; border-radius: 4px; }
+.question-list { flex-grow: 1; overflow-y: auto; padding-right: 10px; }
+.page-footer { display: flex; justify-content: space-between; align-items: center; background-color: #fff; border-top: 1px solid #ebeef5; padding: 10px 20px; position: sticky; bottom: 0; }
+</style>

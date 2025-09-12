@@ -1,23 +1,59 @@
 import request from '../utils/request';
 
-// 考试相关接口
-export function fetchExams(params) {
-  // params: { page, pageSize, filters... }
-  return request.get('/exams', { params });
+/**
+ * @description [学生端] 获取考试列表
+ * @param {object} data - 查询参数
+ * @param {number} data.page - 页码
+ * @param {number} data.size - 每页数量
+ * @param {string} data.examCategory - 考试分类
+ * @param {string} data.name - 考试名称
+ * @param {string} data.examStatus - 考试状态 (0未开始, 1进行中, 2已结束)
+ */
+export function getStudentExamList(data) {
+  return request({
+    url: '/student/exam/list',
+    method: 'post',
+    data: data
+  });
 }
 
-export function fetchExamById(id) {
-  return request.get(`/exams/${id}`);
+/**
+ * @description [学生端] 查看考试详情
+ * @param {string} id - 考试的ID
+ */
+export function getStudentExamDetail(id) {
+  return request({
+    url: '/student/exam/detail',
+    method: 'get',
+    params: { id }
+  });
 }
 
-export function createExam(data) {
-  return request.post('/exams', data);
+/**
+ * @description [新增] [学生端] 交卷
+ * @param {object} data - 提交的答卷数据
+ * @param {number} data.examId - 考试ID (必填)
+ * @param {Array<object>} data.examSubmitRecordList - 提交记录列表 (必填)
+ * @param {number} data.examSubmitRecordList[].questionId - 题目ID (必填)
+ * @param {string} data.examSubmitRecordList[].userAnswer - 用户答案 (必填)
+ * @param {string} data.examSubmitRecordList[].details - 试卷给的选项，原封不动返回 (必填)
+ */
+export function submitStudentExamPaper(data) {
+  return request({
+    url: '/student/exam/submitPaper', //
+    method: 'post', //
+    data: data //
+  });
 }
 
-export function updateExam(id, data) {
-  return request.put(`/exams/${id}`, data);
-}
-
-export function deleteExam(id) {
-  return request.delete(`/exams/${id}`);
+/**
+ * @description [新增] [学生端] 查看考试结果
+ * @param {string} id - 考试ID
+ */
+export function getStudentExamResult(id) {
+  return request({
+    url: '/student/exam/examRecordDetail', //
+    method: 'get', //
+    params: { id } //
+  });
 }

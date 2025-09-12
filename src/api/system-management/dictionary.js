@@ -21,6 +21,11 @@ export function getDictByType(dictType) {
   });
 }
 
+// 兼容导出：部分页面使用 getDictData 名称，保留此别名以防止导入错误
+export function getDictData(dictType) {
+  return getDictByType(dictType);
+}
+
 // --- 以下是本次新增的三个函数 ---
 
 /**

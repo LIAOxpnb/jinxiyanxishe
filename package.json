@@ -9,7 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@wangeditor/editor": "^5.1.23",
+    "@wangeditor/editor-for-vue": "^5.1.12",
     "axios": "^1.11.0",
+    "uuid": "^13.0.0",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },

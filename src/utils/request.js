@@ -10,13 +10,14 @@ const service = axios.create({
 service.interceptors.request.use(
   (config) => {
     try {
-      const token = localStorage.getItem('token');
+      // 仅从 sessionStorage 读取 token（会话级存储，浏览器关闭后失效）
+      const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : null;
       if (token) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (e) {
-      // ignore localStorage errors in some environments
+      // ignore storage errors in some environments
     }
     return config;
   },

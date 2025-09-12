@@ -6,7 +6,7 @@
         <span class="title">金析社</span>
       </div>
 
-      <form @submit.prevent="handleLogin" class="login-form">
+  <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
           <input type="text" id="phoneNumber" v-model="form.username" placeholder="手机号" />
         </div>
@@ -17,6 +17,7 @@
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
           </span>
         </div>
+  <!-- 使用 sessionStorage 存储 token，登录后在会话结束时清除 -->
         <button type="submit" :disabled="isLoading">
           {{ isLoading ? '登录中...' : '登录' }}
         </button>
@@ -85,6 +86,8 @@ const togglePasswordVisibility = () => {
   isPasswordVisible.value = !isPasswordVisible.value;
 };
 
+// 登录凭证统一使用 sessionStorage 存储（浏览器关闭后失效）
+
 // --- 新增：对话框的显示状态 ---
 const forgetPasswordDialogVisible = ref(false);
 const openAccountDialogVisible = ref(false);
@@ -104,16 +107,24 @@ const handleLogin = async () => {
     
     if (responseData && responseData.data && responseData.data.tokenValue) {
       const { tokenValue, tokenName } = responseData.data;
-      localStorage.setItem('token', tokenValue);
-      localStorage.setItem('tokenName', tokenName);
+      try {
+        sessionStorage.setItem('token', tokenValue);
+        sessionStorage.setItem('tokenName', tokenName);
+      } catch (e) {
+        // ignore storage errors
+      }
       ElMessage.success('登錄成功！');
       
       // 获取重定向路径，如果没有则跳转到首页
       const redirectPath = route.query.redirect || '/home';
       router.push(redirectPath);
     } else if (responseData && responseData.tokenValue) {
-      localStorage.setItem('token', responseData.tokenValue);
-      localStorage.setItem('tokenName', responseData.tokenName);
+      try {
+        sessionStorage.setItem('token', responseData.tokenValue);
+        sessionStorage.setItem('tokenName', responseData.tokenName);
+      } catch (e) {
+        // ignore storage errors
+      }
       ElMessage.success('登錄成功！');
       
       // 获取重定向路径，如果没有则跳转到首页
