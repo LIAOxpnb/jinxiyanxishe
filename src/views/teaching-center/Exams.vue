@@ -3,12 +3,7 @@
     <div class="main-content">
       <h1 class="page-title">考试管理</h1>
       
-      <el-alert
-        title="【备注】默认展示我预约的考试"
-        type="error"
-        :closable="false"
-        class="custom-alert"
-      ></el-alert>
+      <!-- <div class="header-remark">【备注】默认展示我预约的考试</div> -->
 
       <FilterBar
         create-button-text="创建考试"
@@ -149,9 +144,9 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, More } from '@element-plus/icons-vue'; // [修改] 引入 More 图标
+import { ArrowDown, More } from '@element-plus/icons-vue';
 import FilterBar from '@/components/FilterBar.vue';
-import { getExamList, addExam, deleteExam } from '../../api/teaching-center/Exams.js';
+import { getExamList, addExam, deleteExam,updateExamStatus } from '../../api/teaching-center/Exams.js';
 import { getDictData } from '@/api/system-management/dictionary';
 
 const router = useRouter();
@@ -159,12 +154,16 @@ const router = useRouter();
 const loading = ref(true);
 const tableData = ref([]);
 const selectedExams = ref([]);
+
+// 筛选参数，与接口字段完全对应
 const filterParams = reactive({
   name: '',
+  creator: '', // 对应UI上的“创建人”，但后端接口暂不支持
   examCategory: '',
   status: '',
-  isMe: true,
+  isMe: true, // 对应UI上的“范围”，默认为 true
 });
+
 const pagination = reactive({
   page: 1,
   size: 10,
@@ -172,9 +171,17 @@ const pagination = reactive({
 });
 const categoryOptions = ref([]);
 
+// 筛选栏配置，以完全匹配原型图
 const examFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '考试名称' },
-  { type: 'select', model: 'examCategory', placeholder: '分类', options: categoryOptions },
+  { type: 'input', model: 'creator', placeholder: '创建人' }, // 视觉上存在，但功能待后端支持
+  { 
+    type: 'select', 
+    model: 'examCategory', 
+    placeholder: '分类', 
+    options: categoryOptions,
+    clearable: true
+  },
   { 
     type: 'select', 
     model: 'status', 
@@ -182,12 +189,13 @@ const examFilterFields = ref([
     options: [
         { label: '已发布', value: 1 },
         { label: '未发布', value: 0 },
-    ]
+    ],
+    clearable: true
   },
   { 
     type: 'select', 
     model: 'isMe', 
-    placeholder: '范围', 
+    placeholder: '我的考试', 
     options: [
         { label: '我的考试', value: true },
         { label: '全部考试', value: false },
@@ -291,21 +299,19 @@ const submitCreateExam = async () => {
 };
 
 const handleEdit = (row) => {
-  // 使用 router.push 按名称跳转到我们新配置的路由
   router.push({
-    name: 'TeachingCenter-ExamSettings', // 对应步骤二中配置的路由 name
+    name: 'TeachingCenter-ExamSettings',
     params: {
-      id: row.id // 将当前行的考试ID作为参数传递
+      id: row.id
     }
   });
 };
 
 const handleMarking = (row) => {
-  // 使用 router.push 按名称跳转到我们新配置的路由
   router.push({
-    name: 'TeachingCenter-ExamMarking', // 对应步骤二中配置的路由 name
+    name: 'TeachingCenter-ExamMarking',
     params: {
-      id: row.id // 将当前行的考试ID作为参数传递
+      id: row.id
     }
   });
 };
@@ -422,8 +428,11 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 600;
 }
-.custom-alert {
+.header-remark {
+  color: #F56C6C;
   margin-bottom: 20px;
+  font-size: 14px;
+  text-align: right; /* 将备注信息靠右对齐 */
 }
 .el-table {
   margin-top: 20px;

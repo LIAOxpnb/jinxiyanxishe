@@ -14,8 +14,18 @@
           <el-card>
             <template #header>
               <div class="left-panel-header">
-                <el-button type="primary" size="small">新增试题</el-button>
                 <div class="stats-bar">
+                        <el-dropdown @command="addQuestion">
+          <el-button type="primary">
+            新增试题<el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="manual_select">手动选题</el-dropdown-item>
+              <el-dropdown-item command="manual_add">新增试题</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
                   <span>试题数 <span class="stat-value">{{ totalQuestions }}</span> 道</span>
                   <span>总分 <span class="stat-value">{{ totalScore }}</span> 分</span>
                   <span>合格分 <span class="stat-value">{{ examDetails.qualified }}</span> 分</span>
@@ -80,6 +90,16 @@
               <el-descriptions-item label="禁止复制">{{ examDetails.disableCopy === 1 ? '开启' : '关闭' }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
+          
+          <div class="action-buttons">
+            <el-button 
+              :type="examDetails.status === 1 ? 'danger' : 'primary'"
+              @click="handleTogglePublishStatus"
+            >
+              {{ examDetails.status === 1 ? '取消发布' : '发布' }}
+            </el-button>
+          </div>
+          
         </div>
       </div>
     </div>
@@ -140,12 +160,28 @@
           </template>
         </el-form-item>
         <el-form-item label="人员范围">
-           <el-radio-group v-model="editForm.scope">
+           <el-radio-group v-model="editForm.scope" @change="handleScopeChange">
             <el-radio :label="1">指定人员</el-radio>
-            <el-radio :label="2">指定班级</el-radio>
+            <el-radio :label="2" disabled>指定班级</el-radio>
           </el-radio-group>
-          <div style="margin-top: 10px; width: 100%;">
-              <el-select multiple placeholder="选择人员或班级" style="width: 100%;"></el-select>
+          <div v-if="editForm.scope === 1" style="margin-top: 10px; width: 100%;">
+              <el-select 
+                v-model="selectedScopeItems"
+                multiple 
+                filterable
+                remote
+                :remote-method="searchUsers"
+                :loading="userSearchLoading"
+                placeholder="请输入用户姓名、手机号等搜索" 
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="item in userList"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
               <div class="form-hint">【备注】指定班级后，自动添加到班级设置中</div>
           </div>
         </el-form-item>
@@ -214,17 +250,24 @@
         </template>
     </el-dialog>
 
+    <QuestionSelector
+      v-if="selectorVisible"
+      v-model:visible="selectorVisible"
+      :exam-id="examId"
+      @success="handleSelectionSuccess"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { getExamDetail, updateExam, setExamQuestions, setPassingScore } from '../../api/teaching-center/Exams.js';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus, getUserList } from '../../api/teaching-center/Exams.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { Edit, ArrowDown } from '@element-plus/icons-vue';
 import ExamQuestionCard from '@/components/ExamQuestionCard.vue';
+import QuestionSelector from '@/components/QuestionSelector.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -235,18 +278,23 @@ const examDetails = ref(null);
 const questionList = ref([]);
 const categoryOptions = ref([]);
 
-// --- 弹窗与表单状态 ---
 const basicInfoDialogVisible = ref(false);
 const examSettingsDialogVisible = ref(false);
 const batchSetScoreDialogVisible = ref(false);
 const setPassingScoreDialogVisible = ref(false);
+const selectorVisible = ref(false);
+
 const editForm = ref(null);
 const batchScoreForm = ref({});
 const passingScoreForm = ref({ qualified: 0 });
 const isDurationLimited = ref(false);
 const customDuration = ref(60);
 
-// --- 监听与计算属性 ---
+const userList = ref([]);
+const classList = ref([]);
+const selectedScopeItems = ref([]);
+const userSearchLoading = ref(false);
+
 watch(() => editForm.value?.duration, (newVal) => {
   isDurationLimited.value = newVal !== -1;
   if(newVal !== -1) {
@@ -273,11 +321,8 @@ const questionCountsByType = computed(() => {
     return questionList.value.reduce((acc, item) => {
         const type = item.question?.questionType;
         if (!type) return acc;
-
-        // 将后端的中文题型映射为内部使用的英文键
         const typeKeyMap = { '单选': 'SINGLE_CHOICE', '多选': 'MULTIPLE_CHOICE', '判断': 'TRUE_FALSE', '填空': 'FILL_IN_BLANK', '论述': 'ESSAY', '简答': 'ESSAY' };
         const key = typeKeyMap[type];
-
         if (key) {
            if (!acc[key]) acc[key] = 0;
            acc[key]++;
@@ -300,7 +345,16 @@ const questionTypesForBatchScore = ref([
     { type: 'ESSAY', name: '简答' },
 ]);
 
-// --- 方法 ---
+const scopeOptions = computed(() => {
+  if (!editForm.value) return [];
+  return editForm.value.scope === 1 ? userList.value : classList.value;
+});
+
+const scopePlaceholder = computed(() => {
+  if (!editForm.value) return '';
+  return editForm.value.scope === 1 ? '请输入用户姓名、手机号等搜索' : '请选择指定班级';
+});
+
 const goBack = () => {
   router.back();
 };
@@ -316,7 +370,6 @@ const fetchExamDetails = async () => {
       ElMessage.error(res.msg || '获取考试详情失败');
     }
   } catch (error) {
-    console.error("获取考试详情失败:", error);
     ElMessage.error('获取考试详情失败');
   } finally {
     loading.value = false;
@@ -335,6 +388,24 @@ const fetchCategories = async () => {
   } catch (error) { console.error("获取考试分类失败", error); }
 };
 
+const searchUsers = async (query) => {
+    if (!query) {
+        userList.value = [];
+        return;
+    }
+    userSearchLoading.value = true;
+    try {
+        const res = await getUserList({ pageNum: 1, pageSize: 50, param: query, teacher: 1 });
+        if(res.code === 200) {
+            userList.value = res.data.records.map(u => ({ id: u.id, name: u.name || u.username }));
+        }
+    } catch(error) {
+        console.error("搜索用户失败:", error);
+    } finally {
+        userSearchLoading.value = false;
+    }
+};
+
 const openBasicInfoDialog = () => {
   editForm.value = JSON.parse(JSON.stringify(examDetails.value));
   basicInfoDialogVisible.value = true;
@@ -342,10 +413,33 @@ const openBasicInfoDialog = () => {
 
 const openExamSettingsDialog = () => {
   editForm.value = JSON.parse(JSON.stringify(examDetails.value));
+  selectedScopeItems.value = [];
+  
+  if (editForm.value.clazzUserBindList && editForm.value.scope === 1) {
+    userList.value = editForm.value.clazzUserBindList.map(item => ({ id: item.userId, name: item.userName || `用户ID:${item.userId}`}));
+    selectedScopeItems.value = editForm.value.clazzUserBindList.map(item => item.userId).filter(Boolean);
+  } else if (editForm.value.clazzUserBindList && editForm.value.scope === 2) {
+    // 班级逻辑暂不处理
+    classList.value = editForm.value.clazzUserBindList.map(item => ({ id: item.clazzId, name: item.clazzName || `班级ID:${item.clazzId}`}));
+    selectedScopeItems.value = editForm.value.clazzUserBindList.map(item => item.clazzId).filter(Boolean);
+  }
   examSettingsDialogVisible.value = true;
 };
 
 const submitUpdate = async () => {
+    if (editForm.value.scope === 1) {
+        editForm.value.clazzUserBindList = selectedScopeItems.value.map(id => ({ userId: id }));
+    } else if (editForm.value.scope === 2) {
+        editForm.value.clazzUserBindList = selectedScopeItems.value.map(id => ({ clazzId: id }));
+    } else {
+        editForm.value.clazzUserBindList = [];
+    }
+    
+    if (editForm.value.scope !== 0 && editForm.value.clazzUserBindList.length === 0) {
+      ElMessage.warning('请至少选择一个指定人员或班级');
+      return;
+    }
+
     try {
         loading.value = true;
         const res = await updateExam(editForm.value);
@@ -358,7 +452,6 @@ const submitUpdate = async () => {
             ElMessage.error(res.msg || '更新失败');
         }
     } catch(error) {
-        console.error("更新考试失败:", error);
         ElMessage.error('更新失败');
     } finally {
         loading.value = false;
@@ -367,16 +460,11 @@ const submitUpdate = async () => {
 
 const openBatchSetScoreDialog = () => {
     const defaultScores = {};
-    questionTypesForBatchScore.value.forEach(item => {
-        defaultScores[item.type] = 5;
-    });
-    // 尝试用现有题目的平均分初始化，更智能
+    questionTypesForBatchScore.value.forEach(item => { defaultScores[item.type] = 5; });
     questionList.value.forEach(item => {
         const typeKeyMap = { '单选': 'SINGLE_CHOICE', '多选': 'MULTIPLE_CHOICE', '判断': 'TRUE_FALSE', '填空': 'FILL_IN_BLANK', '论述': 'ESSAY', '简答': 'ESSAY' };
         const key = typeKeyMap[item.question.questionType];
-        if (key) {
-            defaultScores[key] = item.score; // 如果有分数，则使用
-        }
+        if (key) { defaultScores[key] = item.score; }
     });
     batchScoreForm.value = defaultScores;
     batchSetScoreDialogVisible.value = true;
@@ -395,47 +483,72 @@ const openSetPassingScoreDialog = () => {
 
 const submitBatchScores = async () => {
     const typeKeyMap = { '单选': 'SINGLE_CHOICE', '多选': 'MULTIPLE_CHOICE', '判断': 'TRUE_FALSE', '填空': 'FILL_IN_BLANK', '论述': 'ESSAY', '简答': 'ESSAY' };
-    
     const examQuestionListPayload = questionList.value.map(q => ({
         questionId: q.questionId,
-        // 根据中文题型找到对应的英文key，再从表单取值
         score: batchScoreForm.value[typeKeyMap[q.question.questionType]] || 0,
         sort: q.sort
     }));
-    
     try {
-        const res = await setExamQuestions({
-            id: examId.value,
-            examQuestionList: examQuestionListPayload
-        });
+        const res = await setExamQuestions({ id: examId.value, examQuestionList: examQuestionListPayload });
         if (res.code === 200) {
             ElMessage.success('批量设置分数成功！');
             batchSetScoreDialogVisible.value = false;
-            await fetchExamDetails(); // 重新获取数据以更新总分等
+            await fetchExamDetails();
         } else {
             ElMessage.error(res.msg || '操作失败');
         }
-    } catch(error) {
-        ElMessage.error('操作失败');
-    }
+    } catch(error) { ElMessage.error('操作失败'); }
 };
 
 const submitPassingScore = async () => {
     try {
-        const res = await setPassingScore({
-            id: examId.value,
-            qualified: passingScoreForm.value.qualified
-        });
+        const res = await setPassingScore({ id: examId.value, qualified: passingScoreForm.value.qualified });
          if (res.code === 200) {
             ElMessage.success('设置合格分成功！');
             setPassingScoreDialogVisible.value = false;
-            await fetchExamDetails(); // 重新获取数据以更新合格分
+            await fetchExamDetails();
         } else {
             ElMessage.error(res.msg || '操作失败');
         }
-    } catch(error) {
-        ElMessage.error('操作失败');
-    }
+    } catch(error) { ElMessage.error('操作失败'); }
+};
+
+const handleTogglePublishStatus = async () => {
+  if (!examDetails.value) return;
+  if ((!examDetails.value.clazzUserBindList || examDetails.value.clazzUserBindList.length === 0) && examDetails.value.scope !==0) {
+    ElMessage.error('发布失败：请先在“考试设置”中指定参考人员或班级！');
+    return;
+  }
+  const currentStatus = examDetails.value.status;
+  const targetStatus = currentStatus === 1 ? 0 : 1;
+  const actionText = targetStatus === 1 ? '发布' : '取消发布';
+  try {
+    await ElMessageBox.confirm(`您确定要“${actionText}”这场考试吗?`, '操作确认', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' });
+    loading.value = true;
+    const res = await updateExamStatus({ id: examId.value, status: targetStatus });
+    if (res.code === 200) { ElMessage.success(`${actionText}成功！`); await fetchExamDetails(); }
+    else { ElMessage.error(res.msg || `${actionText}失败`); }
+  } catch (error) {
+    if (error !== 'cancel') { ElMessage.error(`${actionText}失败`); }
+  } finally {
+    loading.value = false;
+  }
+};
+
+const addQuestion = (command) => {
+  if (command === 'manual_select') {
+    selectorVisible.value = true;
+  } else if (command === 'manual_add') {
+     router.push({ name: 'TeachingCenter-ManualAddQuestion', query: { examId: examId.value } });
+  }
+};
+
+const handleSelectionSuccess = () => {
+  fetchExamDetails();
+};
+
+const handleScopeChange = () => {
+  selectedScopeItems.value = [];
 };
 
 onMounted(() => {
@@ -444,6 +557,8 @@ onMounted(() => {
     examId.value = id;
     fetchExamDetails();
     fetchCategories();
+    // 首次加载不主动获取用户，等待用户搜索
+    // fetchScopeOptionsData();
   } else {
     ElMessage.error('无效的考试ID');
     loading.value = false;
@@ -452,61 +567,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.exam-settings-page {
-  padding: 20px;
-  background-color: #f0f2f5;
-}
-.page-header-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-right: 12px;
-}
-.main-layout {
-  display: flex;
-  margin-top: 20px;
-  gap: 20px;
-}
-.left-panel {
-  flex: 3;
-  min-width: 0;
-}
-.right-panel {
-  flex: 1;
-  min-width: 300px;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.el-card {
-  border-radius: 4px;
-}
-.form-hint {
-  font-size: 12px;
-  color: #f56c6c;
-  line-height: 1.5;
-}
-.left-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.stats-bar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: 14px;
-  color: #606266;
-}
-.stats-bar .stat-value {
-  color: #303133;
-  font-weight: bold;
-  margin: 0 4px;
-}
-.dialog-stat-text {
-  margin: 0 10px;
-  color: #606266;
-  font-size: 14px;
-}
+.exam-settings-page { padding: 20px; background-color: #f0f2f5; }
+.page-header-title { font-size: 18px; font-weight: 600; margin-right: 12px; }
+.main-layout { display: flex; margin-top: 20px; gap: 20px; }
+.left-panel { flex: 3; min-width: 0; }
+.right-panel { flex: 1; min-width: 300px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.el-card { border-radius: 4px; }
+.form-hint { font-size: 12px; color: #f56c6c; line-height: 1.5; }
+.left-panel-header { display: flex; justify-content: space-between; align-items: center; }
+.stats-bar { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #606266; }
+.stats-bar .stat-value { color: #303133; font-weight: bold; margin: 0 4px; }
+.dialog-stat-text { margin: 0 10px; color: #606266; font-size: 14px; }
+.action-buttons { margin-top: 20px; display: flex; }
+.action-buttons .el-button { width: 100%; height: 40px; font-size: 16px; }
 </style>

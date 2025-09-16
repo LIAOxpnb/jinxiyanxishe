@@ -70,7 +70,7 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
-            <el-link v-if="scope.row.examStatus === 1 || scope.row.examStatus === 2" type="primary" :underline="false" @click="viewResult(scope.row)">
+            <el-link v-if="(scope.row.examStatus === 1 || scope.row.examStatus === 2)&& scope.row.viewPaper === 1" type="primary" :underline="false" @click="viewResult(scope.row)">
               查看考卷
             </el-link>
             <span v-else>-</span>

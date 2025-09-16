@@ -144,7 +144,6 @@ onMounted(() => {
   }
 });
 
-// [修改] 前端内部状态与后端中文名称的映射
 const questionTypeMap = {
   SINGLE_CHOICE: '单选',
   MULTIPLE_CHOICE: '多选',
@@ -153,25 +152,22 @@ const questionTypeMap = {
   ESSAY: '论述',
 };
 
-// [修改] 基础试题模板
 const createBaseQuestion = (type) => ({
   uid: uuidv4(),
   title: '',
   details: '',
   questionType: type,
-  difficulty: 1, // 默认难度为1 (中等)
+  difficulty: 1,
   analysisType: 'NO_ANALYSIS',
   analysisContent: '',
   options: [{ content: '' }],
   answer: null,
-  editMode: 'simple', // [新增] 为每个题目增加编辑模式，默认为 'simple'
-    // [新增] 答题限制相关字段
+  editMode: 'simple',
   answerLimit: 'unlimited',
   wordCountRange: '',
   attachmentRequired: 'no',
 });
 
-// [修改] 新增一道题到列表
 const addQuestion = (type) => {
   const base = createBaseQuestion(type);
   switch (type) {
@@ -182,7 +178,7 @@ const addQuestion = (type) => {
       base.answer = '1';
       break;
     case 'FILL_IN_BLANK':
-      base.answer = ['']; // 默认为一个答案空
+      base.answer = [];
       base.options = [];
       break;
     case 'ESSAY':
@@ -213,7 +209,6 @@ const onCancel = () => {
   router.back();
 };
 
-// [重点修改] 提交整个列表，完全重写数据转换逻辑
 const onSubmit = async () => {
   if (questionList.value.length === 0) {
     ElMessage.warning('请至少添加一道试题');
@@ -224,9 +219,11 @@ const onSubmit = async () => {
     return;
   }
 
+  // --- 诊断日志一：检查从 QuestionEditor 组件接收到的原始前端数据 ---
+  console.log('--- 诊断日志 1: 准备提交的原始前端试题列表 (questionList) ---', JSON.parse(JSON.stringify(questionList.value)));
+
   try {
-    // 核心转换逻辑：将前端的数据结构转换为后端需要的格式
-    const payload = questionList.value.map(q => {
+    const payload = questionList.value.map((q, index) => {
       const backendQuestion = {
         questionType: questionTypeMap[q.questionType] || '',
         title: q.title,
@@ -241,13 +238,12 @@ const onSubmit = async () => {
         fileName: "",
         filePath: ""
       };
-
-      // 根据不同题型，格式化 details 和 answer 字段
+      
       switch (q.questionType) {
         case 'SINGLE_CHOICE':
         case 'MULTIPLE_CHOICE': {
-          const detailsArray = q.options.map((opt, index) => ({
-            option: String.fromCharCode(65 + index),
+          const detailsArray = q.options.map((opt, i) => ({
+            option: String.fromCharCode(65 + i),
             value: opt.content,
           }));
           backendQuestion.details = JSON.stringify(detailsArray);
@@ -256,13 +252,17 @@ const onSubmit = async () => {
             backendQuestion.answer = String.fromCharCode(65 + q.answer);
           } else if (q.questionType === 'MULTIPLE_CHOICE' && q.answer && q.answer.length > 0) {
             backendQuestion.answer = [...q.answer].sort((a,b) => a - b)
-              .map(index => String.fromCharCode(65 + index))
+              .map(i => String.fromCharCode(65 + i))
               .join('#@#');
           }
           break;
         }
         case 'TRUE_FALSE':
           backendQuestion.answer = q.answer;
+          backendQuestion.details = JSON.stringify([
+            { option: 'A', value: '正确' },
+            { option: 'B', value: '错误' }
+          ]);
           break;
         case 'FILL_IN_BLANK':
           backendQuestion.answer = q.answer.join('#@#');
@@ -271,10 +271,18 @@ const onSubmit = async () => {
           backendQuestion.answer = q.answer;
           break;
       }
+
+      // --- 诊断日志二：逐个检查每道题从前端格式转换到后端格式后的结果 ---
+      console.log(`--- 诊断日志 2: 第 ${index + 1} 题转换结果 ---`, {
+        '前端原始数据(q)': JSON.parse(JSON.stringify(q)),
+        '转换后后端格式(backendQuestion)': backendQuestion
+      });
+
       return backendQuestion;
     });
-
-    console.log('即将发送到后端的数据(Payload):', JSON.stringify(payload, null, 2));
+    
+    // --- 诊断日志三：检查最终准备发送给后端的完整数据包 ---
+    console.log('--- 诊断日志 3: 最终发送到后端的数据 (Payload) ---', JSON.stringify(payload, null, 2));
 
     const res = await saveQuestionList(payload);
     if (res && res.code === 200) {
@@ -284,14 +292,14 @@ const onSubmit = async () => {
       ElMessage.error(res?.msg || '保存失败');
     }
   } catch (e) {
-    console.error('提交失败:', e);
-    ElMessage.error('提交失败，请检查网络或联系管理员');
+    // --- 诊断日志四：检查后端返回的错误信息 ---
+    console.error('--- 诊断日志 4: 提交失败，后端返回的错误 ---', e);
+    ElMessage.error('提交失败，请检查控制台中的“诊断日志4”获取详细错误');
   }
 };
 </script>
 
 <style scoped>
-/* style 部分无需修改 */
 .batch-add-page { display: flex; flex-direction: column; height: calc(100vh - 88px); }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .batch-info-form { margin-bottom: 20px; padding: 20px 10px 0; background-color: #fcfcfc; border: 1px solid #ebeef5; border-radius: 4px; }

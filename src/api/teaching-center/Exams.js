@@ -168,3 +168,11 @@ export function submitGradePaper(data) {
     data: data //
   });
 }
+
+/**
+ * @description 获取用户(教师)列表
+ * @param {object} params - 查询参数
+ */
+export function getUserList(params) {
+  return request.post('/admin/user/list', params);
+}

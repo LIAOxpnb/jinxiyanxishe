@@ -23,8 +23,8 @@
                 v-for="(q, index) in questionList" 
                 :key="q.questionId"
                 class="nav-item"
-                :class="{ 'answered': isAnswered(q.questionId) }"
-                @click="scrollToQuestion(q.questionId)"
+                :class="{ 'answered': isAnswered(q.question.id) }"
+                @click="scrollToQuestion('question-' + q.question.id)"
               >
                 {{ index + 1 }}
               </div>
@@ -38,8 +38,8 @@
             :key="item.questionId"
             :question-data="item"
             :index="index"
-            v-model="answers[item.questionId]"
-            :ref="el => questionCardRefs[item.questionId] = el"
+            v-model="answers[item.question.id]"
+            :id="'question-' + item.question.id"
           />
         </div>
       </div>
@@ -52,7 +52,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getStudentExamDetail, submitStudentExamPaper } from '@/api/exams.js'; // 确保路径正确
+import { getStudentExamDetail, submitStudentExamPaper } from '@/api/exams.js';
 import TakeExamQuestionCard from '@/components/TakeExamQuestionCard.vue';
 
 const route = useRoute();
@@ -60,10 +60,11 @@ const router = useRouter();
 
 const loading = ref(true);
 const examId = ref(null);
-const examDetails = ref(null); // [修正] 初始值为 null
+const examDetails = ref(null);
 const questionList = ref([]);
 const answers = reactive({});
-const questionCardRefs = reactive({});
+// [修正] 移除 questionCardRefs，因为它在您的代码中未被使用
+// const questionCardRefs = reactive({}); 
 
 // --- 倒计时逻辑 ---
 let timerInterval = null;
@@ -77,7 +78,7 @@ const formattedCountdown = computed(() => {
 });
 
 const startTimer = (durationMinutes) => {
-  if (durationMinutes <= 0) {
+  if (durationMinutes <= 0 || durationMinutes === -1) { // [修正] 增加 -1 的判断
     remainingSeconds.value = Infinity;
     return;
   }
@@ -93,8 +94,25 @@ const startTimer = (durationMinutes) => {
   }, 1000);
 };
 
+// --- 新增点 1: 阻止复制的事件处理函数 ---
+const preventCopy = (e) => {
+  e.preventDefault();
+  ElMessage.warning('本次考试禁止复制题目内容！');
+};
+
+
 onBeforeUnmount(() => {
   if (timerInterval) clearInterval(timerInterval);
+
+  // --- 新增点 2: 在组件卸载时，移除事件监听以防内存泄漏 ---
+  if (examDetails.value && examDetails.value.disableCopy === 1) {
+    const examContainer = document.querySelector('.take-exam-container');
+    if (examContainer) {
+      examContainer.removeEventListener('copy', preventCopy);
+      examContainer.removeEventListener('cut', preventCopy);
+      examContainer.removeEventListener('contextmenu', preventCopy);
+    }
+  }
 });
 
 // --- 页面逻辑 ---
@@ -112,7 +130,9 @@ const isAnswered = (questionId) => {
 };
 
 const scrollToQuestion = (questionId) => {
-  const targetElement = document.getElementById('question-' + questionId);
+  // [修正] 将滚动目标从 questionId 改为 elementId，与模板中的 id 匹配
+  const elementId = 'question-' + questionId;
+  const targetElement = document.getElementById(elementId);
   if (targetElement) {
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -133,12 +153,12 @@ const submitExam = async () => {
   const payload = {
     examId: examId.value,
     examSubmitRecordList: questionList.value.map(q => {
-      let userAnswer = answers[q.questionId];
+      let userAnswer = answers[q.question.id]; // [修正] 使用 q.question.id
       if (Array.isArray(userAnswer)) {
         userAnswer = userAnswer.sort().join('#@#');
       }
       return {
-        questionId: q.question.id, // [修正] 应该是 question.id
+        questionId: q.question.id,
         userAnswer: userAnswer || '',
         details: q.question.details
       };
@@ -170,8 +190,8 @@ onMounted(async () => {
     if (res.code === 200) {
       examDetails.value = res.data;
       questionList.value = res.data.examQuestionList || [];
+      
       questionList.value.forEach(q => {
-        // [修正] 使用 question.id 作为答案对象的键
         if(q.question.questionType === '多选' || q.question.questionType === '填空') {
           answers[q.question.id] = [];
         } else {
@@ -179,6 +199,17 @@ onMounted(async () => {
         }
       });
       startTimer(examDetails.value.duration);
+
+      // --- 新增点 3: 在获取到考试详情后，根据设置添加事件监听 ---
+      if (examDetails.value.disableCopy === 1) {
+        const examContainer = document.querySelector('.take-exam-container');
+        if (examContainer) {
+          examContainer.addEventListener('copy', preventCopy);      // 监听复制事件 (Ctrl+C)
+          examContainer.addEventListener('cut', preventCopy);       // 监听剪切事件 (Ctrl+X)
+          examContainer.addEventListener('contextmenu', preventCopy); // 监听右键菜单
+        }
+      }
+      
     } else {
       ElMessage.error(res.msg || '获取考试详情失败');
     }
@@ -198,10 +229,11 @@ onMounted(async () => {
 .exam-actions { display: flex; align-items: center; gap: 20px; }
 .countdown { font-size: 16px; color: #f56c6c; font-weight: 500; }
 .exam-body { display: flex; flex-grow: 1; overflow: hidden; padding: 20px; gap: 20px; }
-.left-panel { width: 240px; flex-shrink: 0; }
-.right-panel { flex-grow: 1; overflow-y: auto; }
-.question-nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.left-panel { width: 240px; flex-shrink: 0; overflow-y: auto; } /* [修正] 增加 overflow-y */
+.right-panel { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 20px; border-radius: 4px; } /* [修正] 增加样式 */
+.question-nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 10px; } /* [修正] 调整列数 */
 .nav-item { border: 1px solid #dcdfe6; border-radius: 4px; text-align: center; padding: 8px 0; cursor: pointer; transition: all 0.2s; }
 .nav-item:hover { border-color: #409eff; color: #409eff; }
 .nav-item.answered { background-color: #409eff; color: #fff; border-color: #409eff; }
+.box-card { border-radius: 4px; } /* [新增] 为 el-card 增加圆角 */
 </style>
