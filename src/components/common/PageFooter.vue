@@ -12,8 +12,9 @@
 .script-placeholder
 <script setup>
 // 相对导入资源，避免使用绝对 '/assets/..' 导致 Vite 无法解析
-import badge from '../assets/img/u42.png'
-import badge1 from '../assets/img/u45.svg'
+import badge from '@/assets/img/u42.png'
+import badge1 from '@/assets/img/u45.svg'
+
 </script>
 
 <style scoped>

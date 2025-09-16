@@ -162,7 +162,7 @@ import { ref, reactive, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowDown, Delete, More } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import FilterBar from '@/components/FilterBar.vue';
+import FilterBar from '@/components/common/FilterBar.vue';
 
 import {
   getQuestionGroupList,

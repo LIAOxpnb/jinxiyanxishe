@@ -61,7 +61,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import FilterBar from '@/components/FilterBar.vue';
+import FilterBar from '@/components/common/FilterBar.vue';
 import { getQuestionList } from '@/api/teaching-center/QuestionBank';
 import { setExamQuestions } from '@/api/teaching-center/Exams';
 import { getDictByType as getDictData } from '@/api/system-management/dictionary';

@@ -53,7 +53,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getStudentExamDetail, submitStudentExamPaper } from '@/api/exams.js';
-import TakeExamQuestionCard from '@/components/TakeExamQuestionCard.vue';
+import TakeExamQuestionCard from '@/components/exam/TakeExamQuestionCard.vue';
 
 const route = useRoute();
 const router = useRouter();

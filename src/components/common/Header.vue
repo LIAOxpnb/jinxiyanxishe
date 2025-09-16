@@ -1,7 +1,7 @@
 <template>
   <el-header class="header">
     <div class="logo-title">
-      <img src="../assets/img/u71.png" alt="金分析" class="logo-img"/>
+      <img src="@/assets/img/u71.png" alt="金分析" class="logo-img"/>
       <router-link to="/" class="title-link">金析研习社</router-link>
     </div>
     <div class="nav-links">

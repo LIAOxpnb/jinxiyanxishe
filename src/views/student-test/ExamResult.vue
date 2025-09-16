@@ -66,7 +66,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { getStudentExamResult } from '@/api/exams.js';
-import ExamResultQuestionDisplay from '@/components/ExamResultQuestionDisplay.vue';
+import ExamResultQuestionDisplay from '@/components/exam/ExamResultQuestionDisplay.vue';
 
 const route = useRoute();
 const router = useRouter();

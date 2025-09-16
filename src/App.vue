@@ -11,8 +11,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import Header from './components/Header.vue';
-import PageFooter from './components/PageFooter.vue';
+import Header from './components/common/Header.vue';
+import PageFooter from './components/common/PageFooter.vue';
 
 const route = useRoute()
 

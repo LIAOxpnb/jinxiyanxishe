@@ -81,7 +81,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, Refresh, Plus } from '@element-plus/icons-vue';
 import { saveQuestionList, getQuestionGroupList, addQuestionGroup } from '@/api/teaching-center/QuestionBank';
 import { getDictData } from '@/api/system-management/dictionary';
-import QuestionEditor from '@/components/QuestionEditor.vue';
+import QuestionEditor from '@/components/question/QuestionEditor.vue';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = useRouter();

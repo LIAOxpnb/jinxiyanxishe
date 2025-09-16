@@ -63,7 +63,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { getGradePaperDetail, submitGradePaper } from '../../api/teaching-center/Exams.js';
-import ExamQuestionCardForMarking from '@/components/ExamQuestionCardForMarking.vue';
+import ExamQuestionCardForMarking from '@/components/exam/ExamQuestionCardForMarking.vue';
 
 const route = useRoute();
 const router = useRouter();

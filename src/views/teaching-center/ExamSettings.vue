@@ -266,8 +266,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus, getUserList } from '../../api/teaching-center/Exams.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { Edit, ArrowDown } from '@element-plus/icons-vue';
-import ExamQuestionCard from '@/components/ExamQuestionCard.vue';
-import QuestionSelector from '@/components/QuestionSelector.vue';
+import ExamQuestionCard from '@/components/exam/ExamQuestionCard.vue';
+import QuestionSelector from '@/components/question/QuestionSelector.vue';
 
 const route = useRoute();
 const router = useRouter();
