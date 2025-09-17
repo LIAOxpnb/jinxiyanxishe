@@ -219,6 +219,72 @@ const onSubmit = async () => {
     return;
   }
 
+  // 添加详细的表单校验
+  for (let i = 0; i < questionList.value.length; i++) {
+    const question = questionList.value[i];
+    const questionIndex = i + 1;
+    
+    // 校验题目标题
+    if (!question.title || question.title.trim() === '') {
+      ElMessage.error(`第 ${questionIndex} 题：题目内容不能为空`);
+      return;
+    }
+    
+    // 校验选择题的选项和答案
+    if (question.questionType === 'SINGLE_CHOICE' || question.questionType === 'MULTIPLE_CHOICE') {
+      // 校验选项
+      if (!question.options || question.options.length === 0) {
+        ElMessage.error(`第 ${questionIndex} 题：请至少添加一个选项`);
+        return;
+      }
+      
+      // 校验选项内容
+      const validOptions = question.options.filter(opt => opt.content && opt.content.trim() !== '');
+      if (validOptions.length < 2) {
+        ElMessage.error(`第 ${questionIndex} 题：请至少添加两个有效选项`);
+        return;
+      }
+      
+      // 校验答案
+      if (question.questionType === 'SINGLE_CHOICE') {
+        if (question.answer === null || question.answer === undefined) {
+          ElMessage.error(`第 ${questionIndex} 题：请设置正确答案`);
+          return;
+        }
+      } else if (question.questionType === 'MULTIPLE_CHOICE') {
+        if (!question.answer || question.answer.length === 0) {
+          ElMessage.error(`第 ${questionIndex} 题：请至少选择一个正确答案`);
+          return;
+        }
+      }
+    }
+    
+    // 校验判断题的答案
+    if (question.questionType === 'TRUE_FALSE') {
+      if (!question.answer || (question.answer !== '1' && question.answer !== '0')) {
+        ElMessage.error(`第 ${questionIndex} 题：请设置正确答案（正确或错误）`);
+        return;
+      }
+    }
+    
+    // 校验填空题的答案
+    if (question.questionType === 'FILL_IN_BLANK') {
+      if (!question.answer || question.answer.length === 0 || 
+          question.answer.every(ans => !ans || ans.trim() === '')) {
+        ElMessage.error(`第 ${questionIndex} 题：请设置填空答案`);
+        return;
+      }
+    }
+    
+    // 校验论述题的答案
+    if (question.questionType === 'ESSAY') {
+      if (!question.answer || question.answer.trim() === '') {
+        ElMessage.error(`第 ${questionIndex} 题：请设置参考答案`);
+        return;
+      }
+    }
+  }
+
   // --- 诊断日志一：检查从 QuestionEditor 组件接收到的原始前端数据 ---
   console.log('--- 诊断日志 1: 准备提交的原始前端试题列表 (questionList) ---', JSON.parse(JSON.stringify(questionList.value)));
 

@@ -29,18 +29,26 @@ body {
   background-color: #f4f6f8;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden; /* 防止水平滚动条 */
+}
+
+html, body {
+  height: 100%;
+  overflow-x: hidden; /* 确保没有水平滚动条 */
 }
 
 #app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh; /* 使用视窗高度而不是最小高度 */
+  overflow: hidden; /* 防止整体页面出现滚动条 */
 }
 
 .app-main-content {
-  flex-grow: 1;
-  /* 只保留左右内边距，去掉顶部间隙以使页面头部背景贴近页面顶部 */
-  padding: 0 px;
+  flex: 1; /* 占据剩余空间 */
+  overflow: hidden; /* 防止主内容区域出现滚动条 */
+  padding: 0;
+  background-color: #ffffff; /* 确保主内容区域背景为白色 */
 }
 
 .app-main-content.login-page {

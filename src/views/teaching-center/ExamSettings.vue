@@ -73,7 +73,7 @@
             </el-descriptions>
           </el-card>
 
-          <el-card style="margin-top: 20px;">
+          <el-card>
             <template #header>
               <div class="card-header">
                 <span>考试设置</span>
@@ -567,13 +567,60 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.exam-settings-page { padding: 20px; background-color: #f0f2f5; }
+.exam-settings-page { 
+  padding: 20px; 
+  background-color: #f0f2f5; 
+  height: 100%; 
+  overflow-y: auto; 
+  box-sizing: border-box; 
+}
 .page-header-title { font-size: 18px; font-weight: 600; margin-right: 12px; }
-.main-layout { display: flex; margin-top: 20px; gap: 20px; }
-.left-panel { flex: 3; min-width: 0; }
-.right-panel { flex: 1; min-width: 300px; }
+.main-layout { 
+  display: flex; 
+  margin-top: 20px; 
+  gap: 20px; 
+  height: calc(100% - 80px); /* 减去页头的高度 */
+}
+.left-panel { 
+  flex: 3; 
+  min-width: 0; 
+  display: flex; 
+  flex-direction: column; 
+}
+.right-panel { 
+  flex: 1; 
+  min-width: 300px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 12px; /* 进一步减少卡片之间的间距 */
+  height: fit-content; /* 让右侧面板高度根据内容适配 */
+  position: sticky; /* 让右侧面板保持在顶部位置 */
+  top: 0; /* 粘性定位的偏移量 */
+  align-self: flex-start; /* 确保面板从容器顶部开始 */
+}
+.question-list-container {
+  flex: 1; /* 让容器占据剩余的所有空间 */
+  overflow-y: auto; /* 允许垂直滚动 */
+  padding: 0 8px;
+  min-height: 0; /* 允许 flex 子项收缩 */
+}
 .card-header { display: flex; justify-content: space-between; align-items: center; }
-.el-card { border-radius: 4px; }
+.el-card { 
+  border-radius: 4px; 
+  height: 100%; 
+  display: flex; 
+  flex-direction: column; 
+}
+.el-card :deep(.el-card__header) {
+  flex-shrink: 0; /* 防止头部被压缩 */
+}
+.el-card :deep(.el-card__body) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
 .form-hint { font-size: 12px; color: #f56c6c; line-height: 1.5; }
 .left-panel-header { display: flex; justify-content: space-between; align-items: center; }
 .stats-bar { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #606266; }
@@ -581,4 +628,19 @@ onMounted(() => {
 .dialog-stat-text { margin: 0 10px; color: #606266; font-size: 14px; }
 .action-buttons { margin-top: 20px; display: flex; }
 .action-buttons .el-button { width: 100%; height: 40px; font-size: 16px; }
+
+/* 调整描述列表的行高和间距 */
+.el-descriptions :deep(.el-descriptions__body) {
+  background: #fff;
+}
+.el-descriptions :deep(.el-descriptions-item__cell) {
+  padding: 8px 12px; /* 减少内边距，默认通常是 12px 16px */
+}
+.el-descriptions :deep(.el-descriptions-item__label) {
+  width: 80px; /* 固定标签宽度 */
+  font-weight: 500;
+}
+.el-descriptions :deep(.el-descriptions-item__content) {
+  word-break: break-all;
+}
 </style>

@@ -2,9 +2,9 @@
   <el-container class="page-container">
     <el-aside width="220px" class="left-panel">
       <el-menu :default-active="activeGroupId" class="group-menu" @select="handleGroupSelect">
-        <el-menu-item index="all">
+        <!-- <el-menu-item index="all">
           <span>全部</span>
-        </el-menu-item>
+        </el-menu-item> -->
         <el-menu-item v-for="group in groupList" :key="group.id" :index="group.id.toString()">
           <span class="group-name">{{ group.name }}</span>
           <el-dropdown @command="(command) => handleGroupDropdownCommand(command, group)" @click.stop>
@@ -34,6 +34,7 @@
       <el-table v-loading="tableLoading" :data="tableData" style="width: 100%"
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }">
         <el-table-column type="selection" width="55" />
+        <el-table-column prop="id" label="序号" width="100" />
         <el-table-column prop="title" label="题目">
           <template #default="scope">
             <el-link type="primary" :underline="false" @click="handleEditQuestion(scope.row)">{{ scope.row.title
@@ -53,7 +54,6 @@
         <el-table-column label="操作" width="150">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEditQuestion(scope.row)">编辑</el-button>
-            <!-- <el-button link type="primary" size="small">统计</el-button> -->
             <el-dropdown @command="(command) => handleDropdownCommand(command, scope.row)">
               <el-button link size="small" class="more-btn">
                 <el-icon>
@@ -70,20 +70,9 @@
         </el-table-column>
       </el-table>
       <div class="table-footer">
-        <!-- <el-dropdown>
-          <el-button>
-            批量操作<el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item>批量删除</el-dropdown-item>
-              <el-dropdown-item>批量分组</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown> -->
         <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.size"
-          :page-sizes="[10, 20, 50]" layout="total, prev, pager, next, jumper" :total="total"
-          background></el-pagination>
+          :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" :total="total"
+          background />
       </div>
     </el-main>
 
@@ -143,7 +132,8 @@
             <el-radio :label="true">设置解析</el-radio>
           </el-radio-group>
           <div v-if="showAnalysis" style="margin-top: 10px;">
-            <el-input v-model="questionForm.analysis" type="textarea" :rows="6" style="width: 450px;" placeholder="请输入答案解析" />
+            <el-input v-model="questionForm.analysis" type="textarea" :rows="6" style="width: 450px;"
+              placeholder="请输入答案解析" />
           </div>
         </el-form-item>
       </el-form>
@@ -160,7 +150,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ArrowDown, Delete, More } from '@element-plus/icons-vue';
+import { Delete, More } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import FilterBar from '@/components/common/FilterBar.vue';
 
@@ -186,11 +176,30 @@ const total = ref(0);
 const activeGroupId = ref('all');
 const pagination = reactive({ page: 1, size: 10 });
 const filters = ref({});
-const typeOptions = ref([]);
+
+// --- 筛选栏选项配置 ---
+
+// 【修改点】分类选项保持从字典API动态获取
 const categoryOptions = ref([]);
-const difficultyOptions = ref([]);
+
+// 【修改点】题型选项 - 修改为静态数据
+const typeOptions = ref([
+  { label: '单选题', value: '单选' },
+  { label: '多选题', value: '多选' },
+  { label: '填空题', value: '填空' },
+  { label: '判断题', value: '判断' },
+  { label: '解答题', value: '解答' }
+]);
+
+// 【修改点】难度选项 - 修改为静态数据
+const difficultyOptions = ref([
+  { label: '高', value: 0 },
+  { label: '中', value: 1 },
+  { label: '低', value: 2 }
+]);
 
 const questionFilterFields = ref([
+  { type: 'input', model: 'id', placeholder: '序号' },
   { type: 'input', model: 'title', placeholder: '题目' },
   { type: 'input', model: 'creator', placeholder: '创建人' },
   { type: 'select', model: 'questionType', placeholder: '题型', options: typeOptions },
@@ -200,8 +209,6 @@ const questionFilterFields = ref([
 
 const createOptions = ref([
   { label: '手动新增', value: 'manual' },
-  // { label: 'AI新增', value: 'ai' },
-  // { label: '批量导入', value: 'batch' }
 ]);
 
 // --- 编辑弹窗的状态 ---
@@ -231,9 +238,13 @@ const fetchDictOptions = async (dictType, optionsRef) => {
         label: item.dictLabel,
         value: item.dictValue
       }));
+      console.log(`字典[${dictType}]加载成功:`, optionsRef.value);
+    } else {
+      console.warn(`字典[${dictType}]响应成功但无数据:`, res);
     }
   } catch (error) {
     ElMessage.error(`获取“${dictType}”字典失败`);
+    console.error(`获取字典[${dictType}]失败:`, error);
   }
 };
 
@@ -252,18 +263,38 @@ const formatDifficulty = (difficultyValue) => {
   if (difficultyValue === 0) return '高';
   if (difficultyValue === 1) return '中';
   if (difficultyValue === 2) return '低';
-  return '未知'; // 作为备用显示
+  return '未知';
 };
 
+// 【修改点】修复筛选功能的核心逻辑
 const fetchQuestions = async () => {
   tableLoading.value = true;
+
+  // 1. 创建一个干净的参数副本, 过滤掉所有空值 (null, undefined, '')
+  const cleanFilters = {};
+  for (const key in filters.value) {
+    const value = filters.value[key];
+    if (value !== null && value !== undefined && value !== '') {
+      cleanFilters[key] = value;
+    }
+  }
+
+  // 2. 对特定字段进行手动类型转换
+  if (cleanFilters.difficulty) {
+    cleanFilters.difficulty = Number(cleanFilters.difficulty);
+  }
+  if (cleanFilters.id) {
+    cleanFilters.id = Number(cleanFilters.id);
+  }
+
   try {
     const params = {
       groupId: activeGroupId.value === 'all' ? null : activeGroupId.value,
       page: pagination.page,
       size: pagination.size,
-      ...filters.value
+      ...cleanFilters // 3. 使用清洗和转换后的参数
     };
+    console.log('向API发送的最终参数:', params);
     const res = await getQuestionList(params);
     if (res.code === 200 && res.data) {
       const getGroupNameById = (groupId) => {
@@ -352,7 +383,6 @@ const handleEditQuestion = async (row) => {
     const res = await getQuestionDetail(row.id);
     if (res.code === 200 && res.data) {
       const data = res.data;
-      // 基本信息填充
       questionForm.id = data.id;
       questionForm.title = data.title;
       questionForm.questionType = data.questionType;
@@ -361,7 +391,6 @@ const handleEditQuestion = async (row) => {
       questionForm.difficulty = data.difficulty;
       questionForm.analysis = data.analysis;
 
-      // 为“判断题”做特殊处理
       if (data.questionType === '判断') {
         questionForm.options = [
           { value: '1', text: '正确' },
@@ -369,7 +398,6 @@ const handleEditQuestion = async (row) => {
         ];
         questionForm.answer = data.answer;
       } else {
-        // 处理单选、多选等其他题型的原有逻辑
         let parsedOptions = [];
         try {
           parsedOptions = JSON.parse(data.details || '[]');
@@ -455,19 +483,17 @@ const handleDeleteQuestion = (row) => {
     }).catch(() => { });
 };
 
+// 【修改点】移除不再需要的API调用
 onMounted(async () => {
   await fetchGroups();
-
-  Promise.all([
+  // 只保留获取“分类”的 API 请求
+  await Promise.all([
     fetchDictOptions('question_category', categoryOptions),
-    fetchDictOptions('question_type', typeOptions),
-    fetchDictOptions('question_difficulty', difficultyOptions)
   ]);
-
   fetchQuestions();
 });
 
-watch(pagination, () => {
+watch(() => [pagination.page, pagination.size], () => {
   fetchQuestions();
 });
 </script>
@@ -552,7 +578,7 @@ watch(pagination, () => {
 .table-footer {
   margin-top: 20px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 
@@ -574,4 +600,4 @@ watch(pagination, () => {
 .delete-option-btn {
   margin-left: 10px;
 }
-</style>
+</style>2

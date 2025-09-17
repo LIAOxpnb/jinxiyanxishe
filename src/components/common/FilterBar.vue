@@ -22,6 +22,7 @@
         v-model="filterData[field.model]"
         :placeholder="field.placeholder"
         class="filter-item"
+        clearable
       ></el-input>
 
       <el-select
@@ -29,6 +30,7 @@
         v-model="filterData[field.model]"
         :placeholder="field.placeholder"
         class="filter-item"
+        clearable
       >
         <el-option
           v-for="option in field.options"
@@ -40,6 +42,7 @@
     </template>
 
     <el-button @click="onFilter">筛选</el-button>
+    <el-button @click="onReset">重置</el-button>
   </div>
 </template>
 
@@ -58,9 +61,7 @@ const props = defineProps({
   fields: {
     type: Array,
     required: true,
-    // validator: (value) => { ... } // 可以在这里添加复杂的校验逻辑
-  }
-  ,
+  },
   // 可选：创建按钮的下拉选项数组，格式：[{ label: '手动新增', value: 'manual' }, ...]
   createOptions: {
     type: Array,
@@ -69,7 +70,7 @@ const props = defineProps({
 });
 
 // 定义组件可以发出的事件
-const emit = defineEmits(['create', 'filter']);
+const emit = defineEmits(['create', 'filter', 'reset']);
 
 // 创建一个响应式对象来存储所有筛选框的数据
 const filterData = reactive({});
@@ -104,6 +105,21 @@ const onCreateOption = (command) => {
 const onFilter = () => {
   // 将收集到的筛选数据作为参数，发出 filter 事件
   emit('filter', filterData);
+};
+
+// “重置”按钮点击事件
+const onReset = () => {
+  // 1. 遍历 fields 配置，将 filterData 中的每个值重置为空字符串或其默认值
+  props.fields.forEach(field => {
+    filterData[field.model] = field.defaultValue || '';
+  });
+
+  // 2. 主动调用 onFilter 函数，发出一个带有空数据的 filter 事件
+  // 父组件监听到这个事件后，就会用空的筛选条件去重新获取列表，达到刷新效果
+  onFilter();
+
+  // 3. (可选)同时也可以发出一个 reset 事件，供父组件选择性监听
+  emit('reset');
 };
 </script>
 

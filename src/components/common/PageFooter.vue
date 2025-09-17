@@ -2,7 +2,7 @@
   <footer class="page-footer">
     <div class="footer-content">
     <img class="footer-badge" :src="badge" alt="badge" />
-      <span>重庆市公安局信通总队</span>
+      <span>重庆市公安局经侦总队</span>
       <span class="separator">|</span>
      <img class="footer-badge" :src="badge1" alt="badge1" />
       <span>产品说明文档</span>

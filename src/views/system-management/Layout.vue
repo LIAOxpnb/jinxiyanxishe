@@ -78,9 +78,10 @@
 }
 
 .main-layout {
-  /* 容器高度 = 视窗高度 - 顶部导航栏高度 */
-  height: calc(100vh - var(--header-height));
+  /* 容器高度 = 视窗高度 - 顶部导航栏高度 - 页脚高度 */
+  height: calc(100vh - 140px);
   background-color: #fff;
+  overflow: hidden; /* 防止layout自身出现滚动条 */
 }
 
 .aside {

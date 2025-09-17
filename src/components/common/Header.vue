@@ -37,7 +37,7 @@
         <span>消息</span>
       </router-link>
       <div class="user-action" @click="handleLogout">
-        <img src="../assets/img/u84.svg" alt="">
+        <img src="@/assets/img/u84.svg" alt="">
         <span>退出登录</span>
       </div>
     </div>
