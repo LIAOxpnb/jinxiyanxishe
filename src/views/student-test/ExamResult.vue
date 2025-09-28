@@ -13,7 +13,7 @@
         <div class="left-panel">
           <el-descriptions title="试卷信息" :column="1" border>
             <el-descriptions-item label="最终得分">{{ resultDetails.score }}</el-descriptions-item>
-            <el-descriptions-item label="试卷总分">{{ resultDetails.exam?.totalScore }}</el-descriptions-item>
+            <el-descriptions-item label="试卷总分">{{ resultDetails.exam?.score }}</el-descriptions-item>
             <el-descriptions-item label="合格分">{{ resultDetails.exam?.qualified }}</el-descriptions-item>
             <el-descriptions-item label="考核结果">
               <el-tag :type="resultDetails.qualified === 1 ? 'success' : 'danger'">
@@ -62,6 +62,7 @@
 </template>
 
 <script setup>
+// ----- Script部分无需修改，逻辑是正确的 -----
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -96,29 +97,22 @@ const fetchExamResult = async () => {
   }
 };
 
-// [核心修改] 将样式判断逻辑封装成一个函数
 const getNavItemClass = (item) => {
-  // 最高优先级：判断是否为当前激活的题目
   if (item.question.id === activeQuestionId.value) {
-    return 'active'; // 蓝色
+    return 'active';
   }
-  // 其次：判断是否已回答
   if (item.userAnswer !== null && item.userAnswer !== '') {
     if (item.isCorrect === 2) {
-      return 'correct'; // 绿色
+      return 'correct';
     }
-    // 只要回答过但不是正确(isCorrect:2)，都算错误
-    return 'incorrect'; // 红色
+    return 'incorrect';
   }
-  // 最后：未回答的题目
-  return 'unanswered'; // 灰色
+  return 'unanswered';
 };
 
-// [核心修改] 优化点击跳转逻辑
 const scrollToQuestion = (questionId) => {
   const targetElement = document.querySelector(`.question-wrapper[data-question-id='${questionId}']`);
   if (targetElement) {
-    // 立即更新高亮状态，提供即时反馈
     activeQuestionId.value = questionId;
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -165,13 +159,53 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 样式部分无需修改 */
-.page-wrapper { padding: 20px; background-color: #f0f2f5; min-height: calc(100vh - 50px); }
-.main-content { background-color: #fff; padding: 24px; border-radius: 4px; }
+/* ----- 以下是样式部分的修改 ----- */
+
+/* 1. 根容器设置为100%高度的flex布局 */
+.page-wrapper {
+  height: 100%; /* 继承父级的高度 */
+  background-color: #f0f2f5;
+  padding: 20px;
+  box-sizing: border-box; /* 让 padding 不会撑大容器 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 2. 主内容区设置为flex自适应填充 */
+.main-content {
+  background-color: #fff;
+  padding: 24px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1; /* 占据所有剩余空间 */
+  min-height: 0; /* flex布局防溢出技巧 */
+}
+
 .page-header-title { font-size: 18px; }
-.marking-content { display: flex; gap: 20px; margin-top: 20px; }
-.left-panel { flex: 0 0 250px; }
-.right-panel { flex: 1; overflow-y: auto; max-height: 85vh; background-color: #f9fafb; padding: 15px; border-radius: 4px; }
+
+/* 3. 两栏容器也设置为flex自适应填充 */
+.marking-content {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+  flex-grow: 1; /* 占据所有剩余空间 */
+  min-height: 0; /* flex布局防溢出技巧 */
+}
+
+.left-panel { flex: 0 0 250px; overflow-y: auto; }
+
+/* 4. 移除右侧面板不稳定的 max-height，让flex自动计算高度 */
+.right-panel {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f9fafb;
+  padding: 15px;
+  border-radius: 4px;
+  /* max-height: 85vh; <-- 移除这一行 */
+}
+
+/* --- 以下样式保持不变 --- */
 .question-nav { margin-top: 20px; }
 .nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
 .nav-item {

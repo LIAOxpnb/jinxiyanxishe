@@ -1,6 +1,6 @@
 // user.js
 
-import request from '../utils/request';
+import request from '@/utils/request';
 
 // 用户相关接口
 export function login(payload) {

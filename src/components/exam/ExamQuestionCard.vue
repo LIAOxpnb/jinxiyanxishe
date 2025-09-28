@@ -19,10 +19,10 @@
           @change="onScoreChange"
         />
         <span class="score-unit">分</span>
-        <el-tooltip content="上移"><el-icon class="action-icon"><Top /></el-icon></el-tooltip>
-        <el-tooltip content="下移"><el-icon class="action-icon"><Bottom /></el-icon></el-tooltip>
-        <el-tooltip content="预览"><el-icon class="action-icon"><View /></el-icon></el-tooltip>
-        <el-tooltip content="删除"><el-icon class="action-icon delete-icon"><Delete /></el-icon></el-tooltip>
+        <el-tooltip content="上移"><el-icon class="action-icon" @click="$emit('moveUp', index)"><Top /></el-icon></el-tooltip>
+        <el-tooltip content="下移"><el-icon class="action-icon" @click="$emit('moveDown', index)"><Bottom /></el-icon></el-tooltip>
+        <el-tooltip content="试题编辑"><el-icon class="action-icon" @click="$emit('edit', question)"><Edit /></el-icon></el-tooltip>
+        <el-tooltip content="删除"><el-icon class="action-icon delete-icon" @click="$emit('delete', index)"><Delete /></el-icon></el-tooltip>
       </div>
     </div>
     
@@ -35,11 +35,17 @@
             {{ opt.option }}. {{ opt.value }}
           </el-radio>
         </el-radio-group>
-        <el-checkbox-group v-else-if="question.questionType === '多选'" :model-value="correctAnswers">
-          <el-checkbox v-for="opt in parsedOptions" :key="opt.option" :label="opt.option" disabled>
-            {{ opt.option }}. {{ opt.value }}
-          </el-checkbox>
-        </el-checkbox-group>
+        <div v-else-if="question.questionType === '多选'" class="multiple-choice-options">
+          <div 
+            v-for="opt in parsedOptions" 
+            :key="opt.option" 
+            class="multiple-choice-item"
+            :class="{ 'is-correct': correctAnswers.includes(opt.option) }"
+          >
+            <span class="choice-mark">{{ correctAnswers.includes(opt.option) ? '☑' : '☐' }}</span>
+            <span class="choice-text">{{ opt.option }}. {{ opt.value }}</span>
+          </div>
+        </div>
       </div>
        <div class="options-wrapper" v-else-if="question.questionType === '判断'">
         <el-radio-group :model-value="question.answer">
@@ -64,7 +70,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Top, Bottom, View, Delete, Link } from '@element-plus/icons-vue';
+import { Top, Bottom, Edit, Delete, Link } from '@element-plus/icons-vue';
 
 const props = defineProps({
   // 接收的 `item` 是 examQuestionList 数组中的一个元素
@@ -78,7 +84,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['scoreChange']);
+const emit = defineEmits(['scoreChange', 'moveUp', 'moveDown', 'edit', 'delete']);
 
 const question = computed(() => props.itemData.question || {});
 const editableScore = ref(props.itemData.score || 0);
@@ -90,7 +96,8 @@ const difficultyText = computed(() => difficultyMap[question.value.difficulty] |
 const parsedOptions = computed(() => {
   if (question.value.details) {
     try {
-      return JSON.parse(question.value.details);
+      const options = JSON.parse(question.value.details);
+      return options;
     } catch (e) {
       console.error("解析题目选项失败:", e);
       return [];
@@ -101,8 +108,8 @@ const parsedOptions = computed(() => {
 
 // 为多选题的答案格式做适配
 const correctAnswers = computed(() => {
-  if (question.value.questionType === '多选' && question.value.answer) {
-    return question.value.answer.split('#@#');
+  if (question.value.questionType === '多选' && typeof question.value.answer === 'string' && question.value.answer) {
+    return question.value.answer.split('#@#').filter(item => item);
   }
   return [];
 });
@@ -157,6 +164,32 @@ const onScoreChange = (newScore) => {
   font-size: 14px;
   line-height: 1.5;
   margin-bottom: 12px;
+}
+
+.multiple-choice-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.multiple-choice-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.choice-mark {
+  margin-right: 8px;
+  font-size: 16px;
+  color: #606266;
+}
+
+.multiple-choice-item.is-correct .choice-mark {
+  color: #409eff;
+}
+
+.choice-text {
+  line-height: 1.5;
 }
 .options-wrapper {
   font-size: 14px;

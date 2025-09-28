@@ -135,7 +135,13 @@ const fetchSubmissions = async () => {
     const res = await getMarkingList(payload);
     if (res.code === 200) {
       // 假设后端返回的数据结构是 { records: [], total: 0 }
-      tableData.value = res.data.records || [];
+      // 使用后端接口返回的字段：userName -> studentName, graderName -> markerName
+      const records = (res.data.records || []).map(r => ({
+        ...r,
+        studentName: r.userName || r.studentName || '',
+        markerName: r.graderName || r.markerName || ''
+      }));
+      tableData.value = records;
       pagination.total = res.data.total || 0;
     } else {
       ElMessage.error(res.msg || '获取阅卷列表失败');

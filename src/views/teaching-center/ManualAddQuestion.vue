@@ -35,8 +35,8 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="试题分组" prop="groupId">
-              <el-select v-model="batchInfo.groupId" placeholder="未分组" style="width: 150px; margin-right: 8px;">
-                <el-option label="未分组" :value="null" />
+              <el-select v-model="batchInfo.groupId"  style="width: 150px; margin-right: 8px;">
+                <!-- <el-option label="未分组" :value="null" /> -->
                 <el-option
                   v-for="item in groupOptions"
                   :key="item.id"
@@ -209,6 +209,14 @@ const onCancel = () => {
   router.back();
 };
 
+const cleanHtml = (html) => {
+  if (!html) return '';
+  // 使用 DOMParser 来解析 HTML
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // 返回 body 的 textContent，这会移除所有 HTML 标签
+  return doc.body.textContent || "";
+};
+
 const onSubmit = async () => {
   if (questionList.value.length === 0) {
     ElMessage.warning('请至少添加一道试题');
@@ -276,13 +284,7 @@ const onSubmit = async () => {
       }
     }
     
-    // 校验论述题的答案
-    if (question.questionType === 'ESSAY') {
-      if (!question.answer || question.answer.trim() === '') {
-        ElMessage.error(`第 ${questionIndex} 题：请设置参考答案`);
-        return;
-      }
-    }
+    // 论述题不需要参考答案，移除相关校验
   }
 
   // --- 诊断日志一：检查从 QuestionEditor 组件接收到的原始前端数据 ---
@@ -292,7 +294,7 @@ const onSubmit = async () => {
     const payload = questionList.value.map((q, index) => {
       const backendQuestion = {
         questionType: questionTypeMap[q.questionType] || '',
-        title: q.title,
+        title: (q.questionType === 'FILL_IN_BLANK' || q.editMode === 'complex') ? cleanHtml(q.title) : q.title,
         groupId: batchInfo.value.groupId || 0,
         questionCategory: batchInfo.value.questionCategory,
         details: '',

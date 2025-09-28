@@ -21,6 +21,7 @@ const isLoginPage = computed(() => route.name === 'Login')
 </script>
 
 <style>
+
 /* Global styles for the entire application */
 body {
   margin: 0;
@@ -46,7 +47,8 @@ html, body {
 
 .app-main-content {
   flex: 1; /* 占据剩余空间 */
-  overflow: hidden; /* 防止主内容区域出现滚动条 */
+  /* overflow: hidden; 防止主内容区域出现滚动条 */
+  overflow: auto;
   padding: 0;
   background-color: #ffffff; /* 确保主内容区域背景为白色 */
 }
@@ -54,4 +56,6 @@ html, body {
 .app-main-content.login-page {
   padding: 0;
 }
+
+
 </style>

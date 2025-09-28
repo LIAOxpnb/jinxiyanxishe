@@ -63,10 +63,13 @@
   /* 计算布局的总高度：100%容器高度 减去 顶部导航栏和页脚的高度
     Header大约60px，Footer大约80px，总共140px
   */
-  height: calc(100vh - 140px);
+  /* height: calc(100vh - 140px);
   display: flex;
-  overflow: hidden; /* 防止layout自身出现滚动条 */
-  background-color: #ffffff; /* 确保布局容器背景为白色 */
+  overflow: hidden; 防止layout自身出现滚动条
+  background-color: #ffffff; 确保布局容器背景为白色 */
+    height: 100%;
+  display: flex;
+  background-color: #ffffff;
 }
 
 .aside {

@@ -1,6 +1,6 @@
 
 <template>
-  <el-card class="question-card" :id="'question-' + questionData.questionId">
+  <el-card class="question-card" :id="'question-' + questionData.question.id">
     <div class="question-header">
       <span>{{ index + 1 }}.</span>
       <el-tag>{{ questionData.question.questionType }}</el-tag>
@@ -9,14 +9,14 @@
 
     <div class="answer-area">
       <el-radio-group v-if="questionData.question.questionType === '单选'" v-model="answerModel">
-        <el-radio v-for="opt in parsedOptions" :key="opt.option" :label="opt.option" size="large">
-          {{ opt.option }}. {{ opt.value }}
+        <el-radio v-for="opt in displayOptions" :key="opt.displayOption" :label="opt.originalOption" size="large">
+          {{ opt.displayOption }}. {{ opt.value }}
         </el-radio>
       </el-radio-group>
 
       <el-checkbox-group v-else-if="questionData.question.questionType === '多选'" v-model="answerModel">
-        <el-checkbox v-for="opt in parsedOptions" :key="opt.option" :label="opt.option" size="large">
-          {{ opt.option }}. {{ opt.value }}
+        <el-checkbox v-for="opt in displayOptions" :key="opt.displayOption" :label="opt.originalOption" size="large">
+          {{ opt.displayOption }}. {{ opt.value }}
         </el-checkbox>
       </el-checkbox-group>
 
@@ -60,21 +60,53 @@ const answerModel = computed({
   set: (value) => emit('update:modelValue', value)
 });
 
-// 解析选择题选项
-const parsedOptions = computed(() => {
+// 解析并重新映射选项以进行显示
+const displayOptions = computed(() => {
   if (props.questionData.question.details) {
     try {
-      return JSON.parse(props.questionData.question.details);
-    } catch (e) { return []; }
+      // 1. 直接解析后端的JSON，保持其原始顺序
+      const originalOptions = JSON.parse(props.questionData.question.details);
+
+      // 2. 遍历原始数组，创建用于显示的新数组
+      return originalOptions.map((opt, index) => {
+        return {
+          // 后端真实的选项标识 (e.g., "B", "A", "C", "D")，用于提交答案
+          originalOption: opt.option,
+          // 前端显示的选项标识 (e.g., "A", "B", "C", "D")
+          displayOption: String.fromCharCode(65 + index),
+          // 选项的文本内容
+          value: opt.value
+        };
+      });
+    } catch (e) {
+      console.error("解析选项JSON失败:", e);
+      return [];
+    }
   }
   return [];
 });
 
 // 计算填空题数量
+// [核心修正] 重写填空题数量的计算逻辑
 const blankCount = computed(() => {
   if (props.questionData.question.questionType === '填空') {
-    // 根据正确答案的数量来确定填空框的数量
-    return (props.questionData.question.answer?.split('#@#') || []).length;
+    const title = props.questionData.question.title || '';
+    // 使用带有 'g' 标志的正则表达式进行全局匹配，来计算___的数量
+    const matches = title.match(/___/g);
+    const count = matches ? matches.length : 0;
+    
+    // [健壮性] 确保答案数组的长度与填空数量一致
+    // 父组件在创建时应初始化 modelValue 为 []
+    if (Array.isArray(answerModel.value)) {
+      while (answerModel.value.length < count) {
+        answerModel.value.push('');
+      }
+      if (answerModel.value.length > count) {
+        answerModel.value.splice(count);
+      }
+    }
+    
+    return count;
   }
   return 0;
 });

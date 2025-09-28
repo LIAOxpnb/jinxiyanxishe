@@ -1,27 +1,26 @@
 <template>
   <div class="dictionary-management">
-    <!-- 页面标题 -->
     <div class="page-header">
       <h1>字典管理</h1>
     </div>
     
-    <!-- 操作栏 -->
     <div class="action-bar">
       <div class="left-actions">
         <button class="btn-primary" @click="handleAdd">新增</button>
         <div class="search-box">
           <input 
             type="text" 
-            placeholder="搜索"
-            v-model="searchText"
+            placeholder="请输入字典类型搜索"
+            v-model="searchDictType"
+            @keydown.enter="handleSearch"
             class="search-input"
           />
-          <i class="search-icon">🔍</i>
+          <button class="btn-primary" @click="handleSearch" style="margin-left: 8px;">搜索</button>
+          <button class="btn-secondary" @click="handleReset" style="margin-left: 8px;">重置</button>
         </div>
       </div>
     </div>
 
-    <!-- 数据表格 -->
     <div class="table-container">
       <table class="data-table">
         <thead>
@@ -34,7 +33,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in filteredData" :key="item.id">
+          <tr v-for="item in tableData" :key="item.id">
             <td>{{ item.dictLabel }}</td>
             <td>{{ item.dictValue }}</td>
             <td>{{ item.dictType }}</td>
@@ -52,20 +51,18 @@
       </table>
     </div>
 
-    <!-- 分页 -->
-    <div class="pagination">
+    <div class="pagination" v-if="!isSearching">
       <span class="pagination-info">共计{{ total }}条</span>
       <div class="pagination-controls">
         <button 
           v-for="page in Math.ceil(total / pageSize)" 
           :key="page"
           :class="['page-btn', { active: currentPage === page }]"
-          @click="currentPage = page; fetchDictList()"
+          @click="handlePageChange(page)"
         >
           {{ page }}
         </button>
-        <span>...</span>
-        <select v-model="pageSize" class="page-size-select" @change="fetchDictList">
+        <select v-model="pageSize" class="page-size-select" @change="handlePageSizeChange">
           <option value="10">10 条/页</option>
           <option value="20">20 条/页</option>
           <option value="50">50 条/页</option>
@@ -73,7 +70,6 @@
       </div>
     </div>
 
-    <!-- 新增/编辑字典模态框 -->
     <div v-if="isModalVisible" class="modal-overlay">
       <div class="modal-content">
         <h2>{{ modalTitle }}</h2>
@@ -112,63 +108,87 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
-import { getDictList, addDict, updateDict, deleteDict } from '../../api/system-management/dictionary'
+import { ref, onMounted } from 'vue'
+import { getDictList, getDictByType, addDict, updateDict, deleteDict } from '../../api/system-management/dictionary'
 
 export default {
   name: 'DictionaryManagement',
   setup() {
-    // 响应式数据
-    const searchText = ref('')
+    const searchDictType = ref('')
+    const isSearching = ref(false)
+    const loading = ref(false)
+
     const currentPage = ref(1)
     const pageSize = ref(10)
     const tableData = ref([])
     const total = ref(0)
 
-    // Modal state
     const isModalVisible = ref(false)
     const modalTitle = ref('')
     const currentDict = ref({})
 
-    // 获取字典列表数据
-    const fetchDictList = async () => {
+    const fetchDictData = async () => {
+      loading.value = true;
       try {
-        const params = {
-          pageNum: currentPage.value,
-          pageSize: pageSize.value,
-        };
-        const response = await getDictList(params);
-        if (response.code === 200) {
-          tableData.value = response.data.records;
-          total.value = response.data.total || response.data.records.length;
+        if (searchDictType.value) {
+          isSearching.value = true;
+          const response = await getDictByType(searchDictType.value);
+          if (response.code === 200) {
+            tableData.value = response.data || [];
+            total.value = response.data?.length || 0;
+          } else {
+            console.error('Failed to fetch dictionary by type:', response.msg);
+            tableData.value = [];
+            total.value = 0;
+          }
         } else {
-          console.error('Failed to fetch dictionary list:', response.msg);
+          isSearching.value = false;
+          const params = {
+            pageNum: currentPage.value,
+            pageSize: pageSize.value,
+          };
+          const response = await getDictList(params);
+          if (response.code === 200 && response.data) {
+            tableData.value = response.data.records;
+            total.value = response.data.total;
+          } else {
+            console.error('Failed to fetch dictionary list:', response.msg);
+          }
         }
       } catch (error) {
-        console.error('Error fetching dictionary list:', error);
+        console.error('Error fetching dictionary data:', error);
+      } finally {
+        loading.value = false;
       }
     };
 
-    // 在组件挂载时获取数据
     onMounted(() => {
-      fetchDictList();
+      fetchDictData();
     });
     
-    // 计算属性 - 过滤数据
-    const filteredData = computed(() => {
-      if (!searchText.value) {
-        return tableData.value
-      }
-      return tableData.value.filter(item => 
-        item.dictLabel.includes(searchText.value) ||
-        item.dictValue.includes(searchText.value) ||
-        item.dictType.includes(searchText.value)
-      )
-    })
+    const handleSearch = () => {
+      currentPage.value = 1;
+      fetchDictData();
+    };
 
-    // 方法
+    const handleReset = () => {
+      searchDictType.value = '';
+      currentPage.value = 1;
+      fetchDictData();
+    };
+
+    const handlePageChange = (page) => {
+      currentPage.value = page;
+      fetchDictData();
+    };
+
+    const handlePageSizeChange = () => {
+      currentPage.value = 1;
+      fetchDictData();
+    };
+
     const handleAdd = () => {
-      currentDict.value = { status: '0' }; // 默认新增项的状态为'正常'
+      currentDict.value = { status: '0' };
       modalTitle.value = '新增字典';
       isModalVisible.value = true;
     }
@@ -185,7 +205,7 @@ export default {
           const response = await deleteDict(item.id);
           if (response.code === 200) {
             alert('删除成功');
-            fetchDictList(); // 刷新列表
+            fetchDictData();
           } else {
             alert('删除失败: ' + response.msg);
           }
@@ -200,17 +220,15 @@ export default {
       try {
         let response;
         if (currentDict.value.id) {
-          // 更新
           response = await updateDict(currentDict.value);
         } else {
-          // 新增
           response = await addDict(currentDict.value);
         }
 
         if (response.code === 200) {
           alert('保存成功');
           isModalVisible.value = false;
-          fetchDictList(); // 刷新列表
+          fetchDictData();
         } else {
           alert('保存失败: ' + response.msg);
         }
@@ -225,17 +243,19 @@ export default {
     };
 
     return {
-      searchText,
+      searchDictType,
+      isSearching,
       currentPage,
       pageSize,
       tableData,
-      filteredData,
       total,
       handleAdd,
       handleEdit,
       handleDelete,
-      fetchDictList,
-      // Modal related
+      handleSearch,
+      handleReset,
+      handlePageChange,
+      handlePageSizeChange,
       isModalVisible,
       modalTitle,
       currentDict,
@@ -276,7 +296,7 @@ export default {
   gap: 12px;
 }
 
-/* 新增按钮 */
+/* 按钮 */
 .btn-primary {
   background-color: #1890ff;
   color: white;
@@ -292,6 +312,23 @@ export default {
   background-color: #40a9ff;
 }
 
+.btn-secondary {
+  background-color: #fff;
+  color: #333;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+
 /* 搜索框 */
 .search-box {
   position: relative;
@@ -302,7 +339,7 @@ export default {
 .search-input {
   width: 240px;
   height: 32px;
-  padding: 4px 32px 4px 12px;
+  padding: 4px 12px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
   font-size: 14px;
@@ -530,6 +567,7 @@ export default {
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 1rem;
+  box-sizing: border-box;
 }
 
 .modal-actions {

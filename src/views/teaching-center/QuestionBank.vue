@@ -188,7 +188,7 @@ const typeOptions = ref([
   { label: '多选题', value: '多选' },
   { label: '填空题', value: '填空' },
   { label: '判断题', value: '判断' },
-  { label: '解答题', value: '解答' }
+  { label: '论述题', value: '论述' }
 ]);
 
 // 【修改点】难度选项 - 修改为静态数据
@@ -411,7 +411,7 @@ const handleEditQuestion = async (row) => {
           isCorrect: correctAnswers.includes(apiOpt.option)
         }));
 
-        if (questionForm.questionType === '单选') {
+        if (questionForm.questionType === '单选' || questionForm.questionType === '填空') {
           questionForm.answer = data.answer;
         }
       }

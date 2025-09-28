@@ -1,9 +1,6 @@
 <template>
   <div class="exam-start-page" v-loading="loading">
-    <div class="top-header">
-      <span class="logo">金析研习社</span>
-    </div>
-
+    <!-- 移除 .top-header, 背景将由 CSS 控制 -->
     <div class="card-wrapper">
       <div class="exam-card">
         <h2 class="exam-title">{{ examDetail.name || '考试名称加载中...' }}</h2>
@@ -11,17 +8,20 @@
         <div class="info-grid">
           <div class="info-item">
             <span>考生姓名:</span>
-            <span class="info-value">考生姓名</span> </div>
+            <span class="info-value">考生姓名</span>
+          </div>
           <div class="info-item">
             <span>归属组织:</span>
-            <span class="info-value">组织名称</span> </div>
+            <span class="info-value">组织名称</span>
+          </div>
           <div class="info-item">
             <span>考试时长:</span>
-            <span class="info-value">{{ examDetail.duration === -1 || examDetail.duration === 0 ? '不限制' : `${examDetail.duration}分钟` }}</span>
+            <span class="info-value">{{ examDetail.duration === -1 || examDetail.duration === 0 ? '不限制' :
+              `${examDetail.duration}分钟` }}</span>
           </div>
           <div class="info-item">
             <span>试卷总分:</span>
-            <span class="info-value">{{ examDetail.totalScore || '-' }}分</span>
+            <span class="info-value">{{ examDetail.score || '-' }}分</span>
           </div>
           <div class="info-item">
             <span>题目数量:</span>
@@ -33,7 +33,8 @@
           </div>
           <div class="info-item">
             <span>考试次数:</span>
-            <span class="info-value">{{ examDetail.attempts === -1 ? '不限制' : `${examDetail.attemptedTimes || 0}/${examDetail.attempts}次` }}</span>
+            <span class="info-value">{{ examDetail.attempts === -1 ? '不限制' :
+              `${examDetail.attemptedTimes || 0}/${examDetail.attempts}次` }}</span>
           </div>
           <div class="info-item">
             <span>考试时间:</span>
@@ -110,35 +111,43 @@ onMounted(() => {
 
 <style scoped>
 .exam-start-page {
-  min-height: 100vh;
-  background-color: #f0f2f5; /* 页面背景色 */
+  /* 1. 使用 flex 布局将内容垂直居中 */
   display: flex;
   flex-direction: column;
+  justify-content: center; /* 主要内容垂直居中 */
   align-items: center;
+  /* 2. 确保页面至少占满整个视口高度 */
+  height: 100vh;
+  background-color: #f0f2f5;
+  /* 3. 添加一个伪元素作为背景层 */
+  position: relative;
+  overflow: hidden; /* 防止伪元素溢出 */
 }
 
-.top-header {
+.exam-start-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 200px; /* 头部蓝色背景高度 */
-  background: url('/src/assets/img/u4045.png') no-repeat center center; /* 确保路径正确 */
+  height: 200px; /* 背景层高度 */
+  background: url('/src/assets/img/u4045.png') no-repeat center center;
   background-size: cover;
-  display: flex;
-  align-items: flex-start;
-  padding: 24px;
-  position: relative;
+  z-index: 0; /* 确保在内容之下 */
 }
 
 .logo {
   font-size: 24px;
   font-weight: bold;
-  color: white;
+  color: black;
 }
 
 .card-wrapper {
-  margin-top: -120px; /* 使卡片向上覆盖蓝色背景 */
-  width: 80%; /* 卡片宽度 */
-  max-width: 800px; /* 最大宽度限制 */
-  z-index: 1; /* 确保卡片在蓝色背景之上 */
+  /* 4. 移除负边距，让 flex 布局处理居中 */
+  width: 90%; /* 使用百分比宽度，并设置最大宽度 */
+  max-width: 800px;
+  z-index: 1; /* 确保卡片在背景层之上 */
+  margin: 20px; /* 添加一些外边距 */
 }
 
 .exam-card {
@@ -153,13 +162,14 @@ onMounted(() => {
   font-size: 28px;
   font-weight: bold;
   color: #303133;
+  margin-top: 0;
   margin-bottom: 40px;
 }
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px 40px; /* 行间距和列间距 */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* 响应式网格，减小最小宽度以适应窄屏 */
+  gap: 20px 40px;
   text-align: left;
   margin-bottom: 40px;
 }
@@ -173,7 +183,7 @@ onMounted(() => {
 
 .info-item span:first-child {
   flex-shrink: 0;
-  width: 90px; /* 标签固定宽度 */
+  width: 90px;
   color: #909399;
   text-align: right;
   margin-right: 10px;

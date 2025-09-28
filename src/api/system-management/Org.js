@@ -9,9 +9,11 @@ export function getOrgList() {
 
 /**
  * @description 获取组织树
+ * @param {object} data - 请求参数
+ * @param {boolean} data.personnel - 是否包含人员
  */
-export function getOrgTree() {
-  return request.post('/admin/organization/tree');
+export function getOrgTree(data) {
+  return request.post('/admin/organization/tree', data);
 }
 
 /**

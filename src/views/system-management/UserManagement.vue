@@ -113,7 +113,7 @@
     <el-dialog
       :title="dialogTitle"
       v-model="dialogVisible"
-      width="840px"
+      width="1060px"
       :before-close="handleDialogClose"
     >
       <el-form

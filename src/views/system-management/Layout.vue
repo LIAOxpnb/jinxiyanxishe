@@ -30,6 +30,9 @@
           <el-menu-item index="/system-management/lecturer-management">
             <template #title>讲师管理</template>
           </el-menu-item>
+          <el-menu-item index="/system-management/back-end-permissions">
+            <template #title>后管权限</template>
+          </el-menu-item>
         </el-menu-item-group>
 
         <el-menu-item-group title="---证书中心---">

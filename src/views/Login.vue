@@ -68,7 +68,7 @@ import { reactive, ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElDialog, ElButton } from 'element-plus'; // 引入 ElDialog 和 ElButton
 
-import { login } from '@/api/user.js';
+import { login } from '@/api/common/user.js';
 
 const router = useRouter();
 const route = useRoute();

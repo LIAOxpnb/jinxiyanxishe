@@ -13,7 +13,9 @@
 <style scoped>
 .student-layout-container {
   background-color: #f0f2f5;
-  min-height: 100vh;
+  /* min-height: 100vh; */
+  /* 现在改为 height: 100%; 让它完美填充父容器分配的空间 */
+  height: 100%;
 }
 
 .page-footer {
