@@ -21,8 +21,8 @@
             <div class="question-nav-grid">
               <div v-for="(q, index) in questionList" :key="q.questionId" class="nav-item" :class="{
                 'answered': isAnswered(q.question.id),
-                'current': currentQuestionId == q.question.id
-              }" @click="scrollToQuestion('question-' + q.question.id)">
+                'current': currentQuestionIndex === index
+              }" @click="goToQuestion(index)">
                 {{ index + 1 }}
               </div>
             </div>
@@ -30,8 +30,38 @@
         </div>
 
         <div class="right-panel">
-          <TakeExamQuestionCard v-for="(item, index) in questionList" :key="item.questionId" :question-data="item"
-            :index="index" v-model="answers[item.question.id]" :id="'question-' + item.question.id" />
+          <!-- 只显示当前题目 -->
+          <TakeExamQuestionCard 
+            v-if="questionList.length > 0 && currentQuestionIndex < questionList.length"
+            :key="questionList[currentQuestionIndex].questionId" 
+            :question-data="questionList[currentQuestionIndex]"
+            :index="currentQuestionIndex" 
+            v-model="answers[questionList[currentQuestionIndex].question.id]" 
+          />
+
+          <!-- 翻页按钮 -->
+          <div class="pagination-controls">
+            <el-button 
+              @click="previousQuestion" 
+              :disabled="currentQuestionIndex === 0"
+              size="large"
+            >
+              上一题
+            </el-button>
+            
+            <span class="question-progress">
+              第 {{ currentQuestionIndex + 1 }} / {{ questionList.length }} 题
+            </span>
+            
+            <el-button 
+              @click="nextQuestion" 
+              :disabled="currentQuestionIndex === questionList.length - 1"
+              type="primary"
+              size="large"
+            >
+              下一题
+            </el-button>
+          </div>
         </div>
       </div>
     </template>
@@ -50,14 +80,12 @@ const route = useRoute();
 const router = useRouter();
 
 const loading = ref(true);
-const submitting = ref(false); // 提交状态
+const submitting = ref(false);
 const examId = ref(null);
 const examDetails = ref(null);
 const questionList = ref([]);
 const answers = reactive({});
-const currentQuestionId = ref(null); // 当前查看的题目ID
-// [修正] 移除 questionCardRefs，因为它在您的代码中未被使用
-// const questionCardRefs = reactive({}); 
+const currentQuestionIndex = ref(0); // 当前题目索引
 
 // --- 倒计时逻辑 ---
 let timerInterval = null;
@@ -71,7 +99,7 @@ const formattedCountdown = computed(() => {
 });
 
 const startTimer = (durationMinutes) => {
-  if (durationMinutes <= 0 || durationMinutes === -1) { // [修正] 增加 -1 的判断
+  if (durationMinutes <= 0 || durationMinutes === -1) {
     remainingSeconds.value = Infinity;
     return;
   }
@@ -87,17 +115,15 @@ const startTimer = (durationMinutes) => {
   }, 1000);
 };
 
-// --- 新增点 1: 阻止复制的事件处理函数 ---
+// --- 阻止复制的事件处理函数 ---
 const preventCopy = (e) => {
   e.preventDefault();
   ElMessage.warning('本次考试禁止复制题目内容！');
 };
 
-
 onBeforeUnmount(() => {
   if (timerInterval) clearInterval(timerInterval);
 
-  // --- 新增点 2: 在组件卸载时，移除事件监听以防内存泄漏 ---
   if (examDetails.value && examDetails.value.disableCopy === 1) {
     const examContainer = document.querySelector('.take-exam-container');
     if (examContainer) {
@@ -119,43 +145,29 @@ const answeredCount = computed(() => {
 const isAnswered = (questionId) => {
   const ans = answers[questionId];
   if (Array.isArray(ans)) {
-    // [核心修正]
-    // 对于数组类型的答案（多选、填空），
-    // 我们要检查数组中是否“存在”（some）至少一个不为空的元素。
     return ans.some(item => item !== null && item !== '');
   }
-  // 对于字符串类型的答案（单选、判断、论述），此逻辑保持不变
   return !!ans; 
 };
 
-const scrollToQuestion = (elementId) => {
-  const targetElement = document.getElementById(elementId);
-  const rightPanel = document.querySelector('.right-panel');
+// 跳转到指定题目
+const goToQuestion = (index) => {
+  if (index >= 0 && index < questionList.value.length) {
+    currentQuestionIndex.value = index;
+  }
+};
 
-  if (targetElement && rightPanel) {
-    // 获取元素相对于右侧面板的精确位置
-    const panelRect = rightPanel.getBoundingClientRect();
-    const targetRect = targetElement.getBoundingClientRect();
+// 上一题
+const previousQuestion = () => {
+  if (currentQuestionIndex.value > 0) {
+    currentQuestionIndex.value--;
+  }
+};
 
-    // 计算目标元素相对于面板顶部的位置
-    const relativeTop = targetRect.top - panelRect.top + rightPanel.scrollTop;
-
-    // 在右侧面板内滚动，留出一些顶部间距
-    rightPanel.scrollTo({
-      top: relativeTop - 20,
-      behavior: 'smooth'
-    });
-
-    // 更新当前题目ID
-    const questionId = elementId.replace('question-', '');
-    currentQuestionId.value = questionId;
-
-    console.log('跳转到题目:', questionId,
-      '元素当前位置:', targetRect.top,
-      '面板位置:', panelRect.top,
-      '计算滚动位置:', relativeTop - 20);
-  } else {
-    console.warn('未找到目标元素或面板:', elementId);
+// 下一题
+const nextQuestion = () => {
+  if (currentQuestionIndex.value < questionList.value.length - 1) {
+    currentQuestionIndex.value++;
   }
 };
 
@@ -171,13 +183,13 @@ const confirmSubmit = () => {
 };
 
 const submitExam = async () => {
-  if (submitting.value) return; // 防止重复提交
+  if (submitting.value) return;
 
   submitting.value = true;
   const payload = {
     examId: examId.value,
     examSubmitRecordList: questionList.value.map(q => {
-      let userAnswer = answers[q.question.id]; // [修正] 使用 q.question.id
+      let userAnswer = answers[q.question.id];
       if (Array.isArray(userAnswer)) {
         userAnswer = userAnswer.sort().join('#@#');
       }
@@ -226,20 +238,17 @@ onMounted(async () => {
         }
       });
 
-      // 设置第一个题目为当前题目
-      if (questionList.value.length > 0) {
-        currentQuestionId.value = questionList.value[0].question.id;
-      }
+      // 初始化为第一题
+      currentQuestionIndex.value = 0;
 
       startTimer(examDetails.value.duration);
 
-      // --- 新增点 3: 在获取到考试详情后，根据设置添加事件监听 ---
       if (examDetails.value.disableCopy === 1) {
         const examContainer = document.querySelector('.take-exam-container');
         if (examContainer) {
-          examContainer.addEventListener('copy', preventCopy);      // 监听复制事件 (Ctrl+C)
-          examContainer.addEventListener('cut', preventCopy);       // 监听剪切事件 (Ctrl+X)
-          examContainer.addEventListener('contextmenu', preventCopy); // 监听右键菜单
+          examContainer.addEventListener('copy', preventCopy);
+          examContainer.addEventListener('cut', preventCopy);
+          examContainer.addEventListener('contextmenu', preventCopy);
         }
       }
 
@@ -255,12 +264,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-
 .take-exam-container {
   display: flex;
   flex-direction: column;
-  /* height: 100vh; */
-   height: 100%;
+  height: 100%;
   background-color: #f5f7fa;
 }
 
@@ -295,10 +302,9 @@ onMounted(async () => {
 .exam-body {
   display: flex;
   flex-grow: 1;
-  /* overflow: hidden; */
   padding: 20px;
   gap: 20px;
-  min-height: 0
+  min-height: 0;
 }
 
 .left-panel {
@@ -307,23 +313,22 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-/* [修正] 增加 overflow-y */
 .right-panel {
   flex-grow: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   background-color: #fff;
   padding: 20px;
   border-radius: 4px;
+  overflow-y: auto;
 }
 
-/* [修正] 增加样式 */
 .question-nav-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
   gap: 10px;
 }
 
-/* [修正] 调整列数 */
 .nav-item {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
@@ -360,5 +365,19 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
+/* 翻页控制按钮样式 */
+.pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #dcdfe6;
+}
 
+.question-progress {
+  font-size: 16px;
+  font-weight: 500;
+  color: #606266;
+}
 </style>

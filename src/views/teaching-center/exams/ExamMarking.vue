@@ -94,7 +94,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 // 1. 导入API函数
-import { getMarkingList } from '../../api/teaching-center/Exams.js'; 
+import { getMarkingList } from '../../../api/teaching-center/Exams.js'; 
 
 const router = useRouter();
 const route = useRoute();

@@ -15,7 +15,7 @@
           <el-menu-item index="/teaching-center/courses">
             <template #title>课程管理</template>
           </el-menu-item>
-          <el-menu-item index="/teaching-center/handouts">
+          <el-menu-item index="/teaching-center/courseware">
             <template #title>课件管理</template>
           </el-menu-item>
         </el-menu-item-group>
@@ -33,7 +33,7 @@
         </el-menu-item-group>
 
         <el-menu-item-group title="---靶场---">
-          <el-menu-item index="/teaching-center/shooting-range">
+          <el-menu-item index="/teaching-center/range">
             <template #title>靶场管理</template>
           </el-menu-item>
         </el-menu-item-group>
@@ -115,7 +115,7 @@
   display: flex; /* 让 el-main 也成为 flex 容器 */
   flex-direction: column;
   flex: 1; /* 占据剩余的所有宽度 */
-  overflow: hidden; /* 防止 el-main 自身出现滚动条 */
+  
   background-color: #ffffff; /* 确保主内容区背景为白色 */
 }
 

@@ -1,5 +1,5 @@
 <template>
   <div>
-    <h1>靶场</h1>
+    <h1>我的主页</h1>
   </div>
 </template>

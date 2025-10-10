@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'; // 推荐引入 ElMessage 用于统一
 const service = axios.create({
   // 建议使用环境变量来管理 baseURL
   baseURL: import.meta.env.VITE_APP_BASE_API || '/api',
-  timeout: 10000,
+  timeout: 30000,
 });
 
 // --- 请求拦截器 (核心修改点) ---

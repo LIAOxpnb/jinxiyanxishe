@@ -462,7 +462,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus } from '../../api/teaching-center/Exams.js';
+import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus } from '../../../api/teaching-center/Exams.js';
 import { getQuestionGroupList } from '@/api/teaching-center/QuestionBank.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';

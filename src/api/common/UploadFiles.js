@@ -1,27 +1,25 @@
-import request from '@/utils/request'; // 确保路径正确
+import request from '@/utils/request';
 
 /**
  * @description 批量上传文件
- * @param {FileList | File[]} files - 从 <input type="file"> 获取的文件列表或文件数组
+ * @param {FileList | File[]} files - 文件列表或文件数组
+ * @param {Function} onProgress - 一个用于报告上传进度的回调函数
  */
-export function uploadFiles(files) {
-  // 1. 创建一个 FormData 对象
+export function uploadFiles(files, onProgress) { // [修改] 增加 onProgress 参数
   const formData = new FormData();
-
-  // 2. 将文件逐个附加到 FormData 中
-  // [重要] 'files' 这个键名必须与后端接口定义的参数名一致
   for (let i = 0; i < files.length; i++) {
-    formData.append('files', files[i]); //
+    formData.append('files', files[i]);
   }
 
-  // 3. 发送请求
   return request({
-    url: '/minio/file/uploadFiles', //
-    method: 'post', //
+    url: '/minio/file/uploadFiles',
+    method: 'post',
     data: formData,
-    // [重要] 上传文件时，必须设置正确的请求头
+    timeout: 0, 
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    // [新增] 将 onProgress 回调函数传递给 axios
+    onUploadProgress: onProgress 
   });
 }

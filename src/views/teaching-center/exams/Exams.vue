@@ -146,7 +146,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, More } from '@element-plus/icons-vue';
 import FilterBar from '@/components/common/FilterBar.vue';
-import { getExamList, addExam, deleteExam,updateExamStatus } from '../../api/teaching-center/Exams.js';
+import { getExamList, addExam, deleteExam,updateExamStatus } from '../../../api/teaching-center/Exams.js';
 import { getDictData } from '@/api/system-management/dictionary';
 
 const router = useRouter();

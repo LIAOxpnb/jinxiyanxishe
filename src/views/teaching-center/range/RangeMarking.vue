@@ -1,5 +1,5 @@
 <template>
   <div>
-    <h1>课件管理</h1>
+    <h1>靶场评分</h1>
   </div>
 </template>
