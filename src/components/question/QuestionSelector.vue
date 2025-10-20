@@ -20,13 +20,15 @@
         height="50vh"
         @selection-change="handleSelectionChange"
         ref="tableRef"
+        :row-class-name="rowClassName"
       >
-  <el-table-column type="selection" width="55" />
+  <el-table-column type="selection" width="55" :selectable="rowSelectable" />
   <el-table-column prop="id" label="序号" width="100" />
   <el-table-column prop="title" label="题目" min-width="300" show-overflow-tooltip>
             <template #default="scope">
                 <div class="question-title-cell">
                     <el-tag size="small" style="margin-right: 8px;">{{ scope.row.questionType }}</el-tag>
+                    <el-tag v-if="scope.row.isExisting" type="info" size="small" style="margin-right: 8px;">已存在</el-tag>
                     <span>{{ scope.row.title }}</span>
                 </div>
             </template>
@@ -73,6 +75,11 @@ const props = defineProps({
   existingQuestions: {
     type: Array,
     default: () => []
+  },
+  // 新增：是否仅返回选择结果，不调用API
+  onlyReturnSelection: {
+    type: Boolean,
+    default: false
   }
 });
 const emit = defineEmits(['update:visible', 'success']);
@@ -110,6 +117,14 @@ const questionFilterFields = ref([
 ]);
 
 const formatDifficulty = (val) => ({0: '高', 1: '中', 2: '低'}[val] || '未知');
+
+const rowClassName = ({ row }) => {
+  return row.isExisting ? 'existing-question-row' : '';
+};
+
+const rowSelectable = (row) => {
+  return !row.isExisting;
+};
 
 const fetchDictOptions = async (dictType, optionsRef) => {
   try {
@@ -151,6 +166,12 @@ const fetchQuestions = async () => {
     if (res.code === 200) {
       questionList.value = res.data.records || [];
       pagination.total = res.data.total || 0;
+      
+      // 标记已存在的题目
+      const existingQuestionIds = (props.existingQuestions || []).map(q => q.questionId);
+      questionList.value.forEach(question => {
+        question.isExisting = existingQuestionIds.includes(question.id);
+      });
       // 恢复已选状态（跨页保留）
       restoringSelections = true;
       await nextTick();
@@ -210,6 +231,15 @@ const handleConfirm = async () => {
   
   const finalSelected = Object.values(selectedMap);
   
+  // 如果只返回选择结果，不调用API
+  if (props.onlyReturnSelection) {
+    const selectedIds = finalSelected.map(q => q.id);
+    emit('success', selectedIds);
+    emit('update:visible', false);
+    return;
+  }
+  
+  // 原有的考试选题逻辑
   // 合并现有题目和新选择的题目
   const existingQuestionList = props.existingQuestions || [];
   const newQuestions = finalSelected.map((q, index) => ({
@@ -264,5 +294,14 @@ onMounted(() => {
 .question-title-cell {
     display: flex;
     align-items: center;
+}
+
+:deep(.existing-question-row) {
+  background-color: #f5f7fa;
+  color: #909399;
+}
+
+:deep(.existing-question-row:hover) {
+  background-color: #f5f7fa !important;
 }
 </style>

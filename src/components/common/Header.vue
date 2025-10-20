@@ -6,11 +6,12 @@
     </div>
     <div class="nav-links">
       <router-link :to="{ name: 'Home' }" class="nav-item">首页</router-link>
-      <router-link :to="{ name: 'Courses' }" class="nav-item">课程</router-link>
+      <router-link :to="{ name: 'Courses' }" class="nav-item">课堂</router-link>
       <router-link :to="{ name: 'Practice' }" class="nav-item">练习</router-link>
       <router-link :to="{ name: 'Student-Exams' }" class="nav-item">考试</router-link>
       <router-link :to="{ name: 'ShootingRange' }" class="nav-item">靶场</router-link>
-      <router-link :to="{ name: 'Classes' }" class="nav-item">班级</router-link>
+      <!-- <router-link :to="{ name: 'Classes' }" class="nav-item">班级</router-link> -->
+      <router-link :to="{ name: 'MyPage', query: { tab: 'myClasses' } }" class="nav-item">班级</router-link>
     </div>
     <div class="search-bar">
         <el-input placeholder="搜索" v-model="searchQuery">
@@ -52,7 +53,9 @@ import { Search, Setting, School, User, Bell } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const searchQuery = ref('')
-
+function goToClasses() {
+  router.push({ path: '/my-page', query: { tab: 'myClasses' } });
+}
 const handleLogout = async () => {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '确认', {

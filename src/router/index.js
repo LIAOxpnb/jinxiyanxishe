@@ -98,15 +98,37 @@ const routes = [
   },
 
   // 顶级页面 (懒加载)
-  { path: '/CoursesPage', name: 'Courses', component: () => import('../views/CoursesPage.vue') },
-  { path: '/PracticePage', name: 'Practice', component: () => import('../views/PracticePage.vue') },
+  { path: '/ClassRoomPage', name: 'Courses', component: () => import('../views/class-room/ClassRoomPage.vue') },
+  { path: '/classroom/details/:id', name: 'ClassRoomDetails', component: () => import('../views/class-room/ClassRoomDetails.vue') },
+  { path: '/PracticePage', name: 'Practice', component: () => import('../views/practice/PracticePage.vue') },
+  { path: '/PracticePage/take/:id', name: 'TakePractice', component: () => import('../views/practice/TakePractice.vue') },
+  { path: '/practice/result/:recordId',name: 'StudentPracticeResult',component: () => import('@/views/practice/PracticeResult.vue'), meta: { title: '练习结果' }
+},
   { path: '/ShootingRangePage', name: 'ShootingRange', component: () => import('../views/ShootingRangePage.vue') },
   { path: '/ClassesPage', name: 'Classes', component: () => import('../views/ClassesPage.vue') },
-
+  { path: '/ClassesPage/:id', name: 'ClassDetails', component: () => import('../views/class/ClassDetail.vue') },
   // 全局账户/消息 (懒加载)
-  { path: '/my-page', name: 'MyPage', component: () => import('../views/MyPage.vue') },
-  { path: '/messages', name: 'Messages', component: () => import('../views/Messages.vue') },
-  
+  { path: '/my-page', name: 'MyPage', component: () => import('../views/my-page/MyPage.vue') },
+  { 
+    path: '/messages', 
+    name: 'Messages', 
+    component: () => import('../views/message/Messages.vue'),
+    // 添加重定向，默认显示系统通知
+    redirect: '/messages/announcements',
+    // 添加子路由
+    children: [
+      {
+        path: 'announcements',
+        name: 'SystemAnnouncements',
+        component: () => import('../views/message/SystemAnnouncements.vue')
+      },
+      {
+        path: 'private',
+        name: 'PrivateLetter',
+        component: () => import('../views/message/PrivateLetter.vue')
+      }
+    ]
+  },
 ]
 
 // 创建路由实例

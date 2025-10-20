@@ -133,7 +133,8 @@ const categoryOptions = ref([]); // 课程分类选项
 const scopeMap = { // 用于在表格中显示学习范围的文本
     0: '公开课',
     1: '指定人员',
-    2: '指定班级'
+    2: '指定班级' ,
+    3: '指定组织' ,
 };
 
 // FilterBar 的配置
@@ -148,6 +149,7 @@ const courseFilterFields = ref([
       { label: '公开课', value: 0 },
       { label: '指定人员', value: 1 },
       { label: '指定班级', value: 2 },
+      { label: '指定组织', value: 3 },
     ]
   },
   { 

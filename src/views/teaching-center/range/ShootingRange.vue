@@ -21,7 +21,7 @@
         </el-table-column>
         <el-table-column prop="shootingRangeType" label="类型" width="90">
           <template #default="scope">
-            {{ scope.row.shootingRangeType === 0 ? '训练' : '比赛' }}
+            {{ scope.row.shootingRangeType === 0 ? '训练' : '比武' }}
           </template>
         </el-table-column>
         <el-table-column label="比赛时间" width="210">
@@ -98,8 +98,8 @@
         </el-form-item>
         <el-form-item label="靶场类型" prop="shootingRangeType">
           <el-radio-group v-model="createForm.shootingRangeType">
-            <el-radio :value="0">训练</el-radio>
-            <el-radio :value="1">正式</el-radio>
+            <el-radio :value="0">公开训练</el-radio>
+            <el-radio :value="1">正式比武</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -144,7 +144,7 @@ const pagination = reactive({
 const categoryOptions = ref([]);
 const typeOptions = ref([
   { label: '训练', value: 0 },
-  { label: '比赛', value: 1 },
+  { label: '比武', value: 1 },
 ]);
 
 const shootingRangeFilterFields = ref([

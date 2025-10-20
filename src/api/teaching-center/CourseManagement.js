@@ -110,3 +110,49 @@ export function deleteCourse(ids) {
     }
   });
 }
+
+/**
+ * @description 保存小节资料
+ * @param {string} id - 小节ID
+ * @param {Array<Object>} data - 资料文件列表
+ * @param {string} data.fileName - 文件名
+ * @param {string} data.filePath - 文件路径
+ * @returns {Promise}
+ */
+export function saveSectionMaterials(id, data) {
+  return request.post('/teacher/course/materialSave', data, {
+    params: { id }
+  });
+}
+
+/**
+ * @description 查看小节资料
+ * @param {string} id - 小节ID
+ * @returns {Promise}
+ */
+export function getSectionMaterials(id) {
+  return request.get('/teacher/course/materialList', {
+    params: { id }
+  });
+}
+
+/**
+ * @description 章节小节保存修改
+ * @param {Array<Object>} data - 章节及小节数据
+ * @returns {Promise}
+ * 示例：
+ * [
+ *   {
+ *     courseId: 10,
+ *     name: '第一章 函数',
+ *     sort: 1,
+ *     courseSectionList: [
+ *       { name: '1.1 定义', sort: 1, coursewareId: 1 },
+ *       { name: '1.2 例题', sort: 2, coursewareId: 2 }
+ *     ]
+ *   }
+ * ]
+ */
+export function saveOrUpdateChaptersAndSections(data) {
+  return request.post('/teacher/courseChapter/saveUpdate', data);
+}

@@ -64,7 +64,7 @@
             </template>
             <el-descriptions :column="1" border>
               <el-descriptions-item label="考试名称">{{ examDetails.name }}</el-descriptions-item>
-              <el-descriptions-item label="分类">{{ examDetails.examCategory  }}</el-descriptions-item>
+              <el-descriptions-item label="分类">{{ examDetails.examCategory }}</el-descriptions-item>
               <el-descriptions-item label="创建人">{{ examDetails.creator }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ examDetails.createTime }}</el-descriptions-item>
             </el-descriptions>
@@ -82,15 +82,15 @@
                 ~
                 ${examDetails.endTime})` }}</el-descriptions-item>
               <el-descriptions-item label="考试时长">{{ examDetails.duration === -1 ? '不限制' : `${examDetails.duration}分钟`
-                }}</el-descriptions-item>
+              }}</el-descriptions-item>
               <el-descriptions-item label="考试次数">{{ examDetails.attempts === -1 ? '不限制' : `${examDetails.attempts}次`
-                }}</el-descriptions-item>
+              }}</el-descriptions-item>
               <el-descriptions-item label="参考人员">{{ ['未指定', '指定人员', '指定班级'][examDetails.scope] || '未知'
-                }}</el-descriptions-item>
+              }}</el-descriptions-item>
               <el-descriptions-item label="试题乱序">{{ examDetails.disorder === 1 ? '开启' : '关闭' }}</el-descriptions-item>
               <el-descriptions-item label="查看考卷">{{ examDetails.viewPaper === 1 ? '开启' : '关闭' }}</el-descriptions-item>
               <el-descriptions-item label="禁止复制">{{ examDetails.disableCopy === 1 ? '开启' : '关闭'
-                }}</el-descriptions-item>
+              }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
 
@@ -138,7 +138,8 @@
         <el-form-item label="考试时长">
           <el-radio-group v-model="editForm.duration" @change="(val) => { if (val !== -1) isDurationLimited = true }">
             <el-radio :label="-1">不限制</el-radio>
-            <el-radio :label="customDuration > 0 ? customDuration : 60" @change="isDurationLimited = true">限制时长</el-radio>
+            <el-radio :label="customDuration > 0 ? customDuration : 60"
+              @change="isDurationLimited = true">限制时长</el-radio>
           </el-radio-group>
           <el-input-number v-if="isDurationLimited" v-model="customDuration" :min="1"
             @change="(val) => editForm.duration = val" controls-position="right" style="margin-left: 10px;" />
@@ -243,7 +244,7 @@
             style="width: 100px;" />
           <span class="dialog-stat-text">分, 共{{ (questionCountsByType[item.type] || 0) * (batchScoreForm[item.type] ||
             0)
-            }}分</span>
+          }}分</span>
         </el-form-item>
         <el-divider />
         <el-form-item label="总共">
@@ -1552,8 +1553,10 @@ onMounted(() => {
 .right-panel {
   /* flex: 1; */
   /* min-width: 470px; */
-   width: fit-content; /* <-- 新增：让宽度由内容决定 */
-  max-width: 500px;   /* <-- 新增：但不能超过500px，防止布局破坏 */
+  width: fit-content;
+  /* <-- 新增：让宽度由内容决定 */
+  max-width: 500px;
+  /* <-- 新增：但不能超过500px，防止布局破坏 */
   display: flex;
   flex-direction: column;
   gap: 12px;

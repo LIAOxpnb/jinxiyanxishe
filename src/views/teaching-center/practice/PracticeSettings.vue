@@ -165,7 +165,7 @@
     </el-dialog>
 
     <QuestionSelector v-if="selectorVisible" v-model:visible="selectorVisible" :existing-questions="questionList"
-      @success="handleSelectionSuccess" />
+      :only-return-selection="true" @success="handleSelectionSuccess" />
 
     <QuestionEditDialog v-model:visible="editDialogVisible" :question-id="editQuestionId"
       @success="fetchPracticeDetails" />
@@ -368,14 +368,22 @@ const addQuestion = (command) => {
 };
 
 const handleSelectionSuccess = async (selectedIds) => {
-  const newQuestions = selectedIds.map(id => ({ questionId: id, sort: questionList.value.length + 1 }));
+  const newQuestions = selectedIds.map((id, index) => ({ 
+    questionId: id, 
+    sort: questionList.value.length + index + 1 
+  }));
   const currentQuestions = questionList.value.map(q => ({ questionId: q.questionId, sort: q.sort }));
   const payload = {
     id: practiceId.value,
     practiceQuestionList: [...currentQuestions, ...newQuestions],
   };
-  await setPracticeQuestionList(payload);
-  fetchPracticeDetails();
+  try {
+    await setPracticeQuestionList(payload);
+    ElMessage.success('添加题目成功！');
+    fetchPracticeDetails();
+  } catch (error) {
+    ElMessage.error('添加题目失败');
+  }
 };
 
 const updateQuestionListOnServer = async () => {

@@ -18,3 +18,12 @@ export function getProfile() {
 export function logout() {
   return request.post('/auth/logout');
 }
+
+/**
+ * @description: 查看登录用户信息
+ * @param {*}
+ * @return {*}
+ */
+export function getUserInfo() {
+  return request.get('/admin/user/info');
+}

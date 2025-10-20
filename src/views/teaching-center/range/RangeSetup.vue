@@ -30,35 +30,30 @@
                   </el-dropdown>
                   <span>试题数 <span class="stat-value">{{ totalQuestions }}</span> 道</span>
                   <span>总分 <span class="stat-value">{{ totalScore }}</span> 分</span>
-                  <span>合格分 <span class="stat-value">{{ shootingRangeDetails.qualified }}</span> 分</span>
-                  <el-button type="primary" link @click="openBatchSetScoreDialog">批量设置分数</el-button>
-                  <el-dropdown @command="handleScoreCommands">
-                    <el-button type="primary" link>
-                      设置合格分<el-icon class="el-icon--right"><arrow-down /></el-icon>
-                    </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="setPassingScore">设置合格分</el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                  <el-button type="success" @click="saveCluesAndQuestions" style="margin-left: auto;">保存</el-button>
+                  <el-button type="success" @click="saveCluesAndQuestions" style="margin-left: auto;">保存左侧内容</el-button>
+                  <div class="header-remark">【备注】操作后请点击保存</div>
                 </div>
               </div>
             </template>
             <div class="content-list-container">
               <div class="section-title">靶场线索</div>
               <el-empty v-if="clues.length === 0" description="暂无线索" :image-size="80" />
-              <div v-for="(clue, index) in clues" :key="`clue-${clue.id || index}`" class="item-card">
+              <div v-for="(clue, index) in clues" :key="clue.uid" class="item-card">
                  <div class="card-header">
                     <span class="item-index">线索 {{ index + 1 }}</span>
                     <div class="item-actions">
-                        <el-button :icon="Edit" circle plain size="small" @click="editClue(clue)" title="编辑" />
+                        <el-button :icon="Top" circle plain size="small" @click="moveClueUp(index)" :disabled="index === 0" title="上移" />
+                        <el-button :icon="Bottom" circle plain size="small" @click="moveClueDown(index)" :disabled="index === clues.length - 1" title="下移" />
+                        <el-button :icon="Edit" circle plain size="small" @click="editClue(index)" title="编辑" />
                         <el-button :icon="Delete" circle plain type="danger" size="small" @click="deleteClue(index)" title="删除" />
                     </div>
                  </div>
                  <div class="item-body">
                     <div class="item-title" v-html="clue.title"></div>
+                    <div v-if="clue.fileName" class="item-attachment">
+                        <el-icon><Document /></el-icon> 
+                        <a @click.prevent="previewClueFile(clue)">{{ clue.fileName }}</a>
+                    </div>
                  </div>
               </div>
               
@@ -87,10 +82,11 @@
               </div>
             </template>
             <el-descriptions :column="1" border>
+              <el-descriptions-item label="靶场名称">{{ shootingRangeDetails.name }}</el-descriptions-item>
               <el-descriptions-item label="靶场简介">{{ shootingRangeDetails.introduction }}</el-descriptions-item>
-              <el-descriptions-item label="分类">{{ shootingRangeDetails.shootingRangeCategory }}</el-descriptions-item>
-              <el-descriptions-item label="靶场类型">{{ shootingRangeDetails.shootingRangeType === 0 ? '训练' : '正式' }}</el-descriptions-item>
-              <el-descriptions-item label="创建人">{{ shootingRangeDetails.creator }}</el-descriptions-item>
+              <el-descriptions-item label="分类">{{ categoryName }}</el-descriptions-item>
+              <el-descriptions-item label="靶场类型">{{ shootingRangeDetails.shootingRangeType === 0 ? '训练' : '比赛' }}</el-descriptions-item>
+              <el-descriptions-item label="创建人">{{ shootingRangeDetails.creatorName }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ shootingRangeDetails.createTime }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -128,59 +124,275 @@
     
     <QuestionEditDialog v-model:visible="editDialogVisible" :question-id="editQuestionId" @success="fetchShootingRangeDetails" />
 
-    <el-dialog v-model="batchSetScoreDialogVisible" title="批量设置分数" width="500px">
-      <el-form :model="batchScoreForm" label-width="80px">
-        <el-form-item v-for="item in questionTypesForBatchScore" :key="item.type">
-          <template #label>{{ item.name }}</template>
-          <span class="dialog-stat-text">共{{ questionCountsByType[item.type] || 0 }}题</span>
-          <span class="dialog-stat-text">单题</span>
-          <el-input-number v-model="batchScoreForm[item.type]" :min="0" controls-position="right"
-            style="width: 100px;" />
-          <span class="dialog-stat-text">分, 共{{ (questionCountsByType[item.type] || 0) * (batchScoreForm[item.type] || 0) }}分</span>
+    <el-dialog v-model="clueEditorVisible" title="线索编辑" width="800px" :close-on-click-modal="false" @close="destroyClueEditor">
+      <el-form v-if="clueEditorVisible" :model="clueForm" label-width="80px">
+        <el-form-item label="线索内容">
+          <div style="border: 1px solid #ccc">
+            <Toolbar
+              style="border-bottom: 1px solid #ccc"
+              :editor="editorRef"
+              :defaultConfig="{}"
+            />
+            <Editor
+              style="height: 300px; overflow-y: hidden;"
+              v-model="clueForm.title"
+              @onCreated="handleClueEditorCreated"
+            />
+          </div>
         </el-form-item>
-        <el-divider />
-        <el-form-item label="总共">
-          <span class="dialog-stat-text">共{{ totalQuestions }}题</span>
-          <span style="margin-left: 20px;">总分 <span class="stat-value">{{ batchTotalScore }}</span> 分</span>
+        <el-form-item label="附件">
+          <el-upload
+            :file-list="attachmentList"
+            action="#"
+            :http-request="handleAttachmentUpload"
+            :on-remove="handleAttachmentRemove"
+            :limit="1"
+          >
+            <el-button type="primary" link>上传附件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">
+                单个文件小于100M，支持pdf、doc、docx、xls、xlsx、mp3、mp4格式。
+              </div>
+            </template>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="batchSetScoreDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitBatchScores">确定</el-button>
+        <span class="dialog-footer">
+          <el-button @click="clueEditorVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveClue">确定</el-button>
+        </span>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="setPassingScoreDialogVisible" title="合格分设置" width="500px">
-      <el-form :model="passingScoreForm" label-width="80px">
-        <el-form-item label="总分">
-          <span class="dialog-stat-text">{{ totalScore }}分</span>
+    <el-dialog v-model="basicInfoDialogVisible" title="修改靶场基本信息" width="600px">
+      <el-form v-if="editForm" :model="editForm" label-width="80px">
+        <el-form-item label="靶场名称" prop="name">
+          <el-input v-model="editForm.name" maxlength="30" show-word-limit />
+          <div class="form-hint">【备注】名称重复性校验</div>
         </el-form-item>
-        <el-form-item label="合格分">
-          <el-input-number v-model="passingScoreForm.qualified" :min="0" :max="totalScore" controls-position="right"
-            style="width: 100px;" />
-          <span class="dialog-stat-text">分</span>
+        <el-form-item label="靶场简介" prop="introduction">
+          <el-input v-model="editForm.introduction" type="textarea" :rows="3" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item label="分类" prop="shootingRangeCategory">
+          <el-select v-model="editForm.shootingRangeCategory" placeholder="选择分类" style="width:100%;">
+            <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="靶场类型" prop="shootingRangeType">
+           <el-radio-group v-model="editForm.shootingRangeType" disabled>
+            <el-radio :value="0">训练</el-radio>
+            <el-radio :value="1">比赛</el-radio>
+          </el-radio-group>
+           <div class="form-hint">【备注】类型不可修改</div>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="setPassingScoreDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitPassingScore">确定</el-button>
+        <el-button @click="basicInfoDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitUpdate">确定</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="rangeSettingsDialogVisible" title="靶场设置" width="600px">
+      <el-form v-if="editForm" :model="editForm" label-width="90px">
+        <el-form-item label="闯关模式">
+          <el-radio-group v-model="editForm.challengeMode">
+            <el-radio :value="1">开启</el-radio>
+            <el-radio :value="0">关闭</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="参加时间">
+          <el-radio-group v-model="editForm.participateDate">
+            <el-radio :value="0">不限制</el-radio>
+            <el-radio :value="1">指定时间</el-radio>
+          </el-radio-group>
+          <div v-if="editForm.participateDate === 1" style="margin-top: 10px;">
+            <el-date-picker v-model="timeRange" type="datetimerange" range-separator="至" start-placeholder="选择开始时间"
+              end-placeholder="选择结束时间" value-format="YYYY-MM-DD HH:mm:ss" />
+          </div>
+        </el-form-item>
+        <el-form-item label="靶场时长">
+          <el-radio-group v-model="editForm.duration" @change="(val) => { if (val !== -1) isDurationLimited = true }">
+            <el-radio :label="-1">不限制</el-radio>
+            <el-radio :label="customDuration > 0 ? customDuration : 30" @change="isDurationLimited = true">限制</el-radio>
+          </el-radio-group>
+          <el-input-number v-if="isDurationLimited" v-model="customDuration" :min="30" :max="300" @change="(val) => editForm.duration = val" controls-position="right" style="margin-left: 10px;" />
+          <span v-if="isDurationLimited" style="margin-left: 5px;">分钟</span>
+          <div class="form-hint">【备注】最低30分钟，最高不超过300分钟</div>
+        </el-form-item>
+        <el-form-item label="参加人员">
+          <el-radio-group v-model="editForm.scope">
+            <el-radio :value="1">指定人员</el-radio>
+            <el-radio :value="2">指定班级</el-radio>
+          </el-radio-group>
+          <div v-if="editForm.scope === 1" style="margin-top: 10px; width: 100%;">
+            <div class="selected-users-display">
+              <div v-if="selectedScopeUsers.length === 0" class="no-selection">
+                未选择人员
+              </div>
+              <div v-else class="selection-summary">
+                已选择 {{ selectedScopeUsers.length }} 人
+                <div class="selected-list">
+                  <el-tag v-for="user in selectedScopeUsers.slice(0, 5)" :key="user.id" closable
+                    @close="removeSelectedUser(user)" style="margin: 2px;">
+                    {{ user.name }}
+                  </el-tag>
+                  <span v-if="selectedScopeUsers.length > 5" class="more-items">
+                    等{{ selectedScopeUsers.length }}人
+                  </span>
+                </div>
+              </div>
+            </div>
+            <el-button type="primary" @click="openUserSelectionDialog" style="margin-top: 10px;">
+              {{ selectedScopeUsers.length > 0 ? '修改人员' : '选择人员' }}
+            </el-button>
+            <div class="form-hint">【备注】仅选择的人员可参加当前靶场</div>
+          </div>
+          <div v-if="editForm.scope === 2" style="margin-top: 10px; width: 100%;">
+            <div class="selected-classes-display">
+              <div v-if="selectedScopeClasses.length === 0" class="no-selection">
+                未选择班级
+              </div>
+              <div v-else class="selection-summary">
+                已选择 {{ selectedScopeClasses.length }} 个班级
+                <div class="selected-list">
+                  <el-tag v-for="clazz in selectedScopeClasses.slice(0, 5)" :key="clazz.id" closable
+                    @close="removeSelectedClass(clazz)" style="margin: 2px;">
+                    {{ clazz.name }} ({{ clazz.userCount }}人)
+                  </el-tag>
+                  <span v-if="selectedScopeClasses.length > 5" class="more-items">
+                    等{{ selectedScopeClasses.length }}个班级
+                  </span>
+                </div>
+              </div>
+            </div>
+            <el-button type="primary" @click="openClassSelectionDialog" style="margin-top: 10px;">
+              {{ selectedScopeClasses.length > 0 ? '修改班级' : '选择班级' }}
+            </el-button>
+            <div class="form-hint">【备注】仅选择的班级可选择当前靶场</div>
+          </div>
+        </el-form-item>
+        <el-form-item label="禁止复制">
+          <el-radio-group v-model="editForm.disableCopy">
+            <el-radio :value="1">开启</el-radio>
+            <el-radio :value="0">关闭</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rangeSettingsDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitUpdate">确定</el-button>
+      </template>
+    </el-dialog>
+    
+    <el-dialog v-model="userSelectionDialogVisible" title="选择人员" width="1000px" :close-on-click-modal="false">
+        <div class="add-member-dialog">
+          <div class="user-tree-section">
+            <div class="search-section">
+              <el-input v-model="userSearchKeyword" placeholder="姓名、手机号、警号、身份证号" @input="handleUserSearch" clearable>
+                <template #append><el-button @click="handleUserSearch"><el-icon><Search /></el-icon></el-button></template>
+              </el-input>
+            </div>
+            <div class="user-tree-container">
+                <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id" @check="handleOrgTreeCheck">
+                  <template #default="{ data }">
+                    <div class="tree-node">
+                      <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
+                      <el-avatar v-else :size="20" :src="data.avatar"><el-icon><User /></el-icon></el-avatar>
+                      <span class="node-label">{{ data.name }}</span>
+                      <span v-if="data.type === 'user'" class="user-dept">{{ data.department }}</span>
+                    </div>
+                  </template>
+                </el-tree>
+            </div>
+          </div>
+          <div class="selected-users-section">
+            <div class="section-header">
+              <span>已选：{{ selectedScopeUsers.length }} 名用户</span>
+              <el-button type="text" @click="clearSelectedUsers">清空</el-button>
+            </div>
+            <div class="selected-users-list-dialog">
+              <div v-for="user in selectedScopeUsers" :key="user.id" class="selected-user-item">
+                <el-avatar :size="32" :src="user.avatar"><el-icon><User /></el-icon></el-avatar>
+                <div class="user-details"><div class="user-name">{{ user.name }}</div><div class="user-dept">{{ user.department }}</div></div>
+                <el-button type="text" class="remove-btn" @click="removeSelectedUser(user)"><el-icon><Close /></el-icon></el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <template #footer>
+          <el-button @click="userSelectionDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSelectedUsers">确定</el-button>
+        </template>
+    </el-dialog>
+    
+    <el-dialog v-model="classSelectionDialogVisible" title="选择班级" width="1000px" :close-on-click-modal="false">
+        <div class="add-class-dialog">
+          <div class="class-list-section">
+            <div class="search-section">
+              <el-input v-model="classSearchKeyword" placeholder="班级名称" @input="handleClassSearch" clearable>
+                <template #append><el-button @click="handleClassSearch"><el-icon><Search /></el-icon></el-button></template>
+              </el-input>
+            </div>
+            <div class="class-list-container">
+              <div v-for="clazz in classListData" :key="clazz.id" class="class-item">
+                <el-checkbox v-model="clazz.checked" @change="handleClassCheck(clazz)">
+                  <div class="class-info">
+                    <el-icon class="class-icon"><OfficeBuilding /></el-icon>
+                    <div class="class-details"><span class="class-name">{{ clazz.name }}</span><span class="class-members">({{ clazz.userCount }}人)</span></div>
+                  </div>
+                </el-checkbox>
+              </div>
+            </div>
+            <div class="class-pagination">
+              <span class="pagination-info">共{{ classTotal }}条</span>
+              <el-pagination v-model:current-page="classCurrentPage" v-model:page-size="classPageSize" :total="classTotal" layout="prev, pager, next" @current-change="handleClassPageChange" size="small" />
+            </div>
+          </div>
+          <div class="selected-classes-section">
+            <div class="section-header">
+              <span>已选：{{ selectedScopeClasses.length }} 个班级</span>
+              <el-button type="text" @click="clearSelectedClasses">清空</el-button>
+            </div>
+            <div class="selected-classes-list-dialog">
+              <div v-for="clazz in selectedScopeClasses" :key="clazz.id" class="selected-class-item">
+                <el-icon class="class-icon"><OfficeBuilding /></el-icon>
+                <div class="class-details"><div class="class-name">{{ clazz.name }}</div><div class="class-members">{{ clazz.userCount }}人</div></div>
+                <el-button type="text" class="remove-btn" @click="removeSelectedClass(clazz)"><el-icon><Close /></el-icon></el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <template #footer>
+          <el-button @click="classSelectionDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSelectedClasses">确定</el-button>
+        </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, shallowRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getShootingRangeDetail, setClueAndQuestionList, setShootingRangeQualified } from '@/api/teaching-center/ShootingRange.js';
-import { Edit, ArrowDown, Delete, Document } from '@element-plus/icons-vue';
+import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList } from '@/api/teaching-center/ShootingRange.js';
+import { getDictData } from '@/api/system-management/dictionary';
+import { getUserList } from '@/api/system-management/User.js';
+import { getOrgTree } from '@/api/system-management/Org.js';
+import { getClassList } from '@/api/teaching-center/ClassManagement.js';
+import { Edit, ArrowDown, Delete, Document, Top, Bottom, Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
 import QuestionEditor from '@/components/question/QuestionEditor.vue';
 import { v4 as uuidv4 } from 'uuid';
+import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
+import '@wangeditor/editor/dist/css/style.css';
+import { uploadFiles } from '@/api/common/UploadFiles.js';
+import { previewFile } from '@/api/common/PreviewFile.js';
+import ExamQuestionCard from '@/components/exam/ExamQuestionCard.vue'; 
+import QuestionSelector from '@/components/question/QuestionSelector.vue';
+import QuestionEditDialog from '@/components/question/QuestionEditDialog.vue';
 
 const route = useRoute();
 const router = useRouter();
-
 const loading = ref(true);
 const rangeId = ref(null);
 const shootingRangeDetails = ref(null);
@@ -189,40 +401,69 @@ const questionList = ref([]);
 const editDialogVisible = ref(false);
 const editQuestionId = ref(null);
 
-const batchSetScoreDialogVisible = ref(false);
-const setPassingScoreDialogVisible = ref(false);
-const batchScoreForm = ref({});
-const passingScoreForm = ref({ qualified: 0 });
+const basicInfoDialogVisible = ref(false);
+const rangeSettingsDialogVisible = ref(false);
+const editForm = ref(null);
+const categoryOptions = ref([]);
+
+const isDurationLimited = ref(false);
+const customDuration = ref(30);
+
+const userSelectionDialogVisible = ref(false);
+const classSelectionDialogVisible = ref(false);
+const selectedScopeUsers = ref([]);
+const selectedScopeClasses = ref([]);
+const orgTreeData = ref([]);
+const orgTreeRef = ref(null);
+const userSearchKeyword = ref('');
+const searchedUsers = ref([]);
+const classListData = ref([]);
+const classSearchKeyword = ref('');
+const classCurrentPage = ref(1);
+const classPageSize = ref(10);
+const classTotal = ref(0);
+
+const clueEditorVisible = ref(false);
+const editorRef = shallowRef(null);
+const clueForm = ref(null);
+const attachmentList = ref([]);
 
 const totalQuestions = computed(() => questionList.value.length);
 const totalScore = computed(() => questionList.value.reduce((sum, item) => sum + (Number(item.score) || 0), 0));
-
-const batchTotalScore = computed(() => {
-  let score = 0;
-  for (const type in batchScoreForm.value) {
-    score += (questionCountsByType.value[type] || 0) * (batchScoreForm.value[type] || 0);
-  }
-  return score;
+const categoryName = computed(() => {
+  if (!shootingRangeDetails.value || !categoryOptions.value.length) return '';
+  const category = categoryOptions.value.find(c => c.value == shootingRangeDetails.value.shootingRangeCategory);
+  return category ? category.label : '';
 });
-
-const questionCountsByType = computed(() => {
-  return questionList.value.reduce((acc, item) => {
-    const type = item.questionType;
-    if (type) {
-      if (!acc[type]) acc[type] = 0;
-      acc[type]++;
+const timeRange = computed({
+  get() {
+    if (editForm.value && editForm.value.startTime && editForm.value.endTime) {
+      return [editForm.value.startTime, editForm.value.endTime];
     }
-    return acc;
-  }, {});
+    return [];
+  },
+  set(val) {
+    if (editForm.value) {
+      editForm.value.startTime = val ? val[0] : null;
+      editForm.value.endTime = val ? val[1] : null;
+    }
+  }
 });
 
-const questionTypesForBatchScore = ref([
-  { type: 'SINGLE_CHOICE', name: '单选' },
-  { type: 'MULTIPLE_CHOICE', name: '多选' },
-  { type: 'FILL_IN_BLANK', name: '填空' },
-  { type: 'TRUE_FALSE', name: '判断' },
-  { type: 'ESSAY', name: '论述' },
-]);
+watch(() => editForm.value?.duration, (newVal) => {
+  isDurationLimited.value = newVal !== -1;
+  if (newVal !== -1) {
+    customDuration.value = newVal;
+  }
+});
+
+const handleClueEditorCreated = (editor) => { editorRef.value = editor; };
+const destroyClueEditor = () => {
+  const editor = editorRef.value;
+  if (editor == null) return;
+  editor.destroy();
+  editorRef.value = null;
+};
 
 const goBack = () => router.back();
 
@@ -252,7 +493,7 @@ const transformBackendToFrontend = (backendQuestions = []) => {
       if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE'].includes(questionType)) {
         const options = JSON.parse(q.details || '[]');
         frontendQuestion.options = options.map(opt => ({ content: opt.value }));
-        
+
         if (questionType === 'SINGLE_CHOICE') {
           const correctOption = options.find(opt => opt.option === q.answer);
           frontendQuestion.answer = correctOption ? options.indexOf(correctOption) : null;
@@ -272,7 +513,7 @@ const transformBackendToFrontend = (backendQuestions = []) => {
       } else {
         frontendQuestion.answer = q.answer;
       }
-    } catch(e) { console.error("解析题目详情失败", e); }
+    } catch (e) { console.error("解析题目详情失败", e); }
 
     return frontendQuestion;
   });
@@ -284,7 +525,7 @@ const fetchShootingRangeDetails = async () => {
     const res = await getShootingRangeDetail({ id: rangeId.value });
     if (res.code === 200 && res.data) {
       shootingRangeDetails.value = res.data;
-      clues.value = res.data.clues || [];
+      clues.value = (res.data.clues || []).map(c => ({ ...c, uid: uuidv4() }));
       questionList.value = transformBackendToFrontend(res.data.questions);
     } else {
       ElMessage.error(res.msg || '获取靶场详情失败');
@@ -296,61 +537,73 @@ const fetchShootingRangeDetails = async () => {
   }
 };
 
+const fetchCategories = async () => {
+  try {
+    const res = await getDictData('shooting_range_category');
+    categoryOptions.value = res.data.map(item => ({ label: item.dictLabel, value: item.dictValue }));
+  } catch (error) { ElMessage.error('获取分类选项失败'); }
+};
+
 const saveCluesAndQuestions = async () => {
-    try {
-        const questionTypeMap = {
-            SINGLE_CHOICE: '单选', MULTIPLE_CHOICE: '多选', TRUE_FALSE: '判断',
-            FILL_IN_BLANK: '填空', ESSAY: '论述',
-        };
+  try {
+    const questionTypeMap = {
+      SINGLE_CHOICE: '单选', MULTIPLE_CHOICE: '多选', TRUE_FALSE: '判断',
+      FILL_IN_BLANK: '填空', ESSAY: '论述',
+    };
 
-        const backendQuestions = questionList.value.map((q, i) => {
-            const backendQuestion = {
-                questionType: questionTypeMap[q.questionType] || '',
-                title: q.title,
-                details: '',
-                answer: '',
-                analysis: q.analysisType === 'HAS_ANALYSIS' ? q.analysisContent : '',
-                score: q.score,
-                sort: i + 1,
-            };
+    const backendQuestions = questionList.value.map((q, i) => {
+      const backendQuestion = {
+        questionType: questionTypeMap[q.questionType] || '',
+        title: q.title,
+        details: '',
+        answer: '',
+        analysis: q.analysisType === 'HAS_ANALYSIS' ? q.analysisContent : '',
+        score: q.score,
+        sort: i + 1,
+      };
 
-            if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE'].includes(q.questionType)) {
-                backendQuestion.details = JSON.stringify(q.options.map((opt, i) => ({
-                    option: String.fromCharCode(65 + i),
-                    value: opt.content
-                })));
-                if (q.questionType === 'SINGLE_CHOICE' && q.answer !== null) {
-                    backendQuestion.answer = String.fromCharCode(65 + q.answer);
-                } else if (q.questionType === 'MULTIPLE_CHOICE' && q.answer && q.answer.length > 0) {
-                    backendQuestion.answer = [...q.answer].sort((a, b) => a - b).map(i => String.fromCharCode(65 + i)).join('#@#');
-                }
-            } else if (q.questionType === 'TRUE_FALSE') {
-                backendQuestion.answer = q.answer;
-                 backendQuestion.details = JSON.stringify([
-                  { option: 'A', value: '正确' },
-                  { option: 'B', value: '错误' }
-                ]);
-            } else if (q.questionType === 'FILL_IN_BLANK') {
-                backendQuestion.answer = q.answer ? q.answer.join('#@#') : '';
-            } else {
-                backendQuestion.answer = q.answer;
-            }
-            return backendQuestion;
-        });
+      if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE'].includes(q.questionType)) {
+        backendQuestion.details = JSON.stringify(q.options.map((opt, i) => ({
+          option: String.fromCharCode(65 + i),
+          value: opt.content
+        })));
+        if (q.questionType === 'SINGLE_CHOICE' && q.answer !== null) {
+          backendQuestion.answer = String.fromCharCode(65 + q.answer);
+        } else if (q.questionType === 'MULTIPLE_CHOICE' && q.answer && q.answer.length > 0) {
+          backendQuestion.answer = [...q.answer].sort((a, b) => a - b).map(i => String.fromCharCode(65 + i)).join('#@#');
+        }
+      } else if (q.questionType === 'TRUE_FALSE') {
+        backendQuestion.answer = q.answer;
+        backendQuestion.details = JSON.stringify([
+          { option: 'A', value: '正确' },
+          { option: 'B', value: '错误' }
+        ]);
+      } else if (q.questionType === 'FILL_IN_BLANK') {
+        backendQuestion.answer = q.answer ? q.answer.join('#@#') : '';
+      } else {
+        backendQuestion.answer = q.answer;
+      }
+      return backendQuestion;
+    });
 
-        const payload = {
-            id: rangeId.value,
-            clues: clues.value.map((c, i) => ({ ...c, sort: i + 1 })),
-            questions: backendQuestions,
-        };
+    const payload = {
+      id: rangeId.value,
+      clues: clues.value.map((c, i) => ({
+        title: c.title,
+        fileName: c.fileName,
+        filePath: c.filePath,
+        sort: i + 1
+      })),
+      questions: backendQuestions,
+    };
 
-        await setClueAndQuestionList(payload);
-        ElMessage.success('保存成功！');
-        fetchShootingRangeDetails();
-    } catch (error) {
-        ElMessage.error('保存失败');
-        console.error(error);
-    }
+    await setClueAndQuestionList(payload);
+    ElMessage.success('保存成功！');
+    fetchShootingRangeDetails();
+  } catch (error) {
+    ElMessage.error('保存失败');
+    console.error(error);
+  }
 };
 
 const handleAddItem = (command) => {
@@ -386,9 +639,54 @@ const addQuestion = (type) => {
   questionList.value.push(base);
 };
 
-const addClue = () => { clues.value.push({ title: '新线索', fileName: '', filePath: ''}); };
-const editClue = (clue) => { ElMessage.info(`编辑线索：${clue.title}`); };
-const deleteClue = (index) => { clues.value.splice(index, 1); };
+const addClue = () => {
+  clueForm.value = {
+    uid: uuidv4(),
+    isNew: true,
+    title: '<p>请在此处输入线索内容...</p>',
+    fileName: '',
+    filePath: '',
+  };
+  attachmentList.value = [];
+  clueEditorVisible.value = true;
+};
+
+const editClue = (index) => {
+  const targetClue = clues.value[index];
+  clueForm.value = {
+    ...JSON.parse(JSON.stringify(targetClue)),
+    index: index,
+    isNew: false,
+  };
+
+  if (targetClue.fileName && targetClue.filePath) {
+    attachmentList.value = [{ name: targetClue.fileName, url: targetClue.filePath }];
+  } else {
+    attachmentList.value = [];
+  }
+
+  clueEditorVisible.value = true;
+};
+
+const deleteClue = (index) => {
+  clues.value.splice(index, 1);
+  saveCluesAndQuestions();
+};
+
+const moveClueUp = (index) => {
+  if (index > 0) {
+    [clues.value[index - 1], clues.value[index]] = [clues.value[index], clues.value[index - 1]];
+    saveCluesAndQuestions();
+  }
+};
+
+const moveClueDown = (index) => {
+  if (index < clues.value.length - 1) {
+    [clues.value[index + 1], clues.value[index]] = [clues.value[index], clues.value[index + 1]];
+    saveCluesAndQuestions();
+  }
+};
+
 const handleDeleteQuestion = (index) => { questionList.value.splice(index, 1); };
 
 const copyQuestion = (index) => {
@@ -398,57 +696,205 @@ const copyQuestion = (index) => {
   questionList.value.splice(index + 1, 0, copiedQuestion);
 };
 
-const handleEditQuestion = (question) => { ElMessage.info("编辑功能由QuestionEditor组件内部处理"); };
-const openBasicInfoDialog = () => { ElMessage.info("开启编辑靶场信息弹窗"); };
-const openRangeSettingsDialog = () => { ElMessage.info("开启编辑靶场设置弹窗"); };
-
-const openBatchSetScoreDialog = () => {
-  const defaultScores = {};
-  questionTypesForBatchScore.value.forEach(item => {
-    const firstQuestionOfType = questionList.value.find(q => q.questionType === item.type);
-    defaultScores[item.type] = firstQuestionOfType ? firstQuestionOfType.score : 0;
-  });
-  batchScoreForm.value = defaultScores;
-  batchSetScoreDialogVisible.value = true;
-};
-
-const handleScoreCommands = (command) => {
-  if (command === 'setPassingScore') {
-    openSetPassingScoreDialog();
-  }
-};
-
-const openSetPassingScoreDialog = () => {
-  passingScoreForm.value.qualified = shootingRangeDetails.value.qualified || 0;
-  setPassingScoreDialogVisible.value = true;
-};
-
-const submitBatchScores = async () => {
-  questionList.value.forEach(q => {
-    if (batchScoreForm.value[q.questionType] !== undefined) {
-      q.score = batchScoreForm.value[q.questionType];
-    }
-  });
-  await saveCluesAndQuestions();
-  batchSetScoreDialogVisible.value = false;
-};
-
-const submitPassingScore = async () => {
+const handleAttachmentUpload = async ({ file }) => {
   try {
-    await setShootingRangeQualified({ id: rangeId.value, qualified: passingScoreForm.value.qualified });
-    ElMessage.success('设置合格分成功！');
-    setPassingScoreDialogVisible.value = false;
-    await fetchShootingRangeDetails();
+    const res = await uploadFiles([file]);
+    if (res.code === 200) {
+      const filePath = Array.isArray(res.data) ? res.data[0] : res.data;
+      clueForm.value.fileName = file.name;
+      clueForm.value.filePath = filePath;
+      attachmentList.value = [{ name: file.name, url: filePath }];
+      ElMessage.success('附件上传成功');
+    } else {
+      throw new Error(res.msg || '上传失败');
+    }
   } catch (error) {
-    ElMessage.error('操作失败');
+    ElMessage.error(error.message);
+    attachmentList.value = [];
   }
 };
+
+const handleAttachmentRemove = () => {
+  clueForm.value.fileName = '';
+  clueForm.value.filePath = '';
+  attachmentList.value = [];
+};
+
+const previewClueFile = async (clue) => {
+  if (!clue.filePath) return;
+  try {
+    const url = await previewFile(clue.filePath);
+    window.open(url, '_blank');
+  } catch (error) {
+    ElMessage.error('获取预览地址失败');
+  }
+};
+
+const saveClue = () => {
+  if (clueForm.value.isNew) {
+    clues.value.push({
+      uid: clueForm.value.uid,
+      title: clueForm.value.title,
+      fileName: clueForm.value.fileName,
+      filePath: clueForm.value.filePath,
+    });
+  } else {
+    const index = clueForm.value.index;
+    if (index !== undefined && clues.value[index]) {
+      clues.value[index] = {
+        ...clues.value[index],
+        title: clueForm.value.title,
+        fileName: clueForm.value.fileName,
+        filePath: clueForm.value.filePath,
+      };
+    }
+  }
+  clueEditorVisible.value = false;
+  saveCluesAndQuestions();
+};
+
+const handleEditQuestion = (question) => {
+  editQuestionId.value = question.id;
+  editDialogVisible.value = true;
+};
+
+const openBasicInfoDialog = () => {
+  editForm.value = JSON.parse(JSON.stringify(shootingRangeDetails.value));
+  basicInfoDialogVisible.value = true;
+};
+
+const openRangeSettingsDialog = () => {
+  editForm.value = JSON.parse(JSON.stringify(shootingRangeDetails.value));
+  selectedScopeUsers.value = [];
+  selectedScopeClasses.value = [];
+  if (editForm.value.clazzUserBindList) {
+    if (editForm.value.scope === 1) {
+      selectedScopeUsers.value = editForm.value.clazzUserBindList.map(item => ({ id: item.userId, name: item.userName, department: '...' }));
+    } else if (editForm.value.scope === 2) {
+      selectedScopeClasses.value = editForm.value.clazzUserBindList.map(item => ({ id: item.clazzId, name: item.clazzName, userCount: 0 }));
+    }
+  }
+  rangeSettingsDialogVisible.value = true;
+};
+
+const submitUpdate = async () => {
+  if (editForm.value.scope === 1) {
+    editForm.value.clazzUserBindList = selectedScopeUsers.value.map(user => ({ userId: user.id, userName: user.name }));
+  } else if (editForm.value.scope === 2) {
+    editForm.value.clazzUserBindList = selectedScopeClasses.value.map(clazz => ({ clazzId: clazz.id, clazzName: clazz.name }));
+  } else {
+    editForm.value.clazzUserBindList = [];
+  }
+
+  try {
+    await updateShootingRange(editForm.value);
+    ElMessage.success('更新成功！');
+    await fetchShootingRangeDetails();
+    basicInfoDialogVisible.value = false;
+    rangeSettingsDialogVisible.value = false;
+  } catch (error) {
+    ElMessage.error('更新失败');
+  }
+};
+
+const openUserSelectionDialog = async () => {
+  userSelectionDialogVisible.value = true;
+  await fetchOrgTree();
+};
+const openClassSelectionDialog = async () => {
+  classSelectionDialogVisible.value = true;
+  await fetchClassList();
+};
+
+const fetchOrgTree = async () => {
+  try {
+    const res = await getOrgTree({ personnel: true });
+    if (res.code === 200) {
+      orgTreeData.value = transformOrgTreeData(res.data);
+    }
+  } catch (e) { ElMessage.error("获取组织树失败"); }
+};
+const transformOrgTreeData = (nodes) => {
+  return (nodes || []).map(node => {
+    const transformedNode = { id: `org_${node.id}`, name: node.orgName, type: 'org', children: [] };
+    if (node.users) {
+      transformedNode.children.push(...node.users.map(u => ({ id: `user_${u.id}`, originalId: u.id, name: u.name, type: 'user', department: node.orgName })));
+    }
+    if (node.children) {
+      transformedNode.children.push(...transformOrgTreeData(node.children));
+    }
+    return transformedNode;
+  });
+};
+const handleUserSearch = async () => {
+  if (!userSearchKeyword.value.trim()) {
+    searchedUsers.value = [];
+    return;
+  }
+  try {
+    const res = await getUserList({ pageNum: 1, pageSize: 50, param: userSearchKeyword.value.trim() });
+    if (res.code === 200) {
+      searchedUsers.value = res.data.records.map(u => ({ ...u, checked: selectedScopeUsers.value.some(su => su.id === u.id) }));
+    }
+  } catch (e) { ElMessage.error("搜索用户失败"); }
+};
+const handleUserCheck = (user) => {
+  if (user.checked) {
+    if (!selectedScopeUsers.value.some(u => u.id === user.id)) selectedScopeUsers.value.push(user);
+  } else {
+    selectedScopeUsers.value = selectedScopeUsers.value.filter(u => u.id !== user.id);
+  }
+};
+const handleOrgTreeCheck = (data, { checkedNodes }) => {
+  selectedScopeUsers.value = checkedNodes.filter(n => n.type === 'user').map(u => ({ id: u.originalId, name: u.name, department: u.department }));
+};
+const removeSelectedUser = (user) => {
+  selectedScopeUsers.value = selectedScopeUsers.value.filter(u => u.id !== user.id);
+  const treeNode = orgTreeRef.value?.getNode(`user_${user.id}`);
+  if (treeNode && treeNode.checked) {
+    orgTreeRef.value.setChecked(treeNode, false, false);
+  }
+};
+const clearSelectedUsers = () => {
+  selectedScopeUsers.value = [];
+  orgTreeRef.value?.setCheckedKeys([]);
+};
+const confirmSelectedUsers = () => { userSelectionDialogVisible.value = false; };
+
+const fetchClassList = async () => {
+  try {
+    const res = await getClassList({ page: classCurrentPage.value, size: classPageSize.value, name: classSearchKeyword.value });
+    if (res.code === 200) {
+      classListData.value = res.data.records.map(c => ({ ...c, checked: selectedScopeClasses.value.some(s => s.id === c.id) }));
+      classTotal.value = res.data.total;
+    }
+  } catch (e) { ElMessage.error("获取班级列表失败"); }
+};
+const handleClassSearch = () => { fetchClassList(); };
+const handleClassPageChange = (page) => { classCurrentPage.value = page; fetchClassList(); };
+const handleClassCheck = (clazz) => {
+  if (clazz.checked) {
+    if (!selectedScopeClasses.value.some(c => c.id === clazz.id)) selectedScopeClasses.value.push(clazz);
+  } else {
+    selectedScopeClasses.value = selectedScopeClasses.value.filter(c => c.id !== clazz.id);
+  }
+};
+const removeSelectedClass = (clazz) => {
+  selectedScopeClasses.value = selectedScopeClasses.value.filter(c => c.id !== clazz.id);
+  const itemInList = classListData.value.find(c => c.id === clazz.id);
+  if (itemInList) itemInList.checked = false;
+};
+const clearSelectedClasses = () => {
+  selectedScopeClasses.value = [];
+  classListData.value.forEach(c => c.checked = false);
+};
+const confirmSelectedClasses = () => { classSelectionDialogVisible.value = false; };
 
 onMounted(() => {
-  const id = route.params.id;
-  if (id) {
-    rangeId.value = id;
+  rangeId.value = route.params.id;
+  if (rangeId.value) {
     fetchShootingRangeDetails();
+    fetchCategories();
   } else {
     ElMessage.error('无效的靶场ID');
     loading.value = false;
@@ -463,19 +909,23 @@ onMounted(() => {
   height: 100%;
   overflow-y: auto;
 }
+
 .page-header-title {
   font-size: 18px;
   font-weight: 600;
 }
+
 .main-layout {
   display: flex;
   margin-top: 20px;
   gap: 20px;
 }
+
 .left-panel {
   flex: 3;
   min-width: 0;
 }
+
 .right-panel {
   flex: 1;
   min-width: 320px;
@@ -486,76 +936,221 @@ onMounted(() => {
   top: 20px;
   align-self: flex-start;
 }
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
+
 .stats-bar {
   display: flex;
   align-items: center;
   gap: 20px;
   font-size: 14px;
 }
+
 .stat-value {
   color: #303133;
   font-weight: bold;
 }
+
 .content-list-container {
   padding: 8px;
 }
+
 .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
 }
+
 .item-card {
-    border: 1px solid #e4e7ed;
-    border-radius: 4px;
-    margin-bottom: 16px;
-    padding: 16px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  padding: 16px;
 }
+
 .item-card .card-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
+
 .item-index {
-    font-weight: bold;
-    flex-shrink: 0;
+  font-weight: bold;
+  flex-shrink: 0;
 }
+
 .item-score {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+
 .item-score .el-input-number {
-    width: 80px;
+  width: 80px;
 }
+
 .item-actions {
-    margin-left: 16px;
+  margin-left: auto;
 }
+
 .item-body .item-title {
-    margin-bottom: 12px;
+  margin-bottom: 12px;
 }
+
 .item-attachment {
-    font-size: 12px;
-    color: #409eff;
-    cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.item-attachment a {
+  cursor: pointer;
+  color: #409eff;
+}
+
+.item-attachment a:hover {
+  text-decoration: underline;
+}
+
 .form-hint {
   font-size: 12px;
+  color: #909399;
+}
+
+.certificate-section {
+  color: #909399;
+  font-size: 14px;
+}
+
+.add-member-dialog,
+.add-class-dialog {
+  display: flex;
+  gap: 20px;
+  height: 500px;
+}
+
+.user-tree-section,
+.class-list-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-section {
+  margin-bottom: 16px;
+}
+
+.user-tree-container,
+.class-list-container {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.selected-users-section,
+.selected-classes-section {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e4e7ed;
+  padding-left: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.selected-users-list-dialog,
+.selected-classes-list-dialog {
+  flex: 1;
+  overflow: auto;
+}
+
+.selected-user-item,
+.selected-class-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.remove-btn {
   color: #f56c6c;
 }
-.certificate-section {
-    color: #909399;
-    font-size: 14px;
+
+.selected-users-display, .selected-classes-display {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 12px;
+  background-color: #fafafa;
 }
-.dialog-stat-text {
-  margin: 0 10px;
-  color: #606266;
+.no-selection {
+  color: #909399;
+  text-align: center;
+  padding: 20px 0;
+}
+.selection-summary {
   font-size: 14px;
+  color: #606266;
+}
+.selected-list {
+  margin-top: 8px;
+}
+.more-items {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 5px;
+}
+
+.form-hint { font-size: 12px; color: #909399; }
+.add-member-dialog, .add-class-dialog { display: flex; gap: 20px; height: 500px; }
+.user-tree-section, .class-list-section { flex: 1; display: flex; flex-direction: column; }
+.search-section { margin-bottom: 16px; }
+.user-tree-container, .class-list-container { flex: 1; overflow: auto; border: 1px solid #e4e7ed; border-radius: 4px; padding: 8px; }
+.selected-users-section, .selected-classes-section { width: 300px; display: flex; flex-direction: column; border-left: 1px solid #e4e7ed; padding-left: 20px; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed; }
+.selected-users-list-dialog, .selected-classes-list-dialog { flex: 1; overflow: auto; }
+.selected-user-item, .selected-class-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-bottom: 1px solid #f0f0f0; }
+.remove-btn { color: #f56c6c; }
+.tree-node, .user-info, .class-info { display: flex; align-items: center; gap: 8px; }
+.user-dept, .class-members { font-size: 12px; color: #909399; }
+.class-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.selected-users-display, .selected-classes-display {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 12px;
+  background-color: #fafafa;
+}
+.no-selection {
+  color: #909399;
+  text-align: center;
+  padding: 20px 0;
+}
+.selection-summary {
+  font-size: 14px;
+  color: #606266;
+}
+.selected-list {
+  margin-top: 8px;
+}
+.more-items {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 5px;
 }
 </style>
