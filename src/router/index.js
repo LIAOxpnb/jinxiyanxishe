@@ -104,7 +104,10 @@ const routes = [
   { path: '/PracticePage/take/:id', name: 'TakePractice', component: () => import('../views/practice/TakePractice.vue') },
   { path: '/practice/result/:recordId',name: 'StudentPracticeResult',component: () => import('@/views/practice/PracticeResult.vue'), meta: { title: '练习结果' }
 },
-  { path: '/ShootingRangePage', name: 'ShootingRange', component: () => import('../views/ShootingRangePage.vue') },
+  { path: '/ShootingRangePage', name: 'ShootingRange', component: () => import('../views/shooting-rangePage/ShootingRangePage.vue') },
+  { path: '/shooting-range/detail/:id', name: 'ShootingRangeDetail', component: () => import('../views/shooting-rangePage/ShootingRangeDetail.vue') },
+  { path: '/shooting-range/take/:id', name: 'TakeShootingRange', component: () => import('../views/shooting-rangePage/TakeShootingRange.vue') },
+  { path: '/shooting-range/result/:id', name: 'ShootingRangeResult', component: () => import('../views/shooting-rangePage/ShootingRangeResult.vue') },
   { path: '/ClassesPage', name: 'Classes', component: () => import('../views/ClassesPage.vue') },
   { path: '/ClassesPage/:id', name: 'ClassDetails', component: () => import('../views/class/ClassDetail.vue') },
   // 全局账户/消息 (懒加载)

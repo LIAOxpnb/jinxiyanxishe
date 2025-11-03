@@ -36,7 +36,7 @@
           <tr v-for="item in tableData" :key="item.id">
             <td>{{ item.dictLabel }}</td>
             <td>{{ item.dictValue }}</td>
-            <td>{{ item.dictType }}</td>
+            <td>{{  item.dictType }}</td>
             <td>
               <span :class="['status-badge', item.status === '0' ? 'status-normal' : 'status-disabled']">
                 {{ item.status === '0' ? '正常' : '禁用' }}
@@ -76,19 +76,24 @@
         <form @submit.prevent="handleSave">
           <div class="form-group">
             <label for="dictLabel">字典标签</label>
-            <input type="text" id="dictLabel" v-model="currentDict.dictLabel" required>
+            <input type="text" id="dictLabel" v-model="currentDict.dictLabel" @input="generateDictValue" required>
           </div>
           <div class="form-group">
             <label for="dictValue">字典值</label>
-            <input type="text" id="dictValue" v-model="currentDict.dictValue" required>
+            <input type="text" id="dictValue" v-model="currentDict.dictValue" readonly title="字典值将根据字典标签自动生成" required>
           </div>
           <div class="form-group">
             <label for="dictType">字典类型</label>
-            <input type="text" id="dictType" v-model="currentDict.dictType" required>
+            <select id="dictType" v-model="currentDict.dictType" @change="handleDictTypeChange" required>
+              <option value="">请选择字典类型</option>
+              <option v-for="type in dictTypeOptions" :key="type.value" :value="type.value">
+                {{ type.label }}
+              </option>
+            </select>
           </div>
            <div class="form-group">
             <label for="dictSort">排序</label>
-            <input type="number" id="dictSort" v-model="currentDict.dictSort">
+            <input type="number" id="dictSort" v-model="currentDict.dictSort" readonly title="排序值将自动获取">
           </div>
           <div class="form-group">
             <label for="status">状态</label>
@@ -109,8 +114,8 @@
 
 <script>
 import { ref, onMounted } from 'vue'
-import { getDictList, getDictByType, addDict, updateDict, deleteDict } from '../../api/system-management/dictionary'
-
+import { getDictList, getDictByType, addDict, updateDict, deleteDict, getMaxSort } from '../../api/system-management/dictionary'
+import { pinyin } from 'pinyin-pro'; // <-- [新增] 导入 pinyin-pro
 export default {
   name: 'DictionaryManagement',
   setup() {
@@ -126,6 +131,26 @@ export default {
     const isModalVisible = ref(false)
     const modalTitle = ref('')
     const currentDict = ref({})
+    
+    // 字典类型映射表（固定映射）
+    const dictTypeMap = {
+      'exam_category': '考试分类',
+      'file_type': '文件分类',
+      'shooting_range_category': '靶场分类',
+      'courseware_category': '课件分类',
+      'course_category': '课程分类',
+      'question_category': '题库分类'
+    };
+    
+    // 字典类型选项
+    const dictTypeOptions = ref([
+      { value: 'exam_category', label: '考试分类' },
+      { value: 'file_type', label: '文件分类' },
+      { value: 'shooting_range_category', label: '靶场分类' },
+      { value: 'courseware_category', label: '课件分类' },
+      { value: 'course_category', label: '课程分类' },
+      { value: 'question_category', label: '题库分类' }
+    ]);
 
     const fetchDictData = async () => {
       loading.value = true;
@@ -187,8 +212,23 @@ export default {
       fetchDictData();
     };
 
+    // 字典类型改变时，自动获取排序值
+    const handleDictTypeChange = async () => {
+      if (currentDict.value.dictType && !currentDict.value.id) {
+        try {
+          const response = await getMaxSort(currentDict.value.dictType);
+          if (response.code === 200 && response.data !== null && response.data !== undefined) {
+            currentDict.value.dictSort = response.data;
+            console.log('自动获取排序值:', response.data);
+          }
+        } catch (error) {
+          console.error('获取排序值失败:', error);
+        }
+      }
+    };
+
     const handleAdd = () => {
-      currentDict.value = { status: '0' };
+      currentDict.value = { status: '0', dictSort: 0 };
       modalTitle.value = '新增字典';
       isModalVisible.value = true;
     }
@@ -242,6 +282,39 @@ export default {
       isModalVisible.value = false;
     };
 
+
+
+    // 生成字典值的函数
+    const generateDictValue = () => {
+      const label = currentDict.value.dictLabel || '';
+      if (!label.trim()) {
+        currentDict.value.dictValue = '';
+        return;
+      }
+
+      const pinyinValue = convertToPinyin(label.trim());
+      currentDict.value.dictValue = pinyinValue;
+    };
+
+    // 中文转拼音函数
+const convertToPinyin = (text) => {
+      if (!text || !text.trim()) {
+        return '';
+      }
+
+      // pinyin() 会自动处理中英文、数字混合
+      // { toneType: 'none' } -> zhi fu bao (无声调)
+      // 默认会用空格分隔
+      const pinyinString = pinyin(text.trim(), { toneType: 'none' });
+
+      // 将所有空格（包括 pinyin-pro 生成的）替换为下划线
+      // 并清理多余的下划线
+      return pinyinString
+        .toLowerCase()
+        .replace(/\s+/g, '_') // 将所有空格（连续的）替换为单个下划线
+        .replace(/_+/g, '_')   // 再次确保合并连续的下划线
+        .replace(/^_|_$/g, ''); // 移除开头和结尾的下划线
+    };
     return {
       searchDictType,
       isSearching,
@@ -249,7 +322,10 @@ export default {
       pageSize,
       tableData,
       total,
+      dictTypeOptions,
+      dictTypeMap,
       handleAdd,
+      handleDictTypeChange,
       handleEdit,
       handleDelete,
       handleSearch,
@@ -261,6 +337,7 @@ export default {
       currentDict,
       handleSave,
       handleCancel,
+      generateDictValue,
     }
   }
 }
@@ -568,6 +645,12 @@ export default {
   border-radius: 4px;
   font-size: 1rem;
   box-sizing: border-box;
+}
+
+.form-group input[readonly] {
+  background-color: #f5f5f5;
+  color: #666;
+  cursor: not-allowed;
 }
 
 .modal-actions {

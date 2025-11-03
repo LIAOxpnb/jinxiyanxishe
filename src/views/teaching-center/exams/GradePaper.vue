@@ -10,7 +10,7 @@
             返回
           </el-button>
           <span class="page-header-title">
-            试卷详情 - {{ paperDetails.exam?.name }} (学员: {{ paperDetails.userName }})
+            试卷详情 - {{ paperDetails.exam?.name }} 
           </span>
         </div>
         <div class="header-actions">
@@ -22,8 +22,8 @@
       <div class="marking-content">
         <div class="left-panel">
           <el-descriptions title="试卷信息" :column="1" border>
-            <el-descriptions-item label="已得分">{{ paperDetails.score }}</el-descriptions-item>
-            <el-descriptions-item label="总得分">{{ paperDetails.score }}</el-descriptions-item>
+            <el-descriptions-item label="已得分">{{ currentTotalScore }}</el-descriptions-item>
+            <el-descriptions-item label="总得分">{{ currentTotalScore }}</el-descriptions-item>
             <el-descriptions-item label="试卷总分">{{ paperDetails.exam?.score }}</el-descriptions-item>
             <el-descriptions-item label="合格分">{{ paperDetails.exam?.qualified }}</el-descriptions-item>
           </el-descriptions>
@@ -156,6 +156,20 @@ const handleSubmitScores = async () => {
   }
 };
 
+// 计算当前总得分
+const currentTotalScore = computed(() => {
+  const list = paperDetails.value?.examSubmitRecordList;
+  if (!list) return 0;
+  
+  return list.reduce((total, item) => {
+    // 只计算已经有分数的题目
+    if (item.score !== null && item.score !== undefined) {
+      return total + (Number(item.score) || 0);
+    }
+    return total;
+  }, 0);
+});
+
 const filteredQuestionList = computed(() => {
   const list = paperDetails.value?.examSubmitRecordList;
   if (!list) return [];
@@ -187,13 +201,20 @@ onMounted(() => {
 .page-wrapper {
   padding: 20px;
   background-color: #f0f2f5;
-  min-height: calc(100vh - 50px);
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .main-content {
   background-color: #fff;
   padding: 24px;
   border-radius: 4px;
+  height: calc(100vh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
 .custom-header {
@@ -230,24 +251,30 @@ onMounted(() => {
 .marking-content {
   display: flex;
   gap: 20px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .left-panel {
   flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .right-panel {
   flex: 1;
   overflow-y: auto;
-  max-height: 75vh;
   background-color: #f9fafb;
   padding: 15px;
-  padding-bottom: 20px;
+  padding-bottom: 60px;
   border-radius: 4px;
 }
 
 .question-nav {
   margin-top: 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .nav-grid {
@@ -255,6 +282,9 @@ onMounted(() => {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin-top: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  padding-right: 5px;
 }
 
 .nav-item {

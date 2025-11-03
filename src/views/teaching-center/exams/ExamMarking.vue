@@ -48,7 +48,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="submitTime" label="提交时间" sortable min-width="160" />
+        <el-table-column prop="createTime" label="提交时间" sortable min-width="160" />
         <el-table-column prop="score" label="考试得分" sortable min-width="110">
           <template #default="scope">
             {{ scope.row.status !== 4 ? '-' : scope.row.score }}

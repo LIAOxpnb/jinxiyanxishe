@@ -27,3 +27,13 @@ export function logout() {
 export function getUserInfo() {
   return request.get('/admin/user/info');
 }
+
+/**
+ * @description: 登录后修改自己的密码
+ * @param {object} payload { password: 'new_password' }
+ * @return {*}
+ */
+export function updateMyPassword(payload) {
+  // 根据接口文档，修改密码应该是 POST 请求，并且数据在 body 中
+  return request.post('/admin/user/upMyPassword', payload);
+}

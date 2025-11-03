@@ -263,7 +263,7 @@ onMounted(() => {
   max-width: 100%;
   height: 490px;
   margin: 0px auto 0 auto;
-  border-radius: 8px;
+  /* border-radius: 8px; */
 }
 .hero-content {
   max-width: 500px;

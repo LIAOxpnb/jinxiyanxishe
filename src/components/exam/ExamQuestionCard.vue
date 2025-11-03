@@ -49,9 +49,23 @@
       </div>
        <div class="options-wrapper" v-else-if="question.questionType === '判断'">
         <el-radio-group :model-value="question.answer">
-          <el-radio label="1" disabled>正确</el-radio>
-          <el-radio label="0" disabled>错误</el-radio>
+          <el-radio label="0" disabled>正确</el-radio>
+          <el-radio label="1" disabled>错误</el-radio>
         </el-radio-group>
+      </div>
+
+      <div class="answer-wrapper" v-else-if="question.questionType === '填空'">
+        <div class="answer-display">
+          <span class="answer-label">正确答案：</span>
+          <span class="answer-content">{{ formatFillBlankAnswer(question.answer) }}</span>
+        </div>
+      </div>
+
+      <div class="answer-wrapper" v-else-if="['论述', '简答'].includes(question.questionType)">
+        <div class="answer-display">
+          <span class="answer-label">参考答案：</span>
+          <div class="essay-answer-content">{{ question.answer || '无参考答案' }}</div>
+        </div>
       </div>
       
       <div class="analysis-wrapper" v-if="question.analysis">
@@ -68,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Top, Bottom, Edit, Delete, Link } from '@element-plus/icons-vue';
 
@@ -89,7 +103,12 @@ const emit = defineEmits(['scoreChange', 'moveUp', 'moveDown', 'edit', 'delete']
 const question = computed(() => props.itemData.question || {});
 const editableScore = ref(props.itemData.score || 0);
 
-const difficultyMap = { 0: '简单', 1: '中等', 2: '困难' };
+// 监听props中的分数变化，同步到本地editableScore
+watch(() => props.itemData.score, (newScore) => {
+  editableScore.value = newScore || 0;
+}, { immediate: true });
+
+const difficultyMap = { 0: '困难', 1: '中等', 2: '简单' };
 const difficultyText = computed(() => difficultyMap[question.value.difficulty] || '未知');
 
 // 解析后端返回的 JSON 字符串格式的 details 字段
@@ -114,9 +133,18 @@ const correctAnswers = computed(() => {
   return [];
 });
 
+// 格式化填空题答案
+const formatFillBlankAnswer = (answer) => {
+  if (!answer) return '';
+  return answer.replace(/#@#/g, ' ');
+};
+
 const onScoreChange = (newScore) => {
-  emit('scoreChange', { questionId: question.value.id, newScore });
-  ElMessage.info(`分数修改为 ${newScore}`);
+  // 发送分数修改事件
+  emit('scoreChange', { 
+    questionId: question.value.id, 
+    newScore
+  });
 };
 </script>
 
@@ -214,5 +242,34 @@ const onScoreChange = (newScore) => {
 }
 .attachment-wrapper {
   margin-top: 8px;
+}
+.answer-wrapper {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+.answer-display {
+  font-size: 14px;
+}
+.answer-label {
+  font-weight: bold;
+  color: #606266;
+}
+.answer-content {
+  color: #303133;
+  margin-left: 8px;
+}
+.essay-answer-content {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  color: #303133;
+  line-height: 1.5;
+  min-height: 60px;
+  white-space: pre-wrap;
 }
 </style>

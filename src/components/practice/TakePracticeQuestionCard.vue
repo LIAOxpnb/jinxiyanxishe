@@ -30,8 +30,8 @@
       </el-checkbox-group>
 
       <el-radio-group v-else-if="questionData.question.questionType === '判断'" v-model="answerModel">
-        <el-radio label="1" size="large">正确</el-radio>
-        <el-radio label="0" size="large">错误</el-radio>
+        <el-radio label="0" size="large">正确</el-radio>
+        <el-radio label="1" size="large">错误</el-radio>
       </el-radio-group>
     </div>
   </el-card>

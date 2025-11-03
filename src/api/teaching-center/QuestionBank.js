@@ -104,3 +104,17 @@ export function deleteQuestion(id) {
     }
   });
 }
+
+/**
+ * 废弃题目
+ * @param {string | number} id - 题目的ID
+ * @param {number} abandoned - 废弃状态，1表示废弃
+ */
+export function abandonQuestion(id, abandoned = 1) {
+  return request.get('/teacher/question/abandoned', {
+    params: {
+      id,
+      abandoned
+    }
+  });
+}

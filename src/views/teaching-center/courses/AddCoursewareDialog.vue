@@ -6,7 +6,7 @@
     @close="closeDialog"
     :close-on-click-modal="false"
   >
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="上传课件" name="upload">
         <div class="dialog-content">
           <el-form :model="formModel" label-width="80px" ref="formRef" :rules="rules">
@@ -22,7 +22,6 @@
                   <el-col :span="12">
                       <el-form-item label="课件组" prop="groupId">
                           <el-select v-model="formModel.groupId" placeholder="未分组" style="width: 100%;">
-                              <el-option label="不分组" :value="0" />
                               <el-option v-for="item in groups" :key="item.id" :label="item.name" :value="item.id" />
                           </el-select>
                       </el-form-item>
@@ -50,7 +49,11 @@
       
       <el-tab-pane label="已有课件" name="existing">
         <div class="dialog-content">
-          <ExistingCoursewareList ref="existingListRef" />
+          <ExistingCoursewareList 
+  ref="existingListRef"
+  :categories="categories"
+  :groups="groups"
+  :current-course-id="props.courseId" />
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -67,8 +70,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ref, reactive, watch, onMounted, nextTick } from 'vue';
+// 【已修改】 引入 ElMessageBox
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { uploadFiles } from '../../../api/common/UploadFiles';
 import { batchAddCourseware, getCoursewareGroupList } from '../../../api/teaching-center/CoursewareManagement';
 import { getDictByType } from '@/api/system-management/dictionary.js';
@@ -77,6 +81,7 @@ import ExistingCoursewareList from './ExistingCoursewareList.vue';
 const props = defineProps({
   visible: Boolean,
   courseCategory: String,
+  courseId: [String, Number]
 });
 const emit = defineEmits(['update:visible', 'success']);
 
@@ -97,14 +102,44 @@ const rules = reactive({
     coursewareCategory: [{ required: true, message: '请选择分类', trigger: 'change' }],
 });
 
+// 【已添加】用于存储中止控制器
+const uploadAbortController = ref(null);
+
 const handleFileChange = () => {};
 const existingListRef = ref(null);
 
+// 【添加这个新函数】
+const handleTabChange = (tabName) => {
+  // 当用户切换到“已有课件”标签页时
+  if (tabName === 'existing' && existingListRef.value) {
+    // 立即调用子组件的 fetchData 方法刷新列表
+    existingListRef.value.fetchData();
+  }
+};
+// 【已修改】重写 closeDialog 逻辑
 const closeDialog = () => {
     if (isUploading.value) {
-        ElMessage.warning('文件正在上传中，请稍候');
-        return;
+        // 如果正在上传，则弹窗确认
+        ElMessageBox.confirm('文件正在上传中，确定要取消上传吗？', '提示', {
+            confirmButtonText: '确定取消',
+            cancelButtonText: '继续上传',
+            type: 'warning',
+        }).then(() => {
+            // 用户确认取消
+            uploadAbortController.value?.abort(); // 发送中止信号
+            isUploading.value = false; // 手动重置状态
+            fileList.value = [];
+            uploadProgress.value = 0;
+            formRef.value?.resetFields();
+            emit('update:visible', false);
+        }).catch(() => {
+            // 用户点击“继续上传”
+            ElMessage.info('上传将继续');
+        });
+        return; // 阻止后续代码执行
     }
+
+    // 如果没有在上传，执行原始的关闭逻辑
     fileList.value = [];
     uploadProgress.value = 0;
     formRef.value?.resetFields();
@@ -126,6 +161,10 @@ const submitUploadTab = async () => {
             if (fileList.value.length === 0) {
                 ElMessage.warning('请至少选择一个文件进行上传'); return;
             }
+
+            // 【已添加】创建中止控制器
+            uploadAbortController.value = new AbortController();
+
             isUploading.value = true;
             uploadProgress.value = 0;
             try {
@@ -135,7 +174,10 @@ const submitUploadTab = async () => {
                     }
                 };
                 const rawFiles = fileList.value.map(f => f.raw);
-                const uploadRes = await uploadFiles(rawFiles, onProgress);
+                
+                // 【已修改】传递中止信号
+                const uploadRes = await uploadFiles(rawFiles, onProgress, uploadAbortController.value.signal);
+                
                 if (uploadRes.code !== 200 || !uploadRes.data) {
                     throw new Error(uploadRes.msg || '文件上传失败');
                 }
@@ -171,9 +213,16 @@ const submitUploadTab = async () => {
                 closeDialog();
 
             } catch (error) {
-                ElMessage.error(error.message || '上传失败');
+                // 【已修改】捕获中止错误，不显示为“上传失败”
+                if (error.name === 'AbortError' || error.message === 'canceled') {
+                    ElMessage.info('上传已取消');
+                } else {
+                    ElMessage.error(error.message || '上传失败');
+                }
             } finally {
                 isUploading.value = false;
+                // 【已添加】重置中止控制器
+                uploadAbortController.value = null;
             }
         }
     });
@@ -202,18 +251,50 @@ const fetchInitialData = async () => {
       getCoursewareGroupList(),
       getDictByType('courseware_category')
     ]);
-    if (groupRes.code === 200) groups.value = groupRes.data;
-    if (categoryRes.code === 200) {
-      categories.value = categoryRes.data.map(d => ({ label: d.dictLabel, value: d.dictValue }));
+    
+    if (groupRes.code === 200 && groupRes.data) {
+      groups.value = groupRes.data || [];
+    }
+    if (categoryRes.code === 200 && categoryRes.data) {
+      categories.value = categoryRes.data.map(d => ({ 
+        label: d.dictLabel, 
+        value: d.dictValue 
+      }));
     }
   } catch(e) {
+    console.error('获取分类或分组数据失败:', e);
     ElMessage.error('获取分类或分组数据失败');
   }
 };
 
-watch(() => props.visible, (newVal) => {
+watch(() => props.visible, async (newVal) => {
   if (newVal) {
-    formModel.coursewareCategory = props.courseCategory;
+    // 确保数据已加载
+    if (categories.value.length === 0 || groups.value.length === 0) {
+      await fetchInitialData();
+    }
+    formModel.coursewareCategory = ''; //
+    formModel.groupId = 0; //
+    
+    // 直接使用传入的分类值（现在是正确的 dictValue 格式）
+    // if (props.courseCategory) {
+    //   formModel.coursewareCategory = props.courseCategory;
+    // }
+    
+    // 等待DOM渲染后，刷新已有课件列表
+    // 多次尝试确保组件已经渲染
+    await nextTick();
+    await nextTick();
+    
+    console.log('existingListRef.value:', existingListRef.value);
+    console.log('props.courseId:', props.courseId);
+    
+    if (existingListRef.value && existingListRef.value.fetchData) {
+      console.log('调用 fetchData');
+      existingListRef.value.fetchData();
+    } else {
+      console.warn('existingListRef 未就绪');
+    }
   }
 });
 

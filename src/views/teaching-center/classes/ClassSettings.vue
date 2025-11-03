@@ -84,7 +84,7 @@
     <el-dialog 
       v-model="addExamDialogVisible" 
       title="添加考试"
-      width="800px"
+      width="1200px"
       :before-close="closeAddExamDialog"
     >
       <div class="add-exam-dialog">
@@ -490,13 +490,14 @@ const closeAddExamDialog = () => {
 }
 
 const createNewExam = () => {
-  ElMessage.info('跳转到新建考试页面')
-  // TODO: 实现跳转到新建考试页面
+  router.push({ name: 'TeachingCenter-Exams' })
 }
 
 const editExam = (exam) => {
-  ElMessage.info(`查看考试: ${exam.name}`)
-  // TODO: 实现查看考试详情
+  router.push({ 
+    name: 'TeachingCenter-ExamSettings', 
+    params: { id: exam.id } 
+  })
 }
 
 const cancelAddExam = () => {

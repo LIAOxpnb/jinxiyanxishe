@@ -70,10 +70,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getStudentExamDetail, submitStudentExamPaper } from '@/api/exams.js';
+import { getStudentExamDetail, submitStudentExamPaper, submitStudentExamRecord } from '@/api/exams.js';
 import TakeExamQuestionCard from '@/components/exam/TakeExamQuestionCard.vue';
 
 const route = useRoute();
@@ -85,7 +85,12 @@ const examId = ref(null);
 const examDetails = ref(null);
 const questionList = ref([]);
 const answers = reactive({});
-const currentQuestionIndex = ref(0); // 当前题目索引
+const currentQuestionIndex = ref(0);
+const examRecordId = ref(null);
+const isExamSubmitted = ref(false);
+const isRestoringAnswers = ref(false);
+let saveTimeout = null;
+let lastSavedState = ''; // 【新增】跟踪上次保存的状态
 
 // --- 倒计时逻辑 ---
 let timerInterval = null;
@@ -109,7 +114,7 @@ const startTimer = (durationMinutes) => {
       remainingSeconds.value--;
     } else {
       clearInterval(timerInterval);
-      ElMessage.warning('考试时间到，系统将自动交卷！');
+      ElMessage.warning('考试时间到,系统将自动交卷!');
       submitExam();
     }
   }, 1000);
@@ -118,11 +123,12 @@ const startTimer = (durationMinutes) => {
 // --- 阻止复制的事件处理函数 ---
 const preventCopy = (e) => {
   e.preventDefault();
-  ElMessage.warning('本次考试禁止复制题目内容！');
+  ElMessage.warning('本次考试禁止复制题目内容!');
 };
 
 onBeforeUnmount(() => {
   if (timerInterval) clearInterval(timerInterval);
+  if (saveTimeout) clearTimeout(saveTimeout);
 
   if (examDetails.value && examDetails.value.disableCopy === 1) {
     const examContainer = document.querySelector('.take-exam-container');
@@ -132,12 +138,14 @@ onBeforeUnmount(() => {
       examContainer.removeEventListener('contextmenu', preventCopy);
     }
   }
+  
+  window.removeEventListener('beforeunload', handleBeforeUnload);
 });
 
 // --- 页面逻辑 ---
 const answeredCount = computed(() => {
   return Object.values(answers).filter(ans => {
-    if (Array.isArray(ans)) return ans.length > 0;
+    if (Array.isArray(ans)) return ans.some(item => item !== null && item !== '');
     return !!ans;
   }).length;
 });
@@ -150,21 +158,18 @@ const isAnswered = (questionId) => {
   return !!ans; 
 };
 
-// 跳转到指定题目
 const goToQuestion = (index) => {
   if (index >= 0 && index < questionList.value.length) {
     currentQuestionIndex.value = index;
   }
 };
 
-// 上一题
 const previousQuestion = () => {
   if (currentQuestionIndex.value > 0) {
     currentQuestionIndex.value--;
   }
 };
 
-// 下一题
 const nextQuestion = () => {
   if (currentQuestionIndex.value < questionList.value.length - 1) {
     currentQuestionIndex.value++;
@@ -173,7 +178,7 @@ const nextQuestion = () => {
 
 const confirmSubmit = () => {
   const unansweredCount = questionList.value.length - answeredCount.value;
-  ElMessageBox.confirm(`已答 ${answeredCount.value} 题，未答 ${unansweredCount} 题。确定要交卷吗？`, '交卷确认', {
+  ElMessageBox.confirm(`已答 ${answeredCount.value} 题,未答 ${unansweredCount} 题。确定要交卷吗?`, '交卷确认', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -185,62 +190,218 @@ const confirmSubmit = () => {
 const submitExam = async () => {
   if (submitting.value) return;
 
+  if (!examRecordId.value) {
+    ElMessage.error('未找到答题记录,无法交卷');
+    return;
+  }
+
   submitting.value = true;
-  const payload = {
-    examId: examId.value,
-    examSubmitRecordList: questionList.value.map(q => {
-      let userAnswer = answers[q.question.id];
-      if (Array.isArray(userAnswer)) {
-        userAnswer = userAnswer.sort().join('#@#');
-      }
-      return {
-        questionId: q.question.id,
-        userAnswer: userAnswer || '',
-        details: q.question.details
-      };
-    })
-  };
+  isExamSubmitted.value = true;
 
   try {
-    const res = await submitStudentExamPaper(payload);
+    const res = await submitStudentExamPaper(examRecordId.value);
     if (res.code === 200) {
-      ElMessage.success('交卷成功！');
+      ElMessage.success('交卷成功!');
       router.push({ name: 'Student-Exams' });
     } else {
       ElMessage.error(res.msg || '交卷失败');
+      isExamSubmitted.value = false;
     }
   } catch (error) {
-    console.error('交卷失败:', error);
-    ElMessage.error('交卷失败，请检查网络连接');
+    ElMessage.error('交卷失败,请检查网络连接');
+    isExamSubmitted.value = false;
   } finally {
     submitting.value = false;
   }
 };
 
+// 暂存答题记录
+const saveExamRecord = async () => {
+  const examSubmitRecordList = questionList.value.map(q => {
+    let userAnswer = answers[q.question.id];
+    if (Array.isArray(userAnswer)) {
+      userAnswer = userAnswer.filter(a => a !== null && a !== '').join('#@#');
+    }
+    return {
+      questionId: q.question.id,
+      userAnswer: userAnswer || '',
+      details: q.question.details
+    };
+  });
+
+  const payload = {};
+  
+  if (examRecordId.value) {
+    payload.id = examRecordId.value;
+  }
+  
+  payload.examId = examId.value;
+  payload.examSubmitRecordList = examSubmitRecordList;
+
+  try {
+    const res = await submitStudentExamRecord(payload);
+    
+    if (res.code === 200 && res.data && res.data.id) {
+      examRecordId.value = res.data.id;
+      // 【新增】保存成功后更新 lastSavedState
+      lastSavedState = JSON.stringify(answers);
+    }
+  } catch (error) {
+    // 静默处理错误
+  }
+};
+
+// 防抖暂存
+const debounceSaveExamRecord = () => {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  saveTimeout = setTimeout(() => {
+    saveExamRecord();
+  }, 1000);
+};
+
+// 【修改】监听答案变化,自动暂存 - 添加序列化比较
+watch(answers, (newVal) => {
+  if (!isRestoringAnswers.value) {
+    // 序列化当前状态
+    const currentState = JSON.stringify(newVal);
+    // 只有当序列化后的值真的变化时才保存
+    if (currentState !== lastSavedState) {
+      lastSavedState = currentState;
+      debounceSaveExamRecord();
+    }
+  }
+}, { deep: true });
+
+// 处理页面关闭前的警告和暂存
+const handleBeforeUnload = (e) => {
+  if (!isExamSubmitted.value && examRecordId.value) {
+    try {
+      const examSubmitRecordList = questionList.value.map(q => {
+        let userAnswer = answers[q.question.id];
+        if (Array.isArray(userAnswer)) {
+          userAnswer = userAnswer.filter(a => a !== null && a !== '').join('#@#');
+        }
+        return {
+          questionId: q.question.id,
+          userAnswer: userAnswer || '',
+          details: q.question.details
+        };
+      });
+
+      const payload = {};
+      if (examRecordId.value) {
+        payload.id = examRecordId.value;
+      }
+      payload.examId = examId.value;
+      payload.examSubmitRecordList = examSubmitRecordList;
+
+      const url = '/api/student/exam/submitRecord';
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      navigator.sendBeacon(url, blob);
+    } catch (error) {
+      // 静默处理错误
+    }
+
+    e.preventDefault();
+    e.returnValue = '您还未交卷,系统已自动保存您的答案。';
+    return e.returnValue;
+  }
+};
+
 onMounted(async () => {
   examId.value = route.params.id;
+  
   if (!examId.value) {
     ElMessage.error('无效的考试ID');
     loading.value = false;
     return;
   }
+  
+  const recordId = route.query.recordId;
+  const isRestart = route.query.restart === 'true';
+  
+  if (recordId && !isRestart) {
+    examRecordId.value = Number(recordId);
+  }
+  
   try {
     const res = await getStudentExamDetail(examId.value);
+    
     if (res.code === 200) {
       examDetails.value = res.data;
       questionList.value = res.data.examQuestionList || [];
+      
+      if (res.data.examRecord && res.data.examRecord.id) {
+        if (!isRestart) {
+          examRecordId.value = res.data.examRecord.id;
+        }
+      }
 
+      // 【修改】初始化答案对象并恢复已保存的答案
+      isRestoringAnswers.value = true;
+      let hasRestoredAnswers = false;
+      
       questionList.value.forEach(q => {
-        if (q.question.questionType === '多选' || q.question.questionType === '填空') {
-          answers[q.question.id] = [];
+        const questionId = q.question.id;
+        const questionType = q.question.questionType;
+        const userAnswer = q.question.userAnswer;
+        
+        // 1. 先初始化答案结构
+        if (questionType === '填空') {
+          // 填空题:计算填空数量并初始化空数组
+          const title = q.question.title || '';
+          const matches = title.match(/___/g);
+          const blankCount = matches ? matches.length : 0;
+          answers[questionId] = Array(blankCount).fill('');
+        } else if (questionType === '多选') {
+          answers[questionId] = [];
         } else {
-          answers[q.question.id] = '';
+          answers[questionId] = '';
+        }
+        
+        // 2. 如果是继续答题且有保存的答案,恢复答案
+        if (recordId && !isRestart && userAnswer) {
+          hasRestoredAnswers = true;
+          
+          if (questionType === '填空') {
+            // 填空题:特殊处理,确保数组长度匹配
+            const savedAnswers = userAnswer.split('#@#');
+            const title = q.question.title || '';
+            const matches = title.match(/___/g);
+            const blankCount = matches ? matches.length : 0;
+            
+            // 创建正确长度的数组并填充已保存的答案
+            const restoredAnswers = Array(blankCount).fill('');
+            for (let i = 0; i < Math.min(savedAnswers.length, blankCount); i++) {
+              restoredAnswers[i] = savedAnswers[i] || '';
+            }
+            answers[questionId] = restoredAnswers;
+            
+          } else if (questionType === '多选') {
+            // 多选题:拆分为数组并过滤空值
+            answers[questionId] = userAnswer.split('#@#').filter(a => a);
+            
+          } else {
+            // 单选、判断等:直接保存字符串
+            answers[questionId] = userAnswer;
+          }
         }
       });
+      
+      // 【新增】初始化 lastSavedState,避免恢复后立即触发保存
+      lastSavedState = JSON.stringify(answers);
+      
+      if (hasRestoredAnswers) {
+        ElMessage.success('已恢复之前的答题记录');
+      }
+      
+      setTimeout(() => {
+        isRestoringAnswers.value = false;
+      }, 500);
 
-      // 初始化为第一题
       currentQuestionIndex.value = 0;
-
       startTimer(examDetails.value.duration);
 
       if (examDetails.value.disableCopy === 1) {
@@ -251,6 +412,8 @@ onMounted(async () => {
           examContainer.addEventListener('contextmenu', preventCopy);
         }
       }
+      
+      window.addEventListener('beforeunload', handleBeforeUnload);
 
     } else {
       ElMessage.error(res.msg || '获取考试详情失败');
@@ -260,6 +423,47 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+onBeforeRouteLeave((to, from, next) => {
+  if (isExamSubmitted.value || !examRecordId.value) {
+    next();
+    return;
+  }
+  
+  saveExamRecord().then(() => {
+    ElMessageBox.confirm(
+      '您还未交卷,确定要离开吗?',
+      '提示',
+      {
+        confirmButtonText: '确定离开',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+      .then(() => {
+        next();
+      })
+      .catch(() => {
+        next(false);
+      });
+  }).catch(() => {
+    ElMessageBox.confirm(
+      '您还未交卷,确定要离开吗?',
+      '提示',
+      {
+        confirmButtonText: '确定离开',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+      .then(() => {
+        next();
+      })
+      .catch(() => {
+        next(false);
+      });
+  });
 });
 </script>
 

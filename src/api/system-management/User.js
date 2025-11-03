@@ -4,7 +4,7 @@ import request from '@/utils/request';
  * @description 批量添加用户
  * @param {object} data - 用户数据
  * @param {string} data.password - 密码
- * @param {number} data.needChangePassword - 是否需要修改密码 (0否 1是)
+ * @param {number} data.needChangePassword - 是否登录重置 (0否 1是)
  * @param {array} data.users - 用户列表
  * @param {string} data.users[].username - 手机号
  * @param {string} data.users[].password - 密码

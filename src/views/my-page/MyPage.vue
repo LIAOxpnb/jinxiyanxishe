@@ -71,7 +71,7 @@
             <el-card v-for="clazz in myClasses" :key="clazz.id" class="class-card" shadow="hover" @click="goToClassDetail(clazz.id)">
               <div class="card-header">
                 <h4 class="class-title">{{ clazz.name }}</h4>
-                <el-tag type="success">进行中</el-tag>
+                <el-tag :type="getClazzStatusType(clazz.clazzStatus)">{{ getClazzStatusText(clazz.clazzStatus) }}</el-tag>
               </div>
               <p class="class-period">不限时 / {{ clazz.startTime }} 至 {{ clazz.endTime }}</p>
               <div class="class-stats">
@@ -239,7 +239,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ArrowRight, Document } from '@element-plus/icons-vue';
@@ -250,9 +250,11 @@ import {
   getMyCertificates 
 } from '@/api/mypage.js';
 import { getCourseList } from '@/api/teaching-center/CourseManagement.js';
-import { getProfile, getUserInfo } from '@/api/common/user.js';
-import defaultAvatar from '@/assets/img/u71.png';
+import { getUserInfo } from '@/api/common/user.js';
+import { getInfo } from '@/api/common/info.js';
+import defaultAvatar from '@/assets/img/u84.svg';
 import { previewFile } from '@/api/common/PreviewFile.js';
+import html2canvas from 'html2canvas';
 
 const route = useRoute();
 const router = useRouter();
@@ -289,6 +291,26 @@ const goToCourseDetail = (courseId) => {
 };
 const goToClassDetail = (classId) => {
   router.push({ name: 'ClassDetails', params: { id: classId } });
+};
+
+// 获取班级状态文本
+const getClazzStatusText = (status) => {
+  const statusMap = {
+    0: '未开始',
+    1: '进行中',
+    2: '已结束'
+  };
+  return statusMap[status] || '未知';
+};
+
+// 获取班级状态标签类型
+const getClazzStatusType = (status) => {
+  const typeMap = {
+    0: 'info',      // 未开始 - 灰色
+    1: 'success',   // 进行中 - 绿色
+    2: 'warning'    // 已结束 - 橙色
+  };
+  return typeMap[status] || 'info';
 };
 
 const fetchPersonalHomeData = async () => {
@@ -346,6 +368,10 @@ const fetchMyCertificates = async () => {
     const res = await getMyCertificates();
     if (res.code === 200 && res.data) {
       const certs = res.data || [];
+      // 获取用户信息
+      const userInfoRes = await getInfo();
+      const userName = userInfoRes?.data?.name || '用户姓名';
+      
       const processedCerts = await Promise.all(
         certs.filter(cert => cert.certificate).map(async (cert) => {
             const certInfo = cert.certificate;
@@ -364,7 +390,7 @@ const fetchMyCertificates = async () => {
               intro: certInfo.intro,
               unit: certInfo.unit,
               issueDate: issueDate,
-              userName: cert.userName,
+              userName: userName,
               backgroundUrl: backgroundUrl,
               sealUrl: sealUrl,
               url: backgroundUrl
@@ -395,23 +421,29 @@ const fetchUserBadges = async () => {
 // 获取个人资料用于横幅
 const fetchUserProfile = async () => {
   try {
-    let res = await getProfile().catch(() => null);
-    if (!res || res.code !== 200) {
-      res = await getUserInfo().catch(() => null);
-    }
+    const res = await getUserInfo();
     const data = res?.data || {};
     userProfile.name = data.name || data.nickName || data.realName || data.username || '';
     userProfile.orgName = data.orgName || data.organization || data.deptName || '';
     const avatar = data.avatar || data.headImg || data.avatarUrl || '';
-    if (avatar) {
+    if (avatar && avatar.trim()) {
       // 如果是完整URL直接用；否则可能是文件ID，尝试预览
       if (/^https?:\/\//.test(avatar) || avatar.startsWith('/')) {
         userProfile.avatar = avatar;
       } else {
-        try { userProfile.avatar = await previewFile(avatar); } catch { userProfile.avatar = ''; }
+        try { 
+          userProfile.avatar = await previewFile(avatar); 
+        } catch (err) { 
+          console.warn('头像预览失败:', err.message || err);
+          userProfile.avatar = ''; // 失败时使用默认头像
+        }
       }
+    } else {
+      // 如果没有头像信息，使用默认头像
+      userProfile.avatar = '';
     }
   } catch (e) {
+    console.warn('获取用户信息失败:', e);
     // 静默失败，保留占位
   }
 };
@@ -450,15 +482,50 @@ const viewCertificate = (cert) => {
   certificateDialogVisible.value = true;
 };
 
-const downloadCertificate = () => {
-  if (!currentCertificate.url) return;
-  const link = document.createElement('a');
-  link.href = currentCertificate.url;
-  const fileName = currentCertificate.url.split('/').pop() || `${currentCertificate.name}.jpg`;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+const downloadCertificate = async () => {
+  try {
+    const certificateElement = document.querySelector('.certificate-preview-dialog .certificate-frame');
+    if (!certificateElement) {
+      ElMessage.warning('未找到证书元素');
+      return;
+    }
+
+    // 显示加载提示
+    const loadingMsg = ElMessage.info({ message: '正在生成证书图片...', duration: 0 });
+
+    // 使用 html2canvas 将证书元素转换为 canvas
+    const canvas = await html2canvas(certificateElement, {
+      backgroundColor: null,
+      scale: 2, // 提高清晰度
+      useCORS: true, // 允许跨域图片
+      logging: false,
+      imageTimeout: 0,
+      allowTaint: true
+    });
+
+    // 关闭加载提示
+    loadingMsg.close();
+
+    // 将 canvas 转换为 blob 并下载
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        ElMessage.error('生成图片失败');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${currentCertificate.name || '证书'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      ElMessage.success('证书下载成功');
+    }, 'image/png');
+  } catch (error) {
+    console.error('下载证书失败:', error);
+    ElMessage.error('下载证书失败，请重试');
+  }
 };
 
 const handleTabClick = (tab) => {
@@ -493,11 +560,33 @@ onMounted(() => {
   fetchUserProfile();
   fetchUserBadges();
 });
+
+// 监听路由查询参数变化
+watch(() => route.query.tab, (newTab) => {
+  const validTabs = ['personalHome', 'myClasses', 'myCertificates', 'myTaughtCourses'];
+  if (newTab && validTabs.includes(newTab)) {
+    activeTab.value = newTab;
+    // 根据新的tab加载对应的数据
+    if (newTab === 'personalHome') {
+      fetchPersonalHomeData();
+    } else if (newTab === 'myClasses') {
+      fetchMyClasses();
+    } else if (newTab === 'myCertificates') {
+      fetchMyCertificates();
+    } else if (newTab === 'myTaughtCourses') {
+      fetchMyTaughtCourses();
+    }
+  } else {
+    // 如果没有指定tab或tab无效，默认切换到个人首页
+    activeTab.value = 'personalHome';
+    fetchPersonalHomeData();
+  }
+});
 </script>
 
 <style scoped>
 .my-page {
-  padding: 20px;
+  /* padding: 20px; */
   background-color: #f5f7fa;
 }
 :deep(.el-tabs__header) {
@@ -526,12 +615,15 @@ onMounted(() => {
 }
 /* 顶部个人信息横幅 */
 .profile-hero {
+  height: 140px;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 20px;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 40%, #7dd3fc 100%);
+  /* border-radius: 12px; */
+  background-image: url('../../assets/img/123321111.png');
+  background-size: cover;
+  background-position: center;
   color: #fff;
   margin-bottom: 18px;
 }
@@ -696,6 +788,7 @@ onMounted(() => {
   padding: 6px;
   border-radius: 4px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  
 }
 .certificate-content-small {
   width: 100%;
@@ -717,15 +810,41 @@ onMounted(() => {
   position: relative;
 }
 .badge-small { width: 24px; height: 24px; margin-bottom: 6px; }
-.certificate-title-small { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 6px; text-align: center; }
-.certificate-recipient-small { font-size: 10px; color: #555; margin-bottom: 6px; }
-.certificate-body-small { flex: 1; font-size: 9px; line-height: 1.3; color: #444; text-align: justify; overflow: hidden; }
-.certificate-footer-small { width: 100%; margin-top: auto; }
-.footer-content-small { display: flex; align-items: flex-end; justify-content: flex-end; }
-.unit-date-info-small { text-align: right; }
-.unit-name-small { font-size: 9px; font-weight: bold; }
-.issue-date-small { font-size: 8px; }
-.seal-container-small { position: absolute; right: 10px; bottom: 10px; }
+.certificate-title-small { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 45px; text-align: center; }
+.certificate-recipient-small { font-size: 10px; color: #555; margin-bottom: 20px; }
+.certificate-body-small { 
+  flex: 1; 
+  font-size: 9px; 
+  line-height: 1.3; 
+  color: #444; 
+  text-align: justify; 
+  overflow: hidden; 
+  margin-top: 40px;
+  max-width: 150px;
+  margin-left: auto;
+  margin-right: auto;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+.certificate-footer-small { width: 100%; margin-top: auto; display: flex; justify-content: center; }
+.footer-content-small { 
+  display: flex; 
+  flex-direction: column-reverse; 
+  align-items: center; 
+  width: 100%;
+}
+.unit-date-info-small { 
+  text-align: center; 
+  margin-top: -20px;
+  position: relative;
+  z-index: 1;
+}
+.unit-name-small { font-size: 9px; font-weight: bold; margin-bottom: 15px; }
+.issue-date-small { font-size: 8px; margin-top: 0px; margin-bottom: 40px }
+.seal-container-small { 
+  position: relative;
+  z-index: 2;
+}
 .seal-image-small { width: 50px; height: 50px; object-fit: contain; opacity: 0.8; }
 .certificate-preview-dialog { 
   display: flex; 
@@ -781,7 +900,7 @@ onMounted(() => {
 .certificate-overlay {
   width: 100%;
   height: 100%;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  background: rgba(255, 255, 255, 0.8);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -826,7 +945,7 @@ onMounted(() => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-bottom: 20px;
+  margin-bottom: 50px;
   text-align: center;
   letter-spacing: 3px;
   position: relative;
@@ -847,7 +966,7 @@ onMounted(() => {
 .certificate-recipient {
   font-size: 16px;
   color: #2c3e50;
-  margin-bottom: 20px;
+  margin-bottom: 50px;
   text-align: center;
   font-weight: 500;
   letter-spacing: 1px;
@@ -858,102 +977,66 @@ onMounted(() => {
 }
 
 .certificate-body {
-  flex: 0 0 auto;
-  height: auto;
-  max-height: 180px;
-  font-size: 15px;
+    font-size: 15px;
   line-height: 1.8;
-  color: #34495e;
-  text-align: justify;
-  padding: 20px 25px;
+  color: #2c3e50;
+  text-align: center;
+  padding: 0 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  text-indent: 2em;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  margin: 0 10px 15px 10px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+  /* padding-bottom: 120px; */
+  /* padding-top: 40px; */
+  max-width: 380px;
+  margin: 0 auto;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .certificate-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   width: 100%;
-  margin-top: auto;
-  padding: 0 15px 55px 15px; /* 增加底部内边距以整体上移 */
-  position: relative;
-  min-height: 80px;
+  margin-top: -40px;
 }
   
 .footer-content {
+  margin-top: 160px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   width: 100%;
-  justify-content: flex-end;
-  position: relative;
-}
-
-.footer-content::before {
-  content: '';
-  position: absolute;
-  top: -10px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(to right, transparent, rgba(212, 175, 55, 0.5), transparent);
+  flex-direction: column-reverse;
 }
 
 .unit-date-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
+  align-items: center;
+  margin-top: -30px; /* 使文字上移，与公章重叠 */
   position: relative;
-  z-index: 1; /* 低于公章，使其被覆盖 */
-  padding-right: 0;
+  z-index: 1; /* 文字图层为 1，低于公章 */
 }
 
 .unit-name {
-  font-size: 14px;
+  font-size: 17px;
   color: #2c3e50;
   font-weight: bold;
-  margin-bottom: 4px;
-  margin-left: 0;
-  letter-spacing: 1px;
-  position: relative;
-  padding-left: 12px;
-}
-
-.unit-name::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 16px;
-  background: linear-gradient(to bottom, #d4af37, #f4d03f);
-  border-radius: 2px;
+  margin-bottom: 8px;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .issue-date {
-  margin-left: 0;
-  margin-bottom: 0;
   font-size: 13px;
-  color: #5a6c7d;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  padding-left: 12px;
+  color: #2c3e50;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .seal-container {
-  position: absolute;
-  right: 24px;         /* 贴近右侧 */
-  bottom: 22px;        /* 上移公章并覆盖文字 */
-  transform: none;
-  z-index: 10;         /* 高于文字 */
-  pointer-events: none;/* 避免遮挡点击 */
+  position: relative;
+  flex-shrink: 0;
+  z-index: 2; /* 公章图层为 2，高于文字 */
   filter: drop-shadow(0 4px 8px rgba(231, 76, 60, 0.3));
 }
 

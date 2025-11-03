@@ -16,6 +16,31 @@
             </video>
           </div>
           
+          <!-- 音频播放器 -->
+          <div class="audio-player" v-else-if="currentCourseware.type === 'audio' && currentCourseware.url">
+            <div class="audio-background">
+              <div class="audio-visual">
+                <div class="audio-wave"></div>
+                <div class="audio-wave"></div>
+                <div class="audio-wave"></div>
+                <div class="audio-wave"></div>
+                <div class="audio-wave"></div>
+              </div>
+              <div class="audio-info">
+                <el-icon class="audio-icon" :size="60"><Headset /></el-icon>
+                <h3 class="audio-title">{{ currentSection?.name || '音频课件' }}</h3>
+                <p class="audio-subtitle">正在播放音频课程</p>
+              </div>
+            </div>
+            <audio
+              ref="audioPlayerRef"
+              :src="currentCourseware.url"
+              controls
+            >
+              您的浏览器不支持音频播放
+            </audio>
+          </div>
+
           <!-- PDF 预览 -->
           <div class="courseware-viewer" v-else-if="currentCourseware.type === 'pdf' && currentCourseware.url">
             <iframe :src="currentCourseware.url" class="pdf-viewer" frameborder="0"></iframe>
@@ -26,12 +51,79 @@
             <img :src="currentCourseware.url" class="image-viewer" alt="课件图片" />
           </div>
           
-          <!-- 文档类型（需要下载） -->
+          <!-- Word 文档预览 -->
+ <!-- 原代码：整个 Word 文档预览的 div -->
+ <!-- 替换为： -->
+ <div class="courseware-viewer office-viewer word-viewer" v-else-if="currentCourseware.type === 'word' && currentCourseware.arrayBuffer">
+   <div v-if="wordLoading" class="loading-overlay">
+     <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+     <p>正在加载 Word 文档...</p>
+     <p v-if="documentSize" class="size-info">文件大小: {{ documentSize }}</p>
+   </div>
+  <VueOfficeDocx 
+    v-if="!wordError"
+    :src="currentCourseware.arrayBuffer"
+    style="height: 650px; width: 100%;"
+    @rendered="handleDocxRendered"
+    @error="handleDocxError"
+  />
+  <div v-else class="document-error">
+    <el-icon class="error-icon" :size="80"><WarningFilled /></el-icon>
+    <h3>Word 文档加载失败</h3>
+    <p class="error-message">{{ wordError }}</p>
+    <el-button type="primary" @click="downloadCourseware">
+      <el-icon><Download /></el-icon>
+      下载文档查看
+    </el-button>
+  </div>
+</div>
+          
+ <!-- 原代码：整个 PPT 文档预览的 div -->
+ <!-- 替换为： -->
+ <div class="courseware-viewer office-viewer ppt-viewer" v-else-if="currentCourseware.type === 'ppt' && currentCourseware.arrayBuffer">
+   <div v-if="pptLoading" class="loading-overlay">
+     <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+     <p>正在加载 PPT 文档...</p>
+     <p v-if="documentSize" class="size-info">文件大小: {{ documentSize }}</p>
+     <p class="size-info" style="color: #909399; font-size: 12px;">大文件加载可能需要较长时间，请耐心等待...</p>
+   </div>
+  <VueOfficePptx 
+    v-if="!pptError"
+    :src="currentCourseware.arrayBuffer"
+    style="height: 650px; width: 100%;"
+    @rendered="handlePptxRendered"
+    @error="handlePptxError"
+  />
+  <div v-else class="document-error">
+    <el-icon class="error-icon" :size="80"><WarningFilled /></el-icon>
+    <h3>PPT 文档加载失败</h3>
+    <p class="error-message">{{ pptError }}</p>
+    <el-button type="primary" @click="downloadCourseware">
+      <el-icon><Download /></el-icon>
+      下载文档查看
+    </el-button>
+  </div>
+</div>
+          
+          <!-- Word/PPT文档过大时显示下载提示 -->
+          <div class="courseware-viewer document-viewer" v-else-if="(currentCourseware.type === 'word' || currentCourseware.type === 'ppt') && !currentCourseware.arrayBuffer && (wordError || pptError)">
+            <div class="document-info">
+              <el-icon class="document-icon" :size="80"><Document /></el-icon>
+              <h3>{{ currentSection?.name || '课件文档' }}</h3>              <p class="document-type">{{ getFileExtension(currentSection?.courseware?.fileType) }} 文档</p>
+              <p v-if="documentSize" class="size-info">文件大小: {{ documentSize }}</p>
+              <p class="error-message">{{ wordError || pptError }}</p>
+              <el-button type="primary" size="large" @click="downloadCourseware">
+                <el-icon><Download /></el-icon>
+                下载查看
+              </el-button>
+            </div>
+          </div>
+          
+          <!-- Excel 和其他文档类型（需要下载） -->
           <div class="courseware-viewer document-viewer" v-else-if="currentCourseware.type === 'document' && currentCourseware.url">
             <div class="document-info">
               <el-icon class="document-icon" :size="80"><Document /></el-icon>
-              <h3>{{ currentSection?.courseware?.fileName || '课件文档' }}</h3>
-              <p class="document-type">{{ getFileExtension(currentSection?.courseware?.fileType) }} 文档</p>
+              <h3>{{ currentSection?.name || '课件文档' }}</h3>              <p class="document-type">{{ getFileExtension(currentSection?.courseware?.fileType) }} 文档</p>
               <el-button type="primary" size="large" @click="downloadCourseware">
                 <el-icon><Download /></el-icon>
                 下载查看
@@ -49,31 +141,35 @@
             <el-icon><InfoFilled /></el-icon>
             <span>已自动为您记录课程学习进度，无需手动操作</span>
           </div>
+          
+          <!-- 调试信息 (开发时使用) -->
+
         </div>
 
         <div class="course-header">
           <div class="title-line">
             <span class="title-tag">课程</span>
+            <el-tag v-if="courseDetail.mustLearn" type="danger" effect="dark" style="margin-right: 12px;">必学</el-tag>
             <h1 class="course-title">{{ courseDetail.name }}</h1>
             <el-button link class="like-btn" @click="toggleFavorite">
-              <el-icon><Star v-if="!courseDetail.isCollected" /><StarFilled v-else /></el-icon>
-              {{ courseDetail.collectCount || 0 }}
+              <el-icon><Star v-if="!courseDetail.collect" /><StarFilled v-else /></el-icon>
+              {{ courseDetail.collectNumber || 0 }}
             </el-button>
           </div>
           <p class="course-subtitle">
-            本分组 / {{ courseDetail.createTime }}
+            创建时间 : {{ courseDetail.createTime }}
           </p>
           <p class="course-description">
             {{ courseDetail.summary }}
           </p>
           
-          <div v-if="currentSection" class="current-section-info">
+          <!-- <div v-if="currentSection" class="current-section-info">
             <el-tag type="success" effect="dark">正在学习</el-tag>
             <span class="section-name">{{ currentSection.name }}</span>
             <span v-if="currentSection.courseware" class="section-duration">
               时长: {{ formatDuration(currentSection.courseware.duration) }}
             </span>
-          </div>
+          </div> -->
         </div>
         
         <el-tabs v-model="activeTab" class="details-tabs">
@@ -84,7 +180,7 @@
                 <el-avatar :size="80" :src="courseDetail.instructorAvatar" />
                 <div class="instructor-details">
                   <h3>{{ courseDetail.instructorName || '讲师姓名' }}</h3>
-                  <p>{{ courseDetail.instructorTitle || '知名学院教授' }}</p>
+                  <!-- <p>{{ courseDetail.instructorTitle || '知名学院教授' }}</p> -->
                 </div>
               </div>
               <p class="instructor-bio">{{ courseDetail.instructorBio }}</p>
@@ -94,19 +190,33 @@
             </div>
           </el-tab-pane>
           
-          <!-- 【核心修改】 -->
-          <el-tab-pane label="课程练习" name="syllabus">
+          <!-- 课程练习标签页 -->
+          <el-tab-pane label="课程练习" name="practice">
             <div class="tab-content" v-loading="practiceLoading">
-              <el-table v-if="practiceList.length > 0" :data="practiceList" style="width: 100%">
-                <el-table-column prop="name" label="练习试卷的名称" />
-                <el-table-column prop="questionCount" label="题目数量" width="120" align="center" />
-                <el-table-column label="操作" width="120" align="center">
-                  <template #default="{ row }">
-                    <el-button type="primary" link>开始练习</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <el-empty v-else description="当前小节暂无关联练习" />
+              <div v-if="currentSection" class="current-section-practice">
+                <h3>{{ currentSection.name }} - 相关练习</h3>
+                <el-table v-if="practiceList.length > 0" :data="practiceList" style="width: 100%">
+                  <el-table-column prop="name" label="练习试卷名称" min-width="200" />
+                  <el-table-column prop="questionCount" label="题目数量" width="120" align="center">
+                    <template #default="{ row }">
+                      <el-tag size="small">{{ row.questionCount || 0 }}题</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="timeLimit" label="时长限制" width="120" align="center">
+                    <template #default="{ row }">
+                      <span v-if="row.timeLimit">{{ row.timeLimit }}分钟</span>
+                      <span v-else class="text-muted">不限时</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120" align="center">
+                    <template #default="{ row }">
+                      <el-button type="primary" link @click="startPractice(row)">开始练习</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-empty v-else description="当前小节暂无关联练习" />
+              </div>
+              <el-empty v-else description="请先选择一个小节查看相关练习" />
             </div>
           </el-tab-pane>
 
@@ -180,14 +290,15 @@
               <span>相关推荐</span>
             </div>
           </template>
-          <div class="recommend-list">
-            <div v-for="item in recommendedCourses" :key="item.id" class="recommend-item">
-              <img :src="item.cover" class="recommend-cover" alt="课程封面" />
+          <div class="recommend-list" v-loading="recommendLoading">
+            <div v-for="item in recommendedCourses" :key="item.id" class="recommend-item" @click="goToCourse(item.id)">
+              <img :src="item.coverUrl" class="recommend-cover" alt="课程封面" />
               <div class="recommend-info">
-                <p class="recommend-title">{{ item.title }}</p>
-                <span class="recommend-desc">{{ item.desc }}</span>
+                <p class="recommend-title">{{ item.name }}</p>
+                <span class="recommend-desc">{{ item.summary }}</span>
               </div>
             </div>
+            <el-empty v-if="!recommendLoading && recommendedCourses.length === 0" description="暂无推荐课程" :image-size="60" />
           </div>
         </el-card>
       </el-aside>
@@ -202,35 +313,49 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, shallowRef, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download } from '@element-plus/icons-vue';
+import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download, Loading, WarningFilled, Headset } from '@element-plus/icons-vue';
 import { 
   getStudentCourseDetail, 
+  getStudentCourseList,
   toggleCourseCollect, 
   getStudentSectionDetail,
   submitSection,
   sendHeartbeat 
 } from '@/api/classroom.js';
-// 【已添加】引入获取练习列表的API
-import { getPracticeList } from '@/api/teaching-center/PracticeManagement';
+// 移除单独的练习管理API引入，改用课程详情中的practiceList
+
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { previewFile } from '@/api/common/PreviewFile';
+import { getLecturerDetail } from '@/api/system-management/lecturer';
+// 引入 Office 文档预览组件
+import VueOfficeDocx from '@vue-office/docx';
+import '@vue-office/docx/lib/index.css';
+import VueOfficePptx from '@vue-office/pptx';
 
 const route = useRoute();
+const router = useRouter();
 const courseId = ref(null);
 const loading = ref(true);
 const activeTab = ref('intro');
 const currentSection = ref(null);
 const videoPlayerRef = ref(null);
+const audioPlayerRef = ref(null);
 const activeMenuIndex = ref('');
 const player = shallowRef(null);
+let audioEventHandlers = null;
+const pptLoading = ref(false);
+const wordLoading = ref(false);
+const pptError = ref('');
+const wordError = ref('');
+const documentSize = ref(''); // 文档大小信息
 let heartbeatTimer = null;
 let lastHeartbeatTime = 0;
 let totalWatchTime = 0;
 
-// 【已添加】练习列表相关状态
+// 练习列表相关状态 - 从当前小节获取
 const practiceList = ref([]);
 const practiceLoading = ref(false);
 
@@ -238,6 +363,7 @@ const currentCourseware = reactive({
   type: '',
   url: '',
   mimeType: '',
+  arrayBuffer: null, // 用于 Office 文档的二进制数据
 });
 
 const courseDetail = reactive({
@@ -246,8 +372,9 @@ const courseDetail = reactive({
   createTime: '加载中...',
   summary: '加载中...',
   intro: '<p>加载中...</p>',
-  collectCount: 0,
-  isCollected: false,
+  collectNumber: 0,
+  collect: false,
+  mustLearn: false,
   instructorName: '加载中...',
   instructorTitle: '',
   instructorAvatar: '',
@@ -255,39 +382,23 @@ const courseDetail = reactive({
   courseChapterList: [],
 });
 
-const recommendedCourses = ref([
-  { id: 1, title: '课程标题课程标题课程标题', desc: '课程介绍课程介绍课程介绍', cover: '' },
-  { id: 2, title: 'Excel之数据透视表与高级数据分析', desc: '课程介绍课程介绍课程介绍', cover: '' },
-  { id: 3, title: '用 DeepSeek 帮数据讲故事', desc: '课程介绍课程介绍课程介绍', cover: '' },
-]);
+const recommendedCourses = ref([]);
+const recommendLoading = ref(false);
 
-// 【已添加】获取练习列表的函数
-const fetchPracticesForSection = async (sectionId) => {
-  if (!sectionId) {
+// 从当前小节中获取练习列表
+const updatePracticeList = (section) => {
+  if (!section) {
     practiceList.value = [];
     return;
   }
-  practiceLoading.value = true;
-  try {
-    // 假设我们一次性获取所有练习，不分页
-    const res = await getPracticeList({ sectionId: sectionId, page: 1, size: 100 });
-    if (res.code === 200) {
-      practiceList.value = res.data.records || [];
-    } else {
-      ElMessage.error(res.msg || '获取练习列表失败');
-      practiceList.value = [];
-    }
-  } catch (error) {
-    console.error("获取练习列表异常:", error);
-    practiceList.value = [];
-  } finally {
-    practiceLoading.value = false;
-  }
+  
+  // 从当前小节的practiceList中获取练习数据
+  practiceList.value = section.practiceList || [];
 };
 
-// 【已添加】监听当前小节变化，自动加载练习
+// 监听当前小节变化，自动更新练习列表
 watch(currentSection, (newSection) => {
-  fetchPracticesForSection(newSection?.id);
+  updatePracticeList(newSection);
 });
 
 
@@ -308,6 +419,30 @@ const downloadMaterial = async (material) => {
   }
 };
 
+// 开始练习功能
+const startPractice = (practice) => {
+  if (!practice || !practice.id) {
+    ElMessage.warning('练习信息不完整');
+    return;
+  }
+  
+  // 跳转到练习页面，传递练习ID
+  const routeData = router.resolve({
+    name: 'TakePractice', // 假设练习页面的路由名称
+    params: { id: practice.id },
+    query: { 
+      from: 'course',
+      courseId: courseId.value,
+      sectionId: currentSection.value?.id 
+    }
+  });
+  
+  // 在新窗口打开练习页面
+  window.open(routeData.href, '_blank');
+  
+  ElMessage.success('正在打开练习页面...');
+};
+
 
 const formatDuration = (seconds) => {
   if (!seconds) return '00:00';
@@ -325,15 +460,20 @@ const getCoursewareType = (fileType) => {
   if (!fileType) return 'other';
   const type = fileType.toLowerCase();
   if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'].includes(type)) return 'video';
+  if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(type)) return 'audio';
   if (type === 'pdf') return 'pdf';
   if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(type)) return 'image';
-  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar'].includes(type)) return 'document';
+  if (['doc', 'docx'].includes(type)) return 'word';
+  if (['ppt', 'pptx'].includes(type)) return 'ppt';
+  if (['xls', 'xlsx', 'txt', 'zip', 'rar'].includes(type)) return 'document';
   return 'other';
 };
 
 const getMimeType = (fileType) => {
   const mimeTypes = {
-    'mp4': 'video/mp4', 'webm': 'video/webm', 'pdf': 'application/pdf',
+    'mp4': 'video/mp4', 'webm': 'video/webm',
+    'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'aac': 'audio/aac', 'flac': 'audio/flac',
+    'pdf': 'application/pdf',
     'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
   };
   return mimeTypes[fileType?.toLowerCase()] || 'application/octet-stream';
@@ -343,7 +483,24 @@ const downloadCourseware = () => {
   if (currentCourseware.url) {
     const link = document.createElement('a');
     link.href = currentCourseware.url;
-    link.download = currentSection.value?.courseware?.fileName || 'courseware';
+    
+    // 获取小节名称
+    const sectionName = currentSection.value?.name;
+    // 获取文件类型 (扩展名，不含点)
+    const fileType = currentSection.value?.courseware?.fileType;
+    
+    let newFileName = 'courseware'; // 默认值
+    
+    if (sectionName && fileType) {
+      // 组合：小节名称 + . + 扩展名
+      newFileName = `${sectionName}.${fileType}`;
+    } else if (sectionName) {
+      newFileName = sectionName; // 如果没有类型，至少使用名称
+    } else if (currentSection.value?.courseware?.fileName) {
+      newFileName = currentSection.value.courseware.fileName; // 回退到原始文件名
+    }
+    
+    link.download = newFileName;
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
@@ -351,9 +508,118 @@ const downloadCourseware = () => {
     ElMessage.success('开始下载');
   }
 };
+// 在 downloadCourseware 函数后面添加这个新函数：
+const loadOfficeDocument = async (url, type) => {
+  try {
+    console.log(`开始加载 ${type} 文档:`, url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    // 获取文件大小
+    const contentLength = response.headers.get('content-length');
+    const fileSize = contentLength ? parseInt(contentLength) : 0;
+    const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+    
+    console.log(`${type} 文件大小: ${fileSizeMB} MB`);
+    
+    // 更新文件大小显示
+    documentSize.value = `${fileSizeMB} MB`;
+    
+    // 检查文件大小，如果 Word 或 PPT 超过 70MB 就直接提示下载
+    const maxSizeForPreview = 70 * 1024 * 1024; // 70MB
+    if (fileSize > maxSizeForPreview) {
+      const msg = `文件过大 (${fileSizeMB} MB)，超过70MB限制，请直接下载查看`;
+      throw new Error(msg);
+    }
+    
+    // 如果文件较大但未超过70MB，给出警告提示
+    const warnSize = type === 'PPT' ? 30 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (fileSize > warnSize) {
+      const msg = `文件较大 (${fileSizeMB} MB)，在线预览可能较慢，请耐心等待`;
+      ElMessage.warning({
+        message: msg,
+        duration: 6000,
+        showClose: true
+      });
+      console.warn(msg);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('文件内容为空');
+    }
+    
+    console.log(`${type} 文档加载成功，实际大小:`, (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), 'MB');
+    return arrayBuffer;
+    
+  } catch (error) {
+    console.error(`加载 ${type} 文档失败:`, error);
+    
+    if (error.message.includes('CORS') || error.message.includes('NetworkError')) {
+      throw new Error('文档加载失败：跨域限制，请尝试下载查看');
+    }
+    
+    throw new Error(`文档加载失败: ${error.message}`);
+  }
+};
+// Office 文档渲染事件处理
+const handleDocxRendered = () => {
+  console.log('Word 文档渲染完成');
+  wordLoading.value = false;
+  wordError.value = '';
+  ElMessage.success('Word 文档加载成功');
+};
+const handleDocxError = (error) => {
+  console.error('Word 文档渲染失败:', error);
+  wordLoading.value = false;
+  wordError.value = error?.message || '文档格式不支持或文件已损坏';
+  ElMessage.error('Word 文档加载失败');
+};
+
+const handlePptxRendered = () => {
+  console.log('PPT 文档渲染完成');
+  pptLoading.value = false;
+  pptError.value = '';
+  ElMessage.success('PPT 加载成功');
+};
+
+const handlePptxError = (error) => {
+  console.error('PPT 文档渲染失败:', error);
+  pptLoading.value = false;
+  pptError.value = error?.message || '文档格式不支持或文件已损坏';
+  ElMessage.error('PPT 文档加载失败');
+};
+const cleanupPlayer = () => {
+  stopHeartbeat();
+  if (player.value) {
+    if (typeof player.value.dispose === 'function') {
+      player.value.dispose();
+    }
+  }
+  if (audioEventHandlers && audioPlayerRef.value) {
+    const { onPlay, onPause, onEnded } = audioEventHandlers;
+    audioPlayerRef.value.removeEventListener('play', onPlay);
+    audioPlayerRef.value.removeEventListener('pause', onPause);
+    audioPlayerRef.value.removeEventListener('ended', onEnded);
+  }
+  if (audioPlayerRef.value) {
+    audioPlayerRef.value = null;
+  }
+  audioEventHandlers = null;
+  player.value = null;
+};
 
 const initVideoPlayer = () => {
-  if (player.value) {
+  if (player.value && typeof player.value.dispose === 'function') {
     player.value.dispose();
     player.value = null;
   }
@@ -385,10 +651,59 @@ const initVideoPlayer = () => {
   });
 };
 
+const initAudioPlayer = () => {
+  nextTick(() => {
+    if (audioPlayerRef.value && currentCourseware.type === 'audio') {
+      const audioEl = audioPlayerRef.value;
+      const onPlay = () => {
+        lastHeartbeatTime = Date.now();
+        startHeartbeat();
+      };
+      const onPause = () => stopHeartbeat();
+      const onEnded = async () => {
+        stopHeartbeat();
+        if (currentSection.value) {
+          await submitSectionRecord();
+          ElMessage.success('恭喜你完成本小节学习！');
+        }
+      };
+
+      audioEventHandlers = { onPlay, onPause, onEnded };
+      audioEl.addEventListener('play', onPlay);
+      audioEl.addEventListener('pause', onPause);
+      audioEl.addEventListener('ended', onEnded);
+
+      player.value = audioEl;
+    }
+  });
+};
+
+const getCurrentPlaybackRate = () => {
+  if (!player.value) return 1;
+  if (typeof player.value.playbackRate === 'function') {
+    return player.value.playbackRate();
+  }
+  if (typeof player.value.playbackRate === 'number') {
+    return player.value.playbackRate;
+  }
+  return 1;
+};
+
+const isMediaPaused = () => {
+  if (!player.value) return true;
+  if (typeof player.value.paused === 'function') {
+    return player.value.paused();
+  }
+  if (typeof player.value.paused === 'boolean') {
+    return player.value.paused;
+  }
+  return true;
+};
+
 const startHeartbeat = () => {
   if (heartbeatTimer) return;
   heartbeatTimer = setInterval(async () => {
-    if (!player.value || player.value.paused()) {
+    if (isMediaPaused()) {
       stopHeartbeat();
       return;
     }
@@ -399,7 +714,7 @@ const startHeartbeat = () => {
         await sendHeartbeat({
           sectionId: currentSection.value.id,
           watchSecond: Math.min(elapsedSeconds, 30),
-          playbackRate: player.value.playbackRate()
+          playbackRate: getCurrentPlaybackRate()
         });
         totalWatchTime += elapsedSeconds;
         lastHeartbeatTime = now;
@@ -429,9 +744,22 @@ const fetchCourseDetail = async () => {
     if (res.code === 200 && res.data) {
       Object.assign(courseDetail, res.data); 
       courseDetail.courseChapterList = res.data.courseChapterList || [];
-      courseDetail.instructorName = courseDetail.instructorName || '张教授';
-      courseDetail.instructorTitle = '知名学院教授';
-      courseDetail.instructorBio = courseDetail.instructorBio || '讲师简介讲师简介讲师简介。';
+      
+      // 获取讲师信息
+      if (res.data.creator) {
+        fetchInstructorInfo(res.data.creator);
+      } else {
+        // 没有创建人ID时使用默认值
+        courseDetail.instructorName = '讲师';
+        courseDetail.instructorTitle = '知名学院教授';
+        courseDetail.instructorBio = '暂无讲师简介';
+        courseDetail.instructorAvatar = '';
+      }
+      
+      // 获取推荐课程
+      if (res.data.courseCategory) {
+        fetchRecommendedCourses(res.data.courseCategory);
+      }
     } else {
       ElMessage.error(res.msg || '获取课程详情失败');
     }
@@ -443,26 +771,132 @@ const fetchCourseDetail = async () => {
   }
 };
 
+// 获取讲师信息
+const fetchInstructorInfo = async (creatorId) => {
+  try {
+    const res = await getLecturerDetail({ id: creatorId });
+    if (res.code === 200 && res.data) {
+      courseDetail.instructorName = res.data.name || '讲师';
+      courseDetail.instructorTitle = res.data.title || res.data.role || '讲师';
+      courseDetail.instructorBio = res.data.introduction || res.data.intro || '暂无讲师简介';
+      // 如果有头像字段，使用 previewFile 获取预览URL
+      if (res.data.avatar) {
+        try {
+          courseDetail.instructorAvatar = await previewFile(res.data.avatar);
+          console.log('讲师头像URL:', courseDetail.instructorAvatar);
+        } catch (error) {
+          console.error('获取讲师头像失败:', error);
+          courseDetail.instructorAvatar = '';
+        }
+      } else {
+        courseDetail.instructorAvatar = '';
+      }
+      console.log('讲师信息:', res.data);
+    } else {
+      console.error('获取讲师信息失败:', res.msg);
+      courseDetail.instructorName = '讲师';
+      courseDetail.instructorTitle = '讲师';
+      courseDetail.instructorBio = '暂无讲师简介';
+      courseDetail.instructorAvatar = '';
+    }
+  } catch (error) {
+    console.error('获取讲师信息异常:', error);
+    courseDetail.instructorName = '讲师';
+    courseDetail.instructorTitle = '讲师';
+    courseDetail.instructorBio = '暂无讲师简介';
+    courseDetail.instructorAvatar = '';
+  }
+};
+
+// 获取推荐课程（同分类下的随机3个其他课程）
+const fetchRecommendedCourses = async (courseCategory) => {
+  recommendLoading.value = true;
+  try {
+    const res = await getStudentCourseList({
+      page: 1,
+      size: 100, // 获取更多课程以便随机选择
+      course_category: courseCategory
+    });
+    
+    if (res.code === 200 && res.data && res.data.records) {
+      // 过滤掉当前课程
+      const otherCourses = res.data.records.filter(course => course.id !== courseId.value);
+      
+      // 随机打乱数组
+      const shuffled = otherCourses.sort(() => Math.random() - 0.5);
+      
+      // 取前3个
+      const selectedCourses = shuffled.slice(0, 3);
+      
+      // 处理封面图片预览
+      const coursesWithCover = selectedCourses.filter(c => c.cover);
+      if (coursesWithCover.length > 0) {
+        const previewPromises = coursesWithCover.map(c => previewFile(c.cover));
+        const previewUrls = await Promise.all(previewPromises);
+        const urlMap = new Map();
+        coursesWithCover.forEach((course, index) => {
+          urlMap.set(course.id, previewUrls[index]);
+        });
+        recommendedCourses.value = selectedCourses.map(item => ({
+          ...item,
+          coverUrl: urlMap.get(item.id) || ''
+        }));
+      } else {
+        recommendedCourses.value = selectedCourses.map(item => ({ 
+          ...item, 
+          coverUrl: '' 
+        }));
+      }
+      
+      console.log('推荐课程:', recommendedCourses.value);
+    }
+  } catch (error) {
+    console.error('获取推荐课程失败:', error);
+  } finally {
+    recommendLoading.value = false;
+  }
+};
+
 const toggleFavorite = async () => {
   try {
-    const newStatus = !courseDetail.isCollected;
+    const newStatus = !courseDetail.collect;
     const res = await toggleCourseCollect({ courseId: courseId.value, collect: newStatus });
     if (res.code === 200) {
-      courseDetail.isCollected = newStatus;
-      courseDetail.collectCount += newStatus ? 1 : -1;
+      // 更新收藏状态
+      courseDetail.collect = newStatus;
+      // 更新收藏数量：收藏时+1，取消收藏时-1
+      courseDetail.collectNumber = (courseDetail.collectNumber || 0) + (newStatus ? 1 : -1);
+      // 确保收藏数量不小于0
+      if (courseDetail.collectNumber < 0) {
+        courseDetail.collectNumber = 0;
+      }
       ElMessage.success(newStatus ? '收藏成功' : '取消收藏成功');
     } else {
       ElMessage.error(res.msg || '操作失败');
     }
-  } catch(e) { ElMessage.error('网络错误，请稍后重试'); }
+  } catch(e) { 
+    console.error('收藏操作失败:', e);
+    ElMessage.error('网络错误，请稍后重试'); 
+  }
+};
+
+// 跳转到推荐课程
+const goToCourse = (id) => {
+  router.push({ name: 'ClassRoomDetails', params: { id } });
 };
 
 const handleSectionClick = async (section) => {
-  stopHeartbeat();
+  cleanupPlayer();
   totalWatchTime = 0;
   currentCourseware.type = '';
   currentCourseware.url = '';
   currentCourseware.mimeType = '';
+  currentCourseware.arrayBuffer = null;
+  pptLoading.value = false;
+  wordLoading.value = false;
+  pptError.value = '';  // 新增
+  wordError.value = '';  // 新增
+  documentSize.value = ''; // 重置文件大小
   activeMenuIndex.value = `${section.chapterId}-${section.id}`;
   
   try {
@@ -470,6 +904,8 @@ const handleSectionClick = async (section) => {
     const res = await getStudentSectionDetail(section.id);
     if (res.code === 200 && res.data) {
       currentSection.value = res.data;
+      updatePracticeList(res.data);
+      
       if (res.data.courseware && res.data.courseware.fileName) {
         try {
           const fileType = res.data.courseware.fileType;
@@ -480,11 +916,42 @@ const handleSectionClick = async (section) => {
           currentCourseware.url = coursewareUrl;
           currentCourseware.mimeType = getMimeType(fileType);
           
+          console.log('课件类型:', coursewareType, '文件类型:', fileType, 'URL:', coursewareUrl);
+          
           if (coursewareType === 'video') {
             await nextTick();
             initVideoPlayer();
+          } else if (coursewareType === 'audio') {
+            initAudioPlayer();
+          } else if (coursewareType === 'word') {
+            // 修改这部分 ⬇️
+            wordLoading.value = true;
+            wordError.value = '';
+            try {
+              const arrayBuffer = await loadOfficeDocument(coursewareUrl, 'Word');
+              currentCourseware.arrayBuffer = arrayBuffer;
+              await nextTick();
+            } catch (error) {
+              wordError.value = error.message;
+              wordLoading.value = false;
+            }
+          } else if (coursewareType === 'ppt') {
+            // 修改这部分 ⬇️
+            pptLoading.value = true;
+            pptError.value = '';
+            try {
+              const arrayBuffer = await loadOfficeDocument(coursewareUrl, 'PPT');
+              currentCourseware.arrayBuffer = arrayBuffer;
+              await nextTick();
+            } catch (error) {
+              pptError.value = error.message;
+              pptLoading.value = false;
+            }
           }
-        } catch (error) { ElMessage.error('课件加载失败'); }
+        } catch (error) { 
+          console.error('课件加载失败:', error);
+          ElMessage.error('课件加载失败'); 
+        }
       } else {
         ElMessage.warning('该小节暂无课件内容');
       }
@@ -492,11 +959,31 @@ const handleSectionClick = async (section) => {
       ElMessage.error(res.msg || '获取小节详情失败');
     }
   } catch (error) {
+    console.error('加载失败:', error);
     ElMessage.error('加载失败，请重试');
   } finally {
     loading.value = false;
   }
 };
+
+// 监听路由参数变化，当切换课程时重新加载数据
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    // 清理之前的播放器
+    cleanupPlayer();
+    // 重置状态
+    currentSection.value = null;
+    activeMenuIndex.value = '';
+    activeTab.value = 'intro';
+    currentCourseware.type = '';
+    currentCourseware.url = '';
+    currentCourseware.mimeType = '';
+    currentCourseware.arrayBuffer = null;
+    // 更新课程ID并重新获取数据
+    courseId.value = newId;
+    fetchCourseDetail();
+  }
+});
 
 onMounted(() => {
   courseId.value = route.params.id;
@@ -509,11 +996,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  stopHeartbeat();
-  if (player.value) {
-    player.value.dispose();
-    player.value = null;
-  }
+  cleanupPlayer();
 });
 </script>
 
@@ -523,6 +1006,8 @@ onBeforeUnmount(() => {
   margin: 20px auto;
   background-color: #fff;
   padding: 24px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 .main-column {
   padding-right: 24px;
@@ -549,6 +1034,94 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
 }
+.audio-player {
+  width: 100%;
+  height: 650px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.audio-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.audio-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+
+.audio-wave {
+  width: 6px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+.audio-wave:nth-child(1) { animation-delay: 0s; }
+.audio-wave:nth-child(2) { animation-delay: 0.1s; }
+.audio-wave:nth-child(3) { animation-delay: 0.2s; }
+.audio-wave:nth-child(4) { animation-delay: 0.3s; }
+.audio-wave:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes wave {
+  0%, 100% {
+    height: 40px;
+  }
+  50% {
+    height: 80px;
+  }
+}
+
+.audio-info {
+  text-align: center;
+  color: white;
+}
+
+.audio-icon {
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 20px;
+}
+
+.audio-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: white;
+}
+
+.audio-subtitle {
+  font-size: 16px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.audio-player audio {
+  width: 80%;
+  max-width: 600px;
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+}
 .courseware-viewer {
   width: 100%;
   height: 650px;
@@ -558,6 +1131,7 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  box-sizing: border-box;
 }
 .pdf-viewer {
   width: 100%;
@@ -568,6 +1142,56 @@ onBeforeUnmount(() => {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+.office-viewer {
+  background-color: #fff;
+  padding: 20px;
+  overflow: hidden;
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+}
+.word-viewer {
+  padding: 10px 20px;
+}
+.ppt-viewer {
+  padding: 0;
+  background-color: #f5f5f5;
+}
+.office-viewer :deep(.docx-wrapper),
+.office-viewer :deep(.pptx-wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 600px;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.office-viewer :deep(canvas) {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+}
+.ppt-viewer :deep(.pptx-wrapper) {
+  height: 650px !important;
+}
+.loading-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+}
+.loading-overlay p {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #606266;
+}
+.size-info {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #909399;
 }
 .document-viewer {
   background-color: #fff;
@@ -688,8 +1312,11 @@ onBeforeUnmount(() => {
   line-height: 1.8;
 }
 .sidebar-card {
-  border: none;
+  border: 2px solid #e4e7ed;
   margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  overflow: hidden;
 }
 .sidebar-card .card-header {
   font-weight: 600;
@@ -698,28 +1325,128 @@ onBeforeUnmount(() => {
 .syllabus-menu {
   border-right: none;
 }
+
+/* 章节标题样式 */
+.syllabus-menu .el-sub-menu__title {
+  height: auto !important;
+  min-height: 45px;
+  line-height: 1.5;
+  padding: 14px 16px !important;
+  white-space: normal;
+  font-weight: 600;
+  font-size: 14px;
+  background-color: #fafbfc !important;
+  color: #303133 !important;
+  border-radius: 0;
+  margin: 0;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.syllabus-menu .el-sub-menu__title:hover {
+  background-color: #f0f2f5 !important;
+}
+
+/* 小节样式 */
+.syllabus-menu .el-menu-item {
+  height: auto !important;
+  min-height: 40px;
+  line-height: 1.5;
+  padding: 12px 16px 12px 36px !important;
+  white-space: normal;
+  font-size: 13px;
+  margin: 0;
+  border-radius: 0;
+  transition: all 0.2s ease;
+  background-color: #fff;
+  color: #606266;
+  position: relative;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.syllabus-menu .el-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #c0c4cc;
+  transition: all 0.2s ease;
+}
+
+.syllabus-menu .el-menu-item:hover {
+  background-color: #f5f7fa !important;
+  color: #409eff;
+}
+
+.syllabus-menu .el-menu-item:hover::before {
+  background-color: #409eff;
+  width: 6px;
+  height: 6px;
+}
 .menu-item-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
+
+.menu-item-content span {
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.3;
+  flex: 1;
+  font-size: 13px;
+}
+
+/* 优化子菜单容器 */
+.syllabus-menu .el-sub-menu .el-menu {
+  background-color: #fff !important;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* 活跃小节的特殊样式 */
+.syllabus-menu .el-menu-item.is-active-section {
+  background-color: #ecf5ff !important;
+  color: #409eff !important;
+  font-weight: 500;
+  border-left: 3px solid #409eff;
+}
+
+.syllabus-menu .el-menu-item.is-active-section::before {
+  background-color: #409eff;
+  width: 6px;
+  height: 6px;
+}
+
+/* 章节展开/收起图标样式 */
+.syllabus-menu .el-sub-menu__icon-arrow {
+  color: #909399 !important;
+  font-size: 12px;
+}
 .playing-icon {
-  color: #67c23a;
-  animation: pulse 1.5s ease-in-out infinite;
+  color: #409eff;
+  font-size: 14px;
 }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.is-active-section {
-  background-color: #f0f9ff !important;
-}
+
+/* 移除旧的活跃样式，使用新的样式 */
 .recommend-list .recommend-item {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
   cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+.recommend-list .recommend-item:hover {
+  background-color: #f5f7fa;
 }
 .recommend-cover {
   width: 100px;
@@ -755,5 +1482,51 @@ onBeforeUnmount(() => {
   max-width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+/* 练习相关样式 */
+.current-section-practice h3 {
+  font-size: 16px;
+  color: #303133;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 12px;
+}
+.document-error {
+  text-align: center;
+  padding: 60px 40px;
+}
+.error-icon {
+  color: #f56c6c;
+  margin-bottom: 20px;
+}
+.document-error h3 {
+  font-size: 18px;
+  color: #303133;
+  margin: 16px 0;
+}
+.error-message {
+  color: #909399;
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+/* 防止出现水平滚动条 */
+* {
+  box-sizing: border-box;
+}
+
+body, html {
+  overflow-x: hidden;
+}
+
+.el-container {
+  overflow-x: hidden;
 }
 </style>

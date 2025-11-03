@@ -30,19 +30,14 @@ export function getStudentExamDetail(id) {
 }
 
 /**
- * @description [新增] [学生端] 交卷
- * @param {object} data - 提交的答卷数据
- * @param {number} data.examId - 考试ID (必填)
- * @param {Array<object>} data.examSubmitRecordList - 提交记录列表 (必填)
- * @param {number} data.examSubmitRecordList[].questionId - 题目ID (必填)
- * @param {string} data.examSubmitRecordList[].userAnswer - 用户答案 (必填)
- * @param {string} data.examSubmitRecordList[].details - 试卷给的选项，原封不动返回 (必填)
+ * @description [学生端] 交卷
+ * @param {string} id - 答题记录ID (必填)
  */
-export function submitStudentExamPaper(data) {
+export function submitStudentExamPaper(id) {
   return request({
-    url: '/student/exam/submitPaper', //
-    method: 'post', //
-    data: data //
+    url: '/student/exam/submitPaper',
+    method: 'get',
+    params: { id }
   });
 }
 
@@ -55,5 +50,23 @@ export function getStudentExamResult(id) {
     url: '/student/exam/examRecordDetail', //
     method: 'get', //
     params: { id } //
+  });
+}
+
+/**
+ * @description [新增] [学生端] 暂存答题记录
+ * @param {object} data - 暂存的答题数据
+ * @param {number} data.id - 答题记录ID，继续答题时传入，重新答题则不传
+ * @param {number} data.examId - 考试ID (必填)
+ * @param {Array<object>} data.examSubmitRecordList - 提交记录列表 (必填)
+ * @param {number} data.examSubmitRecordList[].questionId - 题目ID (必填)
+ * @param {string} data.examSubmitRecordList[].userAnswer - 用户答案 (必填)
+ * @param {string} data.examSubmitRecordList[].details - 试卷给的选项，原封不动返回 (必填)
+ */
+export function submitStudentExamRecord(data) {
+  return request({
+    url: '/student/exam/submitRecord',
+    method: 'post',
+    data: data
   });
 }

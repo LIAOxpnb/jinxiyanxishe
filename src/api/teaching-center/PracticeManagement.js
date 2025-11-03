@@ -3,8 +3,8 @@ import request from '@/utils/request';
 // 練習管理相關接口
 
 /**
- * @description 獲取練習列表
- * @param {Object} data - 請求參數
+ * @description 获取练习列表
+ * @param {Object} data - 请求参数
  * @param {number} data.page - 頁碼
  * @param {number} data.size - 頁面大小
  * @param {string} data.name - 練習名稱
@@ -19,7 +19,7 @@ export function getPracticeList(data) {
 
 /**
  * @description 創建練習
- * @param {Object} data - 請求參數
+ * @param {Object} data - 请求参数
  * @param {string} data.name - 練習名稱
  * @param {number} data.courseId - 課程ID
  * @param {number} data.chapterId - 章節ID
@@ -45,7 +45,7 @@ export function deletePractice(ids) {
 
 /**
  * @description 修改練習
- * @param {Object} data - 請求參數
+ * @param {Object} data - 请求参数
  * @param {number} data.id - 練習ID
  * @param {string} data.name - 練習名稱
  * @param {number} data.courseId - 課程ID
@@ -72,8 +72,8 @@ export function setPracticeQuestionList(data) {
 }
 
 /**
- * @description 獲取練習詳情
- * @param {Object} params - 請求參數
+ * @description 获取练习详情
+ * @param {Object} params - 请求参数
  * @param {string} params.id - 練習ID
  * @returns {Promise}
  */
@@ -83,7 +83,7 @@ export function getPracticeDetail(params) {
 
 /**
  * @description 複製練習
- * @param {Object} params - 請求參數
+ * @param {Object} params - 请求参数
  * @param {string} params.id - 要複製的練習ID
  * @param {string} params.name - 新練習的名稱
  * @returns {Promise}

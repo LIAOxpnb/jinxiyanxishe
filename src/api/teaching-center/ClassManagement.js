@@ -1,4 +1,5 @@
 import request from '../../utils/request';
+import axios from 'axios';
 
 // 班级管理相关接口
 
@@ -170,4 +171,42 @@ export function getClazzBind(id) {
  */
 export function delClazzBind(data) {
   return request.post('/teacher/clazz/delClazzBind', data);
+}
+
+/**
+ * 下载用户导入模板 - 下载学员批量导入的Excel模板
+ * @returns {Promise} 返回模板文件blob
+ */
+export function downloadUserTemplate() {
+  const token = localStorage.getItem('token');
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
+  
+  return axios.get(`${baseURL}/teacher/clazz/downloadUserTemplate`, {
+    responseType: 'blob',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : ''
+    }
+  }).then(response => response.data);
+}
+
+/**
+ * 批量导入用户 - 通过Excel文件批量导入学员到班级
+ * @param {FormData} formData - 表单数据，包含file和clazzId
+ * @returns {Promise} 返回导入结果
+ */
+export function uploadUserTemplate(formData) {
+  return request.post('/teacher/clazz/uploadUserTemplate', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+}
+
+/**
+ * 班级汇总 - 获取班级的统计汇总信息
+ * @param {string} id - 班级ID (必需)
+ * @returns {Promise} 返回班级汇总统计数据
+ */
+export function getClazzSummary(id) {
+  return request.get(`/teacher/clazz/summary?id=${id}`);
 }

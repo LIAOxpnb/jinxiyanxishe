@@ -55,3 +55,15 @@ export function deleteDict(id) {
     }
   });
 }
+
+/**
+ * 查询字典下一个排序
+ * @param {string} dictType - 字典类型
+ */
+export function getMaxSort(dictType) {
+  return request.get('/admin/dict/getMaxSort', {
+    params: {
+      dictType
+    }
+  });
+}

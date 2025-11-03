@@ -6,31 +6,41 @@
     @update:model-value="closeDialog"
     :close-on-click-modal="false"
   >
-    <div style="text-align: center; padding: 20px;" v-loading="loading">
+    <div style="text-align: center; padding: 20px;">
       <el-upload
         ref="uploadRef"
         drag
         action="#"
         :limit="1"
-        :http-request="handleUpload"
+        :auto-upload="false"
+        v-model:file-list="fileList"
+        :on-change="handleFileChange"
         :on-exceed="handleExceed"
-        :on-error="handleUploadError"
-        :on-remove="handleRemove"
-        :before-remove="beforeRemove"
-        :file-list="fileList"
       >
         <div style="padding: 40px 0;">
           <el-button type="primary" link>上传附件</el-button>
           <div class="el-upload__tip">
-            只支持单个文件上传，小于50M，支持rar、pdf、doc、docx、xls、xlsx格式
+            只支持单个文件上传，小于50M，支持rar、pdf、doc、docx、xls、xlsx、jpeg、png、jpg、格式
           </div>
         </div>
       </el-upload>
     </div>
+    
+    <div v-if="isUploading" class="progress-container">
+      <el-progress :percentage="uploadProgress" />
+    </div>
+    
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="closeDialog">取消</el-button>
-        <el-button type="primary" @click="submitForm" :disabled="!uploadedFile">确定</el-button>
+        <el-button 
+          type="primary" 
+          @click="submitForm" 
+          :loading="isUploading"
+          :disabled="fileList.length === 0"
+        >
+          {{ isUploading ? `上传中... ${uploadProgress}%` : '确定' }}
+        </el-button>
       </span>
     </template>
   </el-dialog>
@@ -38,7 +48,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { genFileId } from 'element-plus';
 import { uploadFiles } from '../../../api/common/UploadFiles';
 import { getSectionMaterials, saveSectionMaterials } from '../../../api/teaching-center/CourseManagement';
@@ -49,10 +59,11 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:visible', 'update-material']);
 
-const loading = ref(false);
 const uploadRef = ref(null);
 const fileList = ref([]);
-const uploadedFile = ref(null);
+const isUploading = ref(false);
+const uploadProgress = ref(0);
+const hasExistingMaterial = ref(false);
 
 watch(() => props.visible, (newVal) => {
   if (newVal) {
@@ -61,124 +72,150 @@ watch(() => props.visible, (newVal) => {
 });
 
 const fetchExistingMaterials = async () => {
-  loading.value = true;
   fileList.value = [];
-  uploadedFile.value = null;
+  hasExistingMaterial.value = false;
   uploadRef.value?.clearFiles();
 
   try {
     const res = await getSectionMaterials(props.sectionData.id);
     if (res.code === 200 && res.data && res.data.length > 0) {
       const material = res.data[0];
-      uploadedFile.value = {
-        materialPath: material.filePath,
-        materialName: material.fileName,
-      };
-      fileList.value = [{ name: material.fileName }];
+      hasExistingMaterial.value = true;
+      fileList.value = [{ name: material.fileName, url: material.filePath }];
     }
   } catch (error) {
-    ElMessage.error('获取已有资料失败');
-  } finally {
-    loading.value = false;
+    console.error('获取已有资料失败:', error);
+  }
+};
+
+const handleFileChange = (uploadFile, uploadFiles) => {
+  console.log('文件改变:', uploadFile.name);
+  
+  // 验证文件格式
+  const fileName = uploadFile.name.toLowerCase();
+  const validExtension = 
+    fileName.endsWith('.rar') || 
+    fileName.endsWith('.pdf') || 
+    fileName.endsWith('.doc') || 
+    fileName.endsWith('.docx') || 
+    fileName.endsWith('.xls') || 
+    fileName.endsWith('.xlsx') ||
+    fileName.endsWith('.jpeg') ||
+    fileName.endsWith('.jpg') ||
+    fileName.endsWith('.png');
+  
+  if (!validExtension) {
+    ElMessage.error('只支持 rar、pdf、doc、docx、xls、xlsx、jpeg、png、jpg 格式的文件！');
+    // 移除不合格的文件
+    fileList.value = fileList.value.filter(f => f.uid !== uploadFile.uid);
+    return;
+  }
+  
+  // 验证文件大小（50MB）
+  const fileSize = uploadFile.size || uploadFile.raw?.size || 0;
+  const isLt50M = fileSize / 1024 / 1024 < 50;
+  if (!isLt50M) {
+    ElMessage.error('文件大小不能超过 50MB！');
+    // 移除不合格的文件
+    fileList.value = fileList.value.filter(f => f.uid !== uploadFile.uid);
+    return;
   }
 };
 
 const handleExceed = (files) => {
+  ElMessage.warning('只能上传一个文件，将替换当前文件');
   uploadRef.value.clearFiles();
   const file = files[0];
   file.uid = genFileId();
   uploadRef.value.handleStart(file);
 };
 
-// 【核心修改】所有成功逻辑都在此函数内完成，不再需要 handleUploadSuccess
-const handleUpload = async (options) => {
-  const { file } = options;
-  uploadedFile.value = null; // 先清空状态
-
-  try {
-    const res = await uploadFiles([file]); // 调用上传接口
-
-    // 直接在这里处理返回结果
-    if (res.code === 200 && res.data && typeof res.data === 'string') {
-      ElMessage.success(`文件 ${file.name} 上传成功!`);
-      // 直接给 uploadedFile 赋值
-      uploadedFile.value = {
-        materialPath: res.data,
-        materialName: file.name,
-        uid: file.uid,
-      };
-      // 手动调用 el-upload 内部的成功钩子，让它显示UI状态
-      options.onSuccess(res, file);
-    } else {
-      // 如果 code 不为 200 或 data 为空，则抛出错误
-      throw new Error(res.msg || '上传成功，但服务器未返回文件路径');
-    }
-  } catch (error) {
-    // 捕获到任何错误，都调用 el-upload 内部的失败钩子
-    options.onError(error);
-  }
-};
-
-// 【已移除】handleUploadSuccess 函数已不再需要
-
-const handleUploadError = (error) => {
-  ElMessage.error(error.message || '文件上传失败');
-  fetchExistingMaterials(); // 上传失败时，恢复到初始状态
-};
-
-const beforeRemove = (file) => {
-  return ElMessageBox.confirm(`确定要移除文件 ${file.name} 吗?`).then(
-    () => true,
-    () => false
-  );
-};
-
-const handleRemove = async () => {
-  loading.value = true;
-  try {
-    await saveSectionMaterials(props.sectionData.id, []);
-    ElMessage.success('资料移除成功！');
-    uploadedFile.value = null;
-    fileList.value = [];
-    emit('update-material', { 
-      sectionId: props.sectionData.id,
-      materialName: null 
-    });
-  } catch(e) {
-    ElMessage.error('移除失败');
-  } finally {
-    loading.value = false;
-  }
-};
-
 const closeDialog = () => {
+  if (!isUploading.value) {
+    fileList.value = [];
+    uploadProgress.value = 0;
+  }
   emit('update:visible', false);
 };
 
 const submitForm = async () => {
-  if (!uploadedFile.value || !uploadedFile.value.materialPath) {
-    ElMessage.warning('没有有效的资料文件可供保存');
+  // 如果是已存在的资料（从服务器加载的），直接关闭
+  if (hasExistingMaterial.value && fileList.value.length === 1 && fileList.value[0].url) {
+    closeDialog();
     return;
   }
   
-  const payload = [{
-    fileName: uploadedFile.value.materialName,
-    filePath: uploadedFile.value.materialPath
-  }];
-
-  loading.value = true;
+  // 如果没有选择文件
+  if (fileList.value.length === 0) {
+    ElMessage.warning('请选择要上传的文件');
+    return;
+  }
+  
+  isUploading.value = true;
+  uploadProgress.value = 0;
+  
   try {
-    await saveSectionMaterials(props.sectionData.id, payload);
-    ElMessage.success('资料保存成功！');
+    const onProgress = (progressEvent) => {
+      if (progressEvent.total) {
+        uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+      }
+    };
+    
+    const file = fileList.value[0];
+    const rawFile = file.raw;
+    
+    console.log('开始上传文件:', rawFile.name, '大小:', (rawFile.size / 1024 / 1024).toFixed(2) + 'MB');
+    
+    // 调用上传接口
+    const uploadRes = await uploadFiles([rawFile], onProgress);
+    
+    if (uploadRes.code !== 200 || !uploadRes.data) {
+      throw new Error(uploadRes.msg || '文件上传失败');
+    }
+    
+    const filePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+    
+    if (typeof filePath !== 'string' || !filePath) {
+      throw new Error('服务器未返回有效的文件路径');
+    }
+    
+    console.log('文件上传成功，路径:', filePath);
+    
+    // 保存到服务器
+    const payload = [{
+      fileName: rawFile.name,
+      filePath: filePath
+    }];
+    
+    const saveRes = await saveSectionMaterials(props.sectionData.id, payload);
+    
+    if (saveRes.code !== 200) {
+      throw new Error(saveRes.msg || '资料保存失败');
+    }
+    
+    ElMessage.success('资料上传成功！');
     emit('update-material', { 
       sectionId: props.sectionData.id,
-      materialName: uploadedFile.value.materialName 
+      materialName: rawFile.name 
     });
+    
+    fileList.value = [];
     closeDialog();
+    
   } catch (error) {
-    ElMessage.error('保存失败');
+    console.error('上传失败:', error);
+    const errorMsg = error.message || '上传失败，请重试';
+    ElMessage.error(errorMsg);
   } finally {
-    loading.value = false;
+    isUploading.value = false;
+    uploadProgress.value = 0;
   }
 };
 </script>
+
+<style scoped>
+.progress-container {
+  margin-top: 16px;
+  padding: 0 20px;
+}
+</style>

@@ -37,7 +37,7 @@
     </div>
 
     <div class="action-bar">
-      <el-dropdown @command="handleBatchAction">
+      <el-dropdown v-if="clazzStatus !== 2" @command="handleBatchAction">
         <el-button type="primary">
           已有学员<el-icon class="el-icon--right">
             <ArrowDown />
@@ -46,6 +46,8 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="add">添加学员</el-dropdown-item>
+            <el-dropdown-item command="createNew">新建学员</el-dropdown-item>
+            <el-dropdown-item command="batchImport">批量导入</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -72,10 +74,10 @@
       <el-table :data="memberList" v-loading="loading" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="学员姓名" min-width="100" />
-        <el-table-column prop="phone" label="手机号" min-width="120" />
+        <el-table-column prop="username" label="手机号" min-width="120" />
         <el-table-column prop="policeNumber" label="警号" min-width="100" />
         <el-table-column prop="idCard" label="身份证号" min-width="180" />
-        <el-table-column prop="organization" label="组织" min-width="120" />
+        <el-table-column prop="orgName" label="组织" min-width="120" />
         <el-table-column prop="graduateStatus" label="毕业状态" min-width="100">
           <template #default="{ row }">
             <el-tag :type="row.graduate === 1 ? 'success' : 'warning'">
@@ -83,19 +85,19 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="courseProgress" label="课程学习率" min-width="100">
+        <el-table-column prop="studyRate" label="课程学习率" min-width="100">
           <template #default="{ row }">
-            {{ row.courseProgress || 0 }}%
+            {{ row.studyRate || 0 }}%
           </template>
         </el-table-column>
-        <el-table-column prop="examPassRate" label="考试合格率" min-width="100">
+        <el-table-column prop="examRate" label="考试合格率" min-width="100">
           <template #default="{ row }">
-            {{ row.examPassRate || 0 }}%
+            {{ row.examRate || 0 }}%
           </template>
         </el-table-column>
-        <el-table-column prop="practicePassRate" label="靶场合格率" min-width="100">
+        <el-table-column prop="shootingRangeRate" label="靶场合格率" min-width="100">
           <template #default="{ row }">
-            {{ row.practicePassRate || 0 }}%
+            {{ row.shootingRangeRate || 0 }}%
           </template>
         </el-table-column>
         <el-table-column prop="joinTime" label="加入时间" min-width="150" />
@@ -104,7 +106,7 @@
             <el-button type="primary" link @click="handleViewDetail(row)">
               详情
             </el-button>
-            <el-dropdown @command="(command) => handleMemberAction(command, row)">
+            <el-dropdown v-if="clazzStatus !== 2" @command="(command) => handleMemberAction(command, row)">
               <el-button type="primary" link>
                 <el-icon>
                   <MoreFilled />
@@ -122,7 +124,7 @@
     </div>
 
     <div class="table-footer">
-      <div class="batch-actions">
+      <div class="batch-actions" v-if="clazzStatus !== 2">
         <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate" />
         <el-dropdown @command="handleBatchOperation" trigger="click">
           <el-button :disabled="selectedMembers.length === 0">
@@ -148,7 +150,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="addMemberDialogVisible" title="添加人员" width="1000px" :close-on-click-modal="false">
+    <el-dialog v-model="addMemberDialogVisible" title="添加人员" width="1000px" :close-on-click-modal="false" @close="clearAddMemberDialogState">
       <div class="add-member-dialog">
         <div class="user-tree-section">
           <div class="search-section">
@@ -183,9 +185,9 @@
                     </el-tag>
                   </div>
                 </el-checkbox>
-                <div v-if="user.checked" class="checked-notice">
+                <!-- <div v-if="user.checked" class="checked-notice">
                   【备注】已选定的，搜索结果展示为灰站，如取消勾选，右侧同步取消
-                </div>
+                </div> -->
               </div>
             </div>
 
@@ -243,7 +245,7 @@
 
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="addMemberDialogVisible = false">取消</el-button>
+          <el-button @click="closeAddMemberDialog">取消</el-button>
           <el-button type="primary" @click="confirmAddMembers">确定</el-button>
         </span>
       </template>
@@ -255,14 +257,14 @@
           <el-descriptions-item label="姓名">
             {{ currentUserDetail.name || '' }}
           </el-descriptions-item>
-          <el-descriptions-item label="管理员">
+          <!-- <el-descriptions-item label="管理员">
             {{ currentUserDetail.username || '' }}
-          </el-descriptions-item>
+          </el-descriptions-item> -->
           <el-descriptions-item label="警号">
             {{ currentUserDetail.policeNumber || '' }}
           </el-descriptions-item>
           <el-descriptions-item label="手机号">
-            {{ currentUserDetail.phone || '' }}
+            {{ currentUserDetail.username || '' }}
           </el-descriptions-item>
           <el-descriptions-item label="身份证号">
             {{ currentUserDetail.idCard || '' }}
@@ -300,8 +302,168 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="userDetailDialogVisible = false">关闭</el-button>
-          <el-button type="primary" @click="handleEditUser">编辑用户</el-button>
+          <!-- <el-button type="primary" @click="handleEditUser">编辑用户</el-button> -->
         </span>
+      </template>
+    </el-dialog>
+
+    <!-- 新建学员对话框 -->
+    <el-dialog v-model="createMemberDialogVisible" title="新建学员" width="1060px" :before-close="handleCreateDialogClose">
+      <el-form ref="createFormRef" :model="createFormData" :rules="createFormRules" label-width="80px">
+        <!-- 基本信息行 -->
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="姓名" prop="name" required>
+              <el-input v-model="createFormData.name" placeholder="请输入" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="手机号" prop="username" required>
+              <el-input v-model="createFormData.username" placeholder="请输入" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="警号" prop="policeNumber">
+              <el-input v-model="createFormData.policeNumber" placeholder="请输入" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="身份证号" prop="idCard">
+              <el-input v-model="createFormData.idCard" placeholder="请输入" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 组织状态行 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="归属组织" prop="orgId" required>
+              <el-tree-select
+                v-model="createFormData.orgId"
+                :data="orgTreeDataForSelect"
+                :props="{ children: 'children', label: 'orgName', value: 'id' }"
+                placeholder="请选择"
+                check-strictly
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态" prop="status">
+              <el-radio-group v-model="createFormData.status">
+                <el-radio :value="0">正常</el-radio>
+                <el-radio :value="1">禁用</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 批量添加区域 -->
+        <div style="margin-bottom: 20px; padding: 16px; background-color: #fafafa; border-radius: 4px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <el-icon style="margin-right: 8px; color: #409EFF;"><Plus /></el-icon>
+            <span style="font-weight: 500;">添加用户 ({{ batchUserCount }}/50)</span>
+          </div>
+          
+          <el-form-item style="margin-bottom: 0;">
+            <el-input
+              v-model="batchUserInput"
+              type="textarea"
+              :rows="4"
+              placeholder="一行一个用户，格式：姓名,手机号,警号,身份证号&#10;示例：&#10;张三,13800138000,001,110101199001011234&#10;李四,13900139000,002,110101199002022345"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </div>
+
+        <!-- 密码设置区域 -->
+        <div style="margin-bottom: 20px;">
+          <div style="margin-bottom: 12px; font-weight: 500;">密码设置</div>
+          
+          <el-row>
+            <el-col :span="24">
+              <el-form-item>
+                <el-radio-group v-model="passwordType">
+                  <el-radio value="phone">手机号后六位</el-radio>
+                  <el-radio value="custom">自定义密码</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row v-if="passwordType === 'custom'">
+            <el-col :span="12">
+              <el-form-item prop="customPassword">
+                <el-input
+                  v-model="createFormData.customPassword"
+                  type="password"
+                  placeholder="6-32位"
+                  show-password
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 初次登录密码修改设置 -->
+        <div style="margin-bottom: 20px;">
+          <div style="margin-bottom: 12px; font-weight: 500;">初次登录是否需要修改密码</div>
+          
+          <el-row>
+            <el-col :span="24">
+              <el-form-item>
+                <el-radio-group v-model="needChangePasswordOption">
+                  <el-radio :value="1">需要修改</el-radio>
+                  <el-radio :value="0">不需要</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="handleCreateDialogClose">取消</el-button>
+        <el-button type="primary" @click="handleCreateSubmit" :loading="createSubmitLoading">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量导入对话框 -->
+    <el-dialog v-model="batchImportDialogVisible" title="批量导入" width="800px" :before-close="handleBatchImportDialogClose">
+      <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px; padding: 16px; background-color: #f8f9fa; border-radius: 4px;">
+          <p style="margin: 2px 0; font-size: 14px;"><strong>【备注】</strong></p>
+          <p style="margin: 2px 0; font-size: 12px;">1、学员不存在时，自动添加入A班级，学员存在即直接接入A班级；</p>
+          <p style="margin: 2px 0; font-size: 12px;">2、初始密码为身份证号后6位，首次登录需要重置密码；</p>
+          <p style="margin: 2px 0; font-size: 12px;">3、导入文件中姓名必填，并且是全部路径；如"一级组织名称/二级组织名称/三级组织名称"，斜线内提供了组织数据；</p>
+          <p style="margin: 2px 0; font-size: 12px;">4、请务必按照模板填写上传，<a href="#" @click.prevent="downloadTemplate" style="color: #409EFF; text-decoration: underline;">下载模板</a></p>
+        </div>
+
+        <el-upload
+          ref="uploadRef"
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          :limit="1"
+          accept=".xlsx,.xls"
+          drag
+          style="width: 100%;"
+        >
+          <div class="upload-content">
+            <el-icon class="upload-icon"><Upload /></el-icon>
+            <div class="upload-text">点击或拖拽文件到此处上传</div>
+          </div>
+        </el-upload>
+      </div>
+
+      <template #footer>
+        <el-button @click="handleBatchImportDialogClose">取消</el-button>
+        <el-button type="primary" @click="handleBatchImportSubmit" :loading="batchImportLoading">
+          确定
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -311,10 +473,11 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowLeft, ArrowDown, Search, MoreFilled, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
-import { getClassUsers, removeClassUsers, addClassUsers } from '../../../api/teaching-center/ClassManagement.js';
-import { getUserList, getUserDetail } from '../../../api/system-management/User.js';
-import { getOrgTree } from '../../../api/system-management/Org.js';
+import { ArrowLeft, ArrowDown, Search, MoreFilled, User, OfficeBuilding, Close, Plus, Upload } from '@element-plus/icons-vue';
+import { getClassUsers, removeClassUsers, addClassUsers, downloadUserTemplate, uploadUserTemplate, getClazzSummary, getClassList } from '../../../api/teaching-center/ClassManagement.js';
+import { getUserList, getUserDetail, batchSaveUsers } from '../../../api/system-management/User.js';
+import { getAllOrgTree } from '../../../api/system-management/Org.js';
+import { uploadFiles } from '../../../api/common/UploadFiles.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -329,6 +492,7 @@ const selectedMembers = ref([]);
 const statsData = reactive({ studentCount: 0, graduateRate: 0, courseCompleteRate: 0, examPassRate: 0, practicePassRate: 0 });
 const searchParams = reactive({ param: '', graduate: '' });
 const selectAll = ref(false);
+const clazzStatus = ref(null); // 班级状态：0未开始，1进行中，2已结束
 const isIndeterminate = computed(() => {
   const selectedCount = selectedMembers.value.length;
   return selectedCount > 0 && selectedCount < memberList.value.length;
@@ -343,7 +507,103 @@ const orgTreeData = ref([]);
 const userDetailDialogVisible = ref(false);
 const currentUserDetail = ref({});
 
+// 新建学员相关
+const createMemberDialogVisible = ref(false);
+const createFormRef = ref();
+const createSubmitLoading = ref(false);
+const batchUserInput = ref('');
+const orgTreeDataForSelect = ref([]);
+
+const createFormData = reactive({
+  name: '',
+  username: '',
+  policeNumber: '',
+  idCard: '',
+  orgId: null,
+  status: 0,
+  customPassword: ''
+});
+
+// 新增学员相关数据
+const passwordType = ref('phone'); // phone: 手机号后六位, custom: 自定义密码
+const needChangePasswordOption = ref(1); // 1: 需要修改, 0: 不需要
+
+const createFormRules = {
+  name: [
+    { required: true, message: '请输入姓名', trigger: 'blur' }
+  ],
+  username: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+  ],
+  policeNumber: [
+    { required: true, message: '请输入警号', trigger: 'blur' }
+  ],
+  idCard: [
+    { required: true, message: '请输入身份证号', trigger: 'blur' },
+    { pattern: /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/, message: '请输入正确的身份证号', trigger: 'blur' }
+  ],
+  orgId: [
+    { required: true, message: '请选择组织', trigger: 'change' }
+  ],
+  customPassword: [
+    { required: true, message: '请输入自定义密码', trigger: 'blur' },
+    { min: 6, max: 32, message: '密码长度应在6-32位之间', trigger: 'blur' }
+  ]
+};
+
+// 计算批量用户数量
+const batchUserCount = computed(() => {
+  if (!batchUserInput.value.trim()) return 0;
+  return batchUserInput.value.trim().split('\n').filter(line => line.trim()).length;
+});
+
+// 批量导入相关
+const batchImportDialogVisible = ref(false);
+const uploadRef = ref();
+const batchImportLoading = ref(false);
+const importFile = ref(null);
+
 const goBack = () => { router.go(-1); };
+
+// 获取班级详情(包括状态)
+const fetchClazzDetail = async () => {
+  try {
+    // 使用较大的size来确保能获取到目标班级
+    const response = await getClassList({ 
+      page: 1, 
+      size: 1000, 
+      name: '', 
+      isMe: false, 
+      clazzStatus: '' 
+    });
+    if (response.code === 200 && response.data && response.data.records) {
+      const currentClass = response.data.records.find(c => c.id === parseInt(classId));
+      if (currentClass) {
+        clazzStatus.value = currentClass.clazzStatus;
+      }
+    }
+  } catch (error) {
+    console.error('获取班级详情失败:', error);
+  }
+};
+
+// 获取班级汇总统计数据
+const fetchClazzSummary = async () => {
+  try {
+    const response = await getClazzSummary(classId);
+    if (response.code === 200 && response.data) {
+      // 更新统计数据
+      statsData.studentCount = response.data.studentCount || 0;
+      statsData.graduateRate = response.data.graduateRate || 0;
+      statsData.courseCompleteRate = response.data.courseCompleteRate || 0;
+      statsData.examPassRate = response.data.examPassRate || 0;
+      statsData.practicePassRate = response.data.practicePassRate || 0;
+    }
+  } catch (error) {
+    console.error('获取班级汇总数据失败:', error);
+  }
+};
 
 const fetchMemberList = async () => {
   try {
@@ -380,6 +640,14 @@ const handleBatchAction = async (command) => {
   if (command === 'add') {
     addMemberDialogVisible.value = true;
     await fetchOrgTree();
+  } else if (command === 'createNew') {
+    // 新建学员
+    createMemberDialogVisible.value = true;
+    await fetchOrgTreeForSelect();
+  } else if (command === 'batchImport') {
+    // 批量导入
+    batchImportDialogVisible.value = true;
+    importResult.value = null;
   }
 };
 
@@ -447,20 +715,42 @@ const handleUserSearch = async () => {
   try {
     const response = await getUserList({ pageNum: 1, pageSize: 50, param: userSearchKeyword.value.trim(), pagination: true });
     if (response.code === 200) {
-      searchedUsers.value = response.data.records.map(user => ({
-        id: user.id,
-        name: user.name,
-        department: user.orgName || '未知部门',
-        avatar: user.avatar || '',
-        checked: selectedUsers.value.some(u => u.id === user.id) || memberList.value.some(member => member.id === user.id)
-      }));
+      searchedUsers.value = response.data.records.map(user => {
+        let department = user.orgName || user.organizationName || user.deptName || user.department;
+
+        // 如果搜索结果中没有部门信息，尝试从组织树中查找
+        if (!department && orgTreeData.value.length > 0) {
+          const findUserInTree = (nodes) => {
+            for (const node of nodes) {
+              if (node.type === 'user' && node.originalId === user.id) {
+                return node.department;
+              }
+              if (node.children && node.children.length > 0) {
+                const found = findUserInTree(node.children);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+
+          department = findUserInTree(orgTreeData.value);
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          department: department || '未知部门',
+          avatar: user.avatar || '',
+          checked: selectedUsers.value.some(u => u.id === user.id) || memberList.value.some(member => member.id === user.id)
+        };
+      });
     }
   } catch (error) { ElMessage.error('搜索用户失败'); }
 };
 
 const fetchOrgTree = async () => {
   try {
-    const response = await getOrgTree({ personnel: true });
+    const response = await getAllOrgTree({ personnel: true });
     if (response.code === 200) {
       orgTreeData.value = transformOrgTreeData(response.data);
     } else {
@@ -545,6 +835,19 @@ const clearSelectedUsers = () => {
   });
 };
 
+// 清理添加学员弹窗的搜索状态
+const clearAddMemberDialogState = () => {
+  userSearchKeyword.value = '';
+  searchedUsers.value = [];
+  selectedUsers.value = [];
+};
+
+// 关闭添加学员弹窗
+const closeAddMemberDialog = () => {
+  addMemberDialogVisible.value = false;
+  clearAddMemberDialogState();
+};
+
 const removeSelectedUser = (user) => {
   const index = selectedUsers.value.findIndex(u => u.id === user.id);
   if (index > -1) selectedUsers.value.splice(index, 1);
@@ -562,6 +865,7 @@ const confirmAddMembers = async () => {
     await addClassUsers({ id: parseInt(classId), userIdList: userIds });
     ElMessage.success('添加学员成功');
     addMemberDialogVisible.value = false;
+    clearAddMemberDialogState();
     fetchMemberList();
   } catch (error) {
     ElMessage.error('添加学员失败');
@@ -573,7 +877,223 @@ const handleEditUser = () => {
   ElMessage.info('编辑用户功能');
 };
 
+// 获取组织树（用于新建学员的选择器）
+const fetchOrgTreeForSelect = async () => {
+  try {
+    const response = await getAllOrgTree();
+    if (response.code === 200) {
+      orgTreeDataForSelect.value = response.data || [];
+    } else {
+      ElMessage.error(response.msg || '获取组织树失败');
+    }
+  } catch (error) {
+    ElMessage.error('获取组织树失败');
+  }
+};
+
+// 重置新建学员表单
+const resetCreateForm = () => {
+  createFormData.name = '';
+  createFormData.username = '';
+  createFormData.policeNumber = '';
+  createFormData.idCard = '';
+  createFormData.orgId = null;
+  batchUserInput.value = '';
+  createFormRef.value?.resetFields();
+};
+
+// 关闭新建学员对话框
+const handleCreateDialogClose = () => {
+  createMemberDialogVisible.value = false;
+  resetCreateForm();
+};
+
+// 提交新建学员
+const handleCreateSubmit = async () => {
+  try {
+    // 验证基本信息
+    if (!createFormData.orgId) {
+      ElMessage.error('请选择归属组织');
+      return;
+    }
+    
+    createSubmitLoading.value = true;
+    
+    const users = [];
+    
+    // 检查是否有批量用户输入
+    if (batchUserInput.value.trim()) {
+      // 解析批量用户数据
+      const lines = batchUserInput.value.trim().split('\n');
+      for (const line of lines) {
+        const parts = line.split(',').map(part => part.trim());
+        if (parts.length >= 2) {
+          const [name, phone, policeNumber = '', idCard = ''] = parts;
+          users.push({
+            name,
+            username: phone,
+            policeNumber,
+            idCard,
+            orgId: createFormData.orgId
+          });
+        }
+      }
+    } else {
+      // 单个用户 - 验证必填字段
+      if (!createFormData.name || !createFormData.username) {
+        ElMessage.error('请输入姓名和手机号');
+        createSubmitLoading.value = false;
+        return;
+      }
+      
+      users.push({
+        username: createFormData.username,
+        policeNumber: createFormData.policeNumber,
+        idCard: createFormData.idCard,
+        name: createFormData.name,
+        orgId: createFormData.orgId
+      });
+    }
+    
+    if (users.length === 0) {
+      ElMessage.error('请至少添加一个用户');
+      createSubmitLoading.value = false;
+      return;
+    }
+    
+    // 确定密码 - 使用身份证号后6位
+    let password = '';
+    if (users[0].idCard && users[0].idCard.length >= 6) {
+      password = users[0].idCard.slice(-6);
+    } else if (users[0].username) {
+      // 如果没有身份证号，使用手机号后6位
+      password = users[0].username.slice(-6);
+    } else {
+      password = '123456'; // 默认密码
+    }
+    
+    const userData = {
+      password: password,
+      needChangePassword: 1, // 需要修改密码
+      clazzId: parseInt(classId), // 添加班级ID
+      users: users
+    };
+    
+    const response = await batchSaveUsers(userData);
+    if (response.code === 200) {
+      ElMessage.success('新建学员成功');
+      
+      // 获取新建的用户ID并添加到班级
+      if (response.data && response.data.length > 0) {
+        const userIds = response.data.map(user => user.id || user.userId);
+        try {
+          await addClassUsers({ id: parseInt(classId), userIdList: userIds });
+          ElMessage.success('学员已自动添加到班级');
+        } catch (error) {
+          ElMessage.warning('学员创建成功，但添加到班级失败，请手动添加');
+        }
+      }
+      
+      createMemberDialogVisible.value = false;
+      resetCreateForm();
+      fetchMemberList();
+    } else {
+      ElMessage.error(response.msg || '新建学员失败');
+    }
+  } catch (error) {
+    console.error('新建学员错误:', error);
+    ElMessage.error('新建学员失败');
+  } finally {
+    createSubmitLoading.value = false;
+  }
+};
+
+// 文件变化处理
+// 文件变化处理
+const handleFileChange = (uploadFile) => {
+  importFile.value = uploadFile.raw;
+};
+
+// 文件移除处理
+const handleFileRemove = () => {
+  importFile.value = null;
+};
+
+// 提交批量导入
+const handleBatchImportSubmit = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择要导入的文件');
+    return;
+  }
+
+  batchImportLoading.value = true;
+  try {
+    // 创建表单数据
+    const formData = new FormData();
+    formData.append('file', importFile.value);
+    formData.append('clazzId', classId);
+    
+    // 调用批量导入API
+    const response = await uploadUserTemplate(formData);
+
+    if (response.code === 200) {
+      ElMessage.success('批量导入成功');
+      
+      // 关闭对话框并刷新列表
+      setTimeout(() => {
+        handleBatchImportDialogClose();
+        fetchMemberList();
+      }, 1000);
+    } else {
+      ElMessage.error(response.msg || '导入失败');
+    }
+  } catch (error) {
+    console.error('批量导入错误:', error);
+    ElMessage.error('批量导入失败');
+  } finally {
+    batchImportLoading.value = false;
+  }
+};
+
+// 下载模板
+const downloadTemplate = async () => {
+  try {
+    const response = await downloadUserTemplate();
+    
+    // 创建blob对象
+    const blob = new Blob([response], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '学员导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    
+    // 清理
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    ElMessage.success('模板下载成功');
+  } catch (error) {
+    console.error('下载模板失败:', error);
+    ElMessage.error('下载模板失败');
+  }
+};
+
+// 关闭批量导入对话框
+const handleBatchImportDialogClose = () => {
+  batchImportDialogVisible.value = false;
+  importFile.value = null;
+  uploadRef.value?.clearFiles();
+};
+
 onMounted(() => {
+  fetchClazzDetail(); // 获取班级详情(包括状态)
+  fetchClazzSummary(); // 获取班级汇总统计数据
   fetchMemberList();
 });
 </script>

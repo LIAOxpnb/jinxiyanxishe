@@ -1,6 +1,7 @@
 <template>
-  <el-container class="batch-add-page">
-    <el-main>
+  <div class="batch-add-page">
+    <!-- 固定顶部区域 -->
+    <div class="fixed-header">
       <div class="page-header">
         <h2>批量新增试题</h2>
         <el-dropdown @command="addQuestion">
@@ -50,7 +51,10 @@
           </el-col>
         </el-row>
       </el-form>
+    </div>
 
+    <!-- 可滚动内容区域 -->
+    <div class="content-area">
       <div class="question-list">
         <QuestionEditor
           v-for="(question, index) in questionList"
@@ -62,23 +66,34 @@
         />
         <el-empty v-if="questionList.length === 0" description="请点击右上角按钮新增试题" />
       </div>
+    </div>
 
-    </el-main>
-    <el-footer class="page-footer">
-      <span>共 {{ questionList.length }} 道题</span>
+    <!-- 固定底部区域 -->
+    <div class="fixed-footer">
+      <div class="footer-left">
+        <span>共 {{ questionList.length }} 道题</span>
+        <span v-if="lastSaveTime" class="save-status">
+          <el-icon class="save-icon"><Check /></el-icon>
+          已自动保存 {{ formatSaveTime(lastSaveTime) }}
+        </span>
+        <span v-else-if="hasUnsavedChanges" class="unsaved-status">
+          <el-icon class="unsaved-icon"><Loading /></el-icon>
+          保存中...
+        </span>
+      </div>
       <div>
         <el-button @click="onCancel">取消</el-button>
         <el-button type="primary" @click="onSubmit" :disabled="questionList.length === 0">确定</el-button>
       </div>
-    </el-footer>
-  </el-container>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, Refresh, Plus } from '@element-plus/icons-vue';
+import { ArrowDown, Refresh, Plus, Check, Loading } from '@element-plus/icons-vue';
 import { saveQuestionList, getQuestionGroupList, addQuestionGroup } from '@/api/teaching-center/QuestionBank';
 import { getDictData } from '@/api/system-management/dictionary';
 import QuestionEditor from '@/components/question/QuestionEditor.vue';
@@ -93,8 +108,104 @@ const batchInfo = ref({
   groupId: null,
 });
 
+// 暂存相关状态
+const STORAGE_KEY = 'manual_add_question_draft';
+const lastSaveTime = ref(null);
+const hasUnsavedChanges = ref(false);
+
 const categoryOptions = ref([]);
 const groupOptions = ref([]);
+
+// 暂存功能相关方法
+const saveDraft = () => {
+  try {
+    // 只有当有题目或者有分类信息时才保存
+    if (questionList.value.length === 0 && !batchInfo.value.questionCategory) {
+      return;
+    }
+    
+    const draftData = {
+      questionList: questionList.value,
+      batchInfo: batchInfo.value,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draftData));
+    lastSaveTime.value = new Date();
+    hasUnsavedChanges.value = false;
+    console.log('数据已自动保存到本地');
+  } catch (error) {
+    console.error('保存草稿失败:', error);
+    ElMessage.warning('暂存数据失败，请检查浏览器存储空间');
+  }
+};
+
+const loadDraft = () => {
+  try {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      const draftData = JSON.parse(savedData);
+      if (draftData.questionList && draftData.questionList.length > 0) {
+        // 询问用户是否恢复暂存数据
+        ElMessageBox.confirm(
+          `检测到未完成的题目编辑，共 ${draftData.questionList.length} 道题，是否恢复？`,
+          '发现暂存数据',
+          {
+            confirmButtonText: '恢复数据',
+            cancelButtonText: '放弃暂存',
+            type: 'info',
+          }
+        ).then(() => {
+          questionList.value = draftData.questionList;
+          batchInfo.value = { ...batchInfo.value, ...draftData.batchInfo };
+          lastSaveTime.value = new Date(draftData.timestamp);
+          hasUnsavedChanges.value = false;
+          ElMessage.success('已恢复暂存数据');
+        }).catch(() => {
+          clearDraft();
+        });
+      }
+    }
+  } catch (error) {
+    console.error('加载草稿失败:', error);
+    clearDraft();
+  }
+};
+
+const clearDraft = () => {
+  localStorage.removeItem(STORAGE_KEY);
+  lastSaveTime.value = null;
+  hasUnsavedChanges.value = false;
+};
+
+// 防抖保存
+let saveTimer = null;
+const debouncedSave = () => {
+  hasUnsavedChanges.value = true;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  saveTimer = setTimeout(() => {
+    saveDraft();
+  }, 1000); // 1秒后自动保存
+};
+
+// 格式化保存时间
+const formatSaveTime = (time) => {
+  if (!time) return '';
+  const now = new Date();
+  const diff = now - time;
+  
+  if (diff < 60000) { // 1分钟内
+    return '刚刚';
+  } else if (diff < 3600000) { // 1小时内
+    return `${Math.floor(diff / 60000)}分钟前`;
+  } else {
+    return time.toLocaleTimeString('zh-CN', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  }
+};
 
 const fetchCategories = async () => {
   try {
@@ -136,12 +247,49 @@ const addGroup = () => {
   }).catch(() => {});
 };
 
+// 监听数据变化，自动保存
+watch(
+  [questionList, batchInfo],
+  () => {
+    if (questionList.value.length > 0 || batchInfo.value.questionCategory) {
+      debouncedSave();
+    }
+  },
+  { deep: true }
+);
+
+// 浏览器刷新或关闭时的提醒
+const handleBeforeUnload = (event) => {
+  if (hasUnsavedChanges.value || questionList.value.length > 0) {
+    const message = '您有未保存的数据，确定要离开吗？';
+    event.preventDefault();
+    event.returnValue = message;
+    // 在用户真的要离开前保存数据
+    saveDraft();
+    return message;
+  }
+};
+
+// 页面卸载前的处理
+onBeforeUnmount(() => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+});
+
 onMounted(() => {
   fetchCategories();
   fetchGroups();
   if (route.query.groupId && route.query.groupId !== 'all') {
     batchInfo.value.groupId = parseInt(route.query.groupId, 10);
   }
+  // 监听浏览器刷新或关闭事件
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  // 延迟加载暂存数据，确保组件完全加载
+  setTimeout(() => {
+    loadDraft();
+  }, 100);
 });
 
 const questionTypeMap = {
@@ -166,6 +314,8 @@ const createBaseQuestion = (type) => ({
   answerLimit: 'unlimited',
   wordCountRange: '',
   attachmentRequired: 'no',
+  fileName: '',
+  filePath: '',
 });
 
 const addQuestion = (type) => {
@@ -175,7 +325,7 @@ const addQuestion = (type) => {
       base.answer = [];
       break;
     case 'TRUE_FALSE':
-      base.answer = '1';
+      base.answer = '0'; // 默认设置为正确
       break;
     case 'FILL_IN_BLANK':
       base.answer = [];
@@ -184,9 +334,14 @@ const addQuestion = (type) => {
     case 'ESSAY':
       base.answer = '';
       base.options = [];
+      base.answerLimit = 'unlimited';
+      base.wordCountRange = '';
+      base.attachmentRequired = 'no';
       break;
   }
   questionList.value.push(base);
+  // 添加题目后立即触发保存
+  debouncedSave();
 };
 
 const deleteQuestion = (index) => {
@@ -194,6 +349,8 @@ const deleteQuestion = (index) => {
     .then(() => {
       questionList.value.splice(index, 1);
       ElMessage.success('删除成功');
+      // 删除后立即保存
+      debouncedSave();
     }).catch(() => {});
 };
 
@@ -203,10 +360,29 @@ const copyQuestion = (index) => {
   copiedQuestion.uid = uuidv4();
   questionList.value.splice(index + 1, 0, copiedQuestion);
   ElMessage.success('复制成功');
+  // 复制后立即保存
+  debouncedSave();
 };
 
 const onCancel = () => {
-  router.back();
+  if (hasUnsavedChanges.value || questionList.value.length > 0) {
+    ElMessageBox.confirm(
+      '您有未保存的数据，确定要离开吗？数据将会暂存到本地。',
+      '确认离开',
+      {
+        confirmButtonText: '确定离开',
+        cancelButtonText: '继续编辑',
+        type: 'warning',
+      }
+    ).then(() => {
+      saveDraft(); // 离开前保存一次
+      router.back();
+    }).catch(() => {
+      // 用户选择继续编辑
+    });
+  } else {
+    router.back();
+  }
 };
 
 const cleanHtml = (html) => {
@@ -327,16 +503,20 @@ const onSubmit = async () => {
         }
         case 'TRUE_FALSE':
           backendQuestion.answer = q.answer;
-          backendQuestion.details = JSON.stringify([
-            { option: 'A', value: '正确' },
-            { option: 'B', value: '错误' }
-          ]);
+          backendQuestion.details = ''; // 判断题不需要details
           break;
         case 'FILL_IN_BLANK':
           backendQuestion.answer = q.answer.join('#@#');
           break;
         case 'ESSAY':
           backendQuestion.answer = q.answer;
+          // 处理论述题的答题限制
+          if (q.answerLimit === 'limited') {
+            backendQuestion.wordLimit = parseInt(q.wordCountRange) || 0;
+            backendQuestion.fileUpload = q.attachmentRequired === 'yes' ? 1 : 0;
+            backendQuestion.fileName = q.fileName || '';
+            backendQuestion.filePath = q.filePath || '';
+          }
           break;
       }
 
@@ -355,6 +535,8 @@ const onSubmit = async () => {
     const res = await saveQuestionList(payload);
     if (res && res.code === 200) {
       ElMessage.success('批量新增试题成功');
+      // 提交成功后清空暂存数据
+      clearDraft();
       router.push({ path: '/teaching-center/question-bank' });
     } else {
       ElMessage.error(res?.msg || '保存失败');
@@ -368,9 +550,94 @@ const onSubmit = async () => {
 </script>
 
 <style scoped>
-.batch-add-page { display: flex; flex-direction: column; height: calc(100vh - 88px); }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.batch-info-form { margin-bottom: 20px; padding: 20px 10px 0; background-color: #fcfcfc; border: 1px solid #ebeef5; border-radius: 4px; }
-.question-list { flex-grow: 1; overflow-y: auto; padding-right: 10px; }
-.page-footer { display: flex; justify-content: space-between; align-items: center; background-color: #fff; border-top: 1px solid #ebeef5; padding: 10px 20px; position: sticky; bottom: 0; }
+.batch-add-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.fixed-header {
+  flex-shrink: 0;
+  background-color: #fff;
+  border-bottom: 1px solid #ebeef5;
+  padding: 5px;
+  z-index: 100;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.batch-info-form {
+  margin-bottom: 0;
+  padding: 20px 10px 20px;
+  background-color: #fcfcfc;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background-color: #f5f5f5;
+}
+
+.question-list {
+  max-width: 100%;
+}
+
+.fixed-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #fff;
+  border-top: 1px solid #ebeef5;
+  padding: 15px 20px;
+  z-index: 100;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  color: #67c23a;
+  font-size: 12px;
+}
+
+.save-icon {
+  margin-right: 4px;
+}
+
+.unsaved-status {
+  display: flex;
+  align-items: center;
+  color: #e6a23c;
+  font-size: 12px;
+}
+
+.unsaved-icon {
+  margin-right: 4px;
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 </style>

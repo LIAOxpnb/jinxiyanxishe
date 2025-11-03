@@ -42,17 +42,17 @@
         </el-table-column>
       </el-table>
 
+      <div v-if="selectedItems.length > 0" style="margin: 10px 0;">
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedItems.length }})
+        </el-button>
+      </div>
+
       <div class="table-footer">
-        <el-dropdown @command="handleBatchAction" :disabled="selectedItems.length === 0">
-          <el-button>
-            批量操作<el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div></div>
         
         <el-pagination
           v-model:current-page="pagination.page"
@@ -290,16 +290,39 @@ const handleSelectionChange = (selection) => {
   selectedItems.value = selection;
 };
 
-const handleBatchAction = (command) => {
-  if (command === 'delete') {
-    ElMessageBox.confirm(`确定要删除选中的 ${selectedItems.value.length} 项练习吗？`, '提示', { type: 'warning' })
-      .then(async () => {
-        const ids = selectedItems.value.map(item => item.id);
-        await deletePractice(ids);
-        ElMessage.success('批量删除成功！');
-        fetchPracticeList();
-      }).catch(() => {});
+const handleBatchDelete = () => {
+  if (selectedItems.value.length === 0) {
+    ElMessage.warning('请先选择要删除的练习');
+    return;
   }
+
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedItems.value.length} 项练习吗？此操作不可恢复！`, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
+    try {
+      // 收集所有要删除的练习ID
+      const ids = selectedItems.value.map(item => item.id);
+      const deletePromises = ids.map(id => deletePractice([id]));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${selectedItems.value.length} 项练习！`);
+      selectedItems.value = [];
+      fetchPracticeList();
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
 };
 
 const handleDropdownAction = (command, row) => {

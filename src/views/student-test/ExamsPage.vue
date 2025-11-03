@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <el-icon :size="32" color="#fff" class="header-icon"><Document /></el-icon>
-      <h1>正式考试</h1>
+      <h1 style="color: #3370FF">正式考试</h1>
     </div>
 
     <div class="main-content">
@@ -12,7 +12,14 @@
             <el-button :icon="Search" @click="handleFilter" />
           </template>
         </el-input>
-        <el-select v-model="filterParams.examCategory" placeholder="分类" clearable @change="handleFilter"></el-select>
+        <el-select v-model="filterParams.examCategory" placeholder="分类" clearable @change="handleFilter">
+          <el-option
+            v-for="item in categoryOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
         <el-select v-model="filterParams.examStatus" placeholder="状态" clearable @change="handleFilter">
           <el-option label="未开始" value="0"></el-option>
           <el-option label="进行中" value="1"></el-option>
@@ -22,7 +29,7 @@
            <el-option label="合格" value="1"></el-option>
            <el-option label="不合格" value="0"></el-option>
         </el-select>
-        <span class="filter-note">【备注】设置了可查看考卷的显示相关操作</span>
+        <!-- <span class="filter-note">【备注】设置了可查看考卷的显示相关操作</span> -->
       </div>
 
       <el-table :data="tableData" v-loading="loading" style="width: 100%" class="exam-table">
@@ -55,17 +62,34 @@
         </el-table-column>
         <el-table-column label="考试分数" width="120">
              <template #default="scope">
-                {{ scope.row.examRecord ? scope.row.examRecord.score : '-' }}
+                <span v-if="scope.row.examRecord">
+                  <span v-if="scope.row.examRecord.status === 4">
+                    {{ scope.row.examRecord.score }}
+                  </span>
+                  <span v-else-if="scope.row.examRecord.status === 0" style="color: #909399;">未完成</span>
+                  <span v-else-if="scope.row.examRecord.status === 1" style="color: #e6a23c;">待修改</span>
+                  <span v-else-if="scope.row.examRecord.status === 2" style="color: #409eff;">阅卷中</span>
+                  <span v-else-if="scope.row.examRecord.status === 3" style="color: #f56c6c;">修改异常</span>
+                  <span v-else style="color: #909399;">-</span>
+                </span>
+                <span v-else>-</span>
              </template>
         </el-table-column>
         <el-table-column label="考核结果" width="120">
             <template #default="scope">
-                 <span v-if="scope.row.examRecord">
+                <span v-if="scope.row.examRecord">
+                  <span v-if="scope.row.examRecord.status === 4">
                     <span :style="{ color: scope.row.examRecord.qualified === 1 ? '' : '#f56c6c' }">
                         {{ scope.row.examRecord.qualified === 1 ? '合格' : '不合格' }}
                     </span>
-                 </span>
-                 <span v-else>-</span>
+                  </span>
+                  <span v-else-if="scope.row.examRecord.status === 0" style="color: #909399;">未完成</span>
+                  <span v-else-if="scope.row.examRecord.status === 1" style="color: #e6a23c;">待修改</span>
+                  <span v-else-if="scope.row.examRecord.status === 2" style="color: #409eff;">阅卷中</span>
+                  <span v-else-if="scope.row.examRecord.status === 3" style="color: #f56c6c;">修改异常</span>
+                  <span v-else style="color: #909399;">-</span>
+                </span>
+                <span v-else>-</span>
             </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -83,8 +107,10 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.size"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="prev, pager, next, ->, page-sizes"
+          :page-sizes="[5, 10, 15, 20]"
+          :small="false"
+          :background="true"
+          layout="sizes, prev, pager, next"
           :total="pagination.total"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
@@ -100,6 +126,7 @@ import { useRouter } from 'vue-router';
 import { Search, Document } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getStudentExamList } from '../../api/exams.js'; // 确保API路径正确
+import { getDictData } from '@/api/system-management/dictionary';
 
 const router = useRouter();
 
@@ -113,9 +140,10 @@ const filterParams = reactive({
 const tableData = ref([]);
 const pagination = reactive({
   page: 1,
-  size: 10,
+  size: 5,
   total: 0,
 });
+const categoryOptions = ref([]);
 
 const examStatusMap = { 0: '未开始', 1: '进行中', 2: '已结束' };
 const getStatusClass = (status) => {
@@ -136,11 +164,31 @@ const fetchExamList = async () => {
       name: filterParams.name,
       examCategory: filterParams.examCategory,
       examStatus: filterParams.examStatus,
+      // result 参数后端不支持，前端自己筛选
     };
     const res = await getStudentExamList(payload);
     if (res.code === 200) {
-      tableData.value = res.data.records || [];
-      pagination.total = res.data.total || 0;
+      const records = res.data.records || [];
+      
+      // 【前端筛选】根据考核结果筛选
+      let filteredData = records;
+      if (filterParams.result !== '') {
+        filteredData = records.filter(item => {
+          // 只有有考试记录的才能筛选
+          if (!item.examRecord) return false;
+          
+          // result: "1" 表示合格，"0" 表示不合格
+          if (filterParams.result === '1') {
+            return item.examRecord.qualified === 1;
+          } else if (filterParams.result === '0') {
+            return item.examRecord.qualified === 0;
+          }
+          return true;
+        });
+      }
+      
+      tableData.value = filteredData;
+      pagination.total = res.data.total || 0; // 保持后端的总数
     } else {
       ElMessage.error(res.msg || '获取列表失败');
     }
@@ -149,6 +197,21 @@ const fetchExamList = async () => {
     ElMessage.error('获取列表失败');
   } finally {
     loading.value = false;
+  }
+};
+
+// 【新增】获取考试分类选项
+const fetchCategories = async () => {
+  try {
+    const res = await getDictData('exam_category');
+    if (res.code === 200) {
+      categoryOptions.value = res.data.map(item => ({
+        label: item.dictLabel,
+        value: item.dictValue,
+      }));
+    }
+  } catch (error) {
+    console.error("获取考试分类失败", error);
   }
 };
 
@@ -169,11 +232,50 @@ const handleCurrentChange = (newPage) => {
 
 // [核心修改] 点击标题是进入考试的主要入口
 const handleTitleClick = (row) => {
-  // 未开始和进行中的考试，点击标题都应该进入“考试开始确认页”
+  // 场景1：未开始(0)和进行中(1)的考试
   if (row.examStatus === 0 || row.examStatus === 1) {
+    
+    // 【第1道关卡：检查考试次数是否用完】
+    // (row.attempts !== -1) 意味着 "次数有限制"
+    // (row.attemptedTimes || 0) >= row.attempts 意味着 "已用次数 >= 总次数"
+    // (|| 0 是为了防止 attemptedTimes 为 null 或 undefined 时出错)
+    if (row.attempts !== -1 && (row.attemptedTimes || 0) >= row.attempts) {
+      ElMessage.warning('您的考试次数已用完，无法继续考试');
+      return; // 阻止跳转
+    }
+
+    // 【第2道关卡：检查上一份考卷是否正在处理中】
+    // (修复了括号BUG：所有 status 检查都必须在 row.examRecord 存在的前提下)
+    // 状态 1:待修改, 2:阅卷中, 3:修改异常
+    // (我们不再需要检查 status 4，因为次数限制已在上面处理)
+    if (row.examRecord && (row.examRecord.status === 1 || row.examRecord.status === 2 || row.examRecord.status === 3)) {
+      
+      let msg = '您的考卷正在处理中，请稍后';
+      if (row.examRecord.status === 2) {
+        msg = '您的考卷正在批阅中，请稍后';
+      } else if (row.examRecord.status === 1) {
+        msg = '您的考卷正等待修改，请稍后';
+      } else if (row.examRecord.status === 3) {
+        msg = '您的考卷修改异常，请联系管理员';
+      }
+      
+      ElMessage.warning(msg);
+      return; // 阻止跳转
+    }
+
+    // --- 允许跳转 ---
+    // 能运行到这里，说明：
+    // 1. 考试次数未用完 (或不限制)
+    // 2. 并且，没有“正在处理中”的考卷
+    //
+    // 允许跳转的场景:
+    // 1. !row.examRecord (首次尝试)
+    // 2. row.examRecord.status === 0 (未完成，可以继续)
+    // 3. row.examRecord.status === 4 (已评分，可以开始新尝试)
     router.push({ name: 'Student-ExamStart', params: { id: row.id } });
+    
   } 
-  // 已结束的考试，点击标题直接查看结果
+  // 场景2：已结束的考试(2)，点击标题直接查看结果
   else if (row.examStatus === 2) {
     router.push({ name: 'Student-ExamResult', params: { id: row.id } });
   }
@@ -186,6 +288,7 @@ const viewResult = (row) => {
 };
 
 onMounted(() => {
+  fetchCategories(); // 【新增】加载分类选项
   fetchExamList();
 });
 </script>

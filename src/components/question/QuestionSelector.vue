@@ -24,19 +24,49 @@
       >
   <el-table-column type="selection" width="55" :selectable="rowSelectable" />
   <el-table-column prop="id" label="序号" width="100" />
-  <el-table-column prop="title" label="题目" min-width="300" show-overflow-tooltip>
+  <el-table-column prop="title" label="题目" min-width="450">
             <template #default="scope">
                 <div class="question-title-cell">
-                    <el-tag size="small" style="margin-right: 8px;">{{ scope.row.questionType }}</el-tag>
-                    <el-tag v-if="scope.row.isExisting" type="info" size="small" style="margin-right: 8px;">已存在</el-tag>
-                    <span>{{ scope.row.title }}</span>
+                    <div class="question-header">
+                        <div class="question-tags">
+                            <el-tag 
+                                size="small" 
+                                :type="getQuestionTypeColor(scope.row.questionType)"
+                                class="question-type-tag"
+                            >
+                                {{ scope.row.questionType }}
+                            </el-tag>
+                            <el-tag 
+                                v-if="scope.row.isExisting" 
+                                type="info" 
+                                size="small" 
+                                class="existing-tag"
+                            >
+                                已存在
+                            </el-tag>
+                        </div>
+                        <span class="question-id">ID: {{ scope.row.id }}</span>
+                    </div>
+                    <div 
+                        class="question-content" 
+                        :class="{ 'existing-content': scope.row.isExisting }"
+                        :title="scope.row.title"
+                    >
+                        {{ scope.row.title }}
+                    </div>
                 </div>
             </template>
         </el-table-column>
-        <el-table-column prop="questionCategoryName" label="分类" width="120" />
-        <el-table-column prop="difficulty" label="难度" width="80">
+        <el-table-column prop="questionCategory" label="分类" width="120" />
+        <el-table-column prop="difficulty" label="难度" width="100" align="center">
           <template #default="scope">
-            {{ formatDifficulty(scope.row.difficulty) }}
+            <el-tag 
+              size="small" 
+              :type="getDifficultyColor(scope.row.difficulty)"
+              class="difficulty-tag"
+            >
+              {{ formatDifficulty(scope.row.difficulty) }}
+            </el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -118,6 +148,26 @@ const questionFilterFields = ref([
 
 const formatDifficulty = (val) => ({0: '高', 1: '中', 2: '低'}[val] || '未知');
 
+const getQuestionTypeColor = (type) => {
+  const colorMap = {
+    '单选': 'primary',
+    '多选': 'success', 
+    '填空': 'warning',
+    '判断': 'info',
+    '论述': 'danger'
+  };
+  return colorMap[type] || '';
+};
+
+const getDifficultyColor = (difficulty) => {
+  const colorMap = {
+    0: 'danger',  // 高难度 - 红色
+    1: 'warning', // 中难度 - 橙色
+    2: 'success'  // 低难度 - 绿色
+  };
+  return colorMap[difficulty] || 'info';
+};
+
 const rowClassName = ({ row }) => {
   return row.isExisting ? 'existing-question-row' : '';
 };
@@ -165,6 +215,17 @@ const fetchQuestions = async () => {
     const res = await getQuestionList(payload);
     if (res.code === 200) {
       questionList.value = res.data.records || [];
+      // 将 questionCategory 映射为可读标签
+      const getCategoryLabel = (categoryValue) => {
+        if (categoryValue === null || categoryValue === undefined || categoryValue === '') return '未分类';
+        const found = categoryOptions.value.find(opt => String(opt.value) === String(categoryValue));
+        return found ? found.label : String(categoryValue);
+      };
+      // 把映射后的字段写入行，保持原键名以便表格 prop 使用
+      questionList.value = questionList.value.map(item => ({
+        ...item,
+        questionCategory: getCategoryLabel(item.questionCategory)
+      }));
       pagination.total = res.data.total || 0;
       
       // 标记已存在的题目
@@ -277,10 +338,10 @@ const handleConfirm = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载分类字典，确保 fetchQuestions 可以正确映射
+  await fetchDictOptions('question_category', categoryOptions);
   fetchQuestions();
-  // 题型和难度使用静态选项，与 QuestionBank.vue 保持一致；只从字典接口加载分类
-  fetchDictOptions('question_category', categoryOptions);
 });
 </script>
 
@@ -291,9 +352,67 @@ onMounted(() => {
   align-items: center;
   margin-top: 20px;
 }
+
 .question-title-cell {
-    display: flex;
-    align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.question-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.question-type-tag {
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.existing-tag {
+  opacity: 0.8;
+  border-radius: 4px;
+}
+
+.question-id {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 400;
+}
+
+.difficulty-tag {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.question-content {
+  line-height: 1.5;
+  color: #303133;
+  font-size: 14px;
+  max-width: 100%;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s ease;
+}
+
+.question-content.existing-content {
+  color: #909399;
 }
 
 :deep(.existing-question-row) {
@@ -303,5 +422,18 @@ onMounted(() => {
 
 :deep(.existing-question-row:hover) {
   background-color: #f5f7fa !important;
+}
+
+:deep(.existing-question-row .question-content) {
+  color: #909399;
+}
+
+/* 增加表格行高以适应新的布局 */
+:deep(.el-table .el-table__row) {
+  height: auto;
+}
+
+:deep(.el-table .el-table__cell) {
+  padding: 12px 0;
 }
 </style>

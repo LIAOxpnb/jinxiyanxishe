@@ -18,6 +18,12 @@
       
       <el-form-item label="分类" prop="courseCategory">
         <el-select v-model="formModel.courseCategory" placeholder="请选择分类" style="width: 100%;">
+          <el-option 
+            v-for="item in categories" 
+            :key="item.value" 
+            :label="item.label" 
+            :value="item.value"
+          />
         </el-select>
       </el-form-item>
 
@@ -41,11 +47,16 @@
         </div>
       </el-form-item>
       
-      <!-- <el-form-item label="课程讲师" prop="instructorId">
+      <el-form-item label="课程讲师" prop="instructorId">
         <el-select v-model="formModel.instructorId" placeholder="请选择讲师" style="width: 100%;">
-          <el-option label="张教授" :value="1"></el-option>
+          <el-option 
+            v-for="item in instructors" 
+            :key="item.id" 
+            :label="item.name" 
+            :value="item.id"
+          />
         </el-select>
-      </el-form-item> -->
+      </el-form-item>
 
       <el-form-item label="课程介绍" prop="intro">
         <div style="border: 1px solid #ccc; z-index: 100">
@@ -86,6 +97,8 @@ import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import { updateCourse } from '../../../api/teaching-center/CourseManagement';
 import { uploadFiles } from '../../../api/common/UploadFiles';
 import { previewFile } from '../../../api/common/PreviewFile';
+import { getDictByType } from '../../../api/system-management/dictionary.js';
+import { getUserList } from '../../../api/system-management/User.js';
 
 const props = defineProps({
   visible: Boolean,
@@ -119,6 +132,8 @@ const loading = ref(false);
 const coverPreviewUrl = ref('');
 const originalCover = reactive({ path: '', previewUrl: '' });
 const uploadRef = ref(null);
+const categories = ref([]);
+const instructors = ref([]);
 
 const formModel = reactive({
   id: null,
@@ -154,7 +169,47 @@ const formRules = {
 watch(() => props.visible, async (newVal) => {
   if (newVal) {
     loading.value = true;
+    
+    // 加载分类数据
+    try {
+      const categoryRes = await getDictByType('course_category');
+      if (categoryRes.code === 200 && categoryRes.data) {
+        categories.value = categoryRes.data.map(d => ({ 
+          label: d.dictLabel, 
+          value: d.dictValue 
+        }));
+      }
+    } catch (error) {
+      console.error('获取分类数据失败:', error);
+    }
+    
+    // 加载讲师列表
+    try {
+      const instructorRes = await getUserList({
+        teacher: 1,
+        pagination: false
+      });
+      if (instructorRes.code === 200 && instructorRes.data) {
+        instructors.value = Array.isArray(instructorRes.data) 
+          ? instructorRes.data 
+          : instructorRes.data.list || [];
+      }
+    } catch (error) {
+      console.error('获取讲师列表失败:', error);
+    }
+    
     Object.assign(formModel, props.courseData);
+    
+    // 如果没有设置讲师ID，但有创建人姓名，则根据创建人姓名匹配讲师
+    if (!formModel.instructorId && props.courseData.creatorName) {
+      const matchedInstructor = instructors.value.find(
+        instructor => instructor.name === props.courseData.creatorName
+      );
+      if (matchedInstructor) {
+        formModel.instructorId = matchedInstructor.id;
+      }
+    }
+    
     coverPreviewUrl.value = '';
     
     originalCover.path = props.courseData.cover || '';

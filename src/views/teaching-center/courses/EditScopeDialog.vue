@@ -175,7 +175,7 @@
 import { reactive, watch, ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { updateCourse } from '../../../api/teaching-center/CourseManagement';
-import { getOrgTree } from '@/api/system-management/Org.js';
+import { getAllOrgTree } from '@/api/system-management/Org.js';
 import { getUserList } from '@/api/system-management/User.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
@@ -262,7 +262,7 @@ const openClassSelectionDialog = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const res = await getOrgTree({ personnel: true });
+    const res = await getAllOrgTree({ personnel: true });
     if (res.code === 200) {
       orgTreeData.value = transformOrgTreeData(res.data);
     }
@@ -313,7 +313,12 @@ const confirmSelectedUsers = () => {
 
 const fetchClassList = async () => {
   try {
-    const res = await getClassList({ page: classCurrentPage.value, size: classPageSize.value, name: classSearchKeyword.value });
+    const res = await getClassList({ 
+      page: classCurrentPage.value, 
+      size: classPageSize.value, 
+      name: classSearchKeyword.value,
+      clazzId: '' // 添加clazzId字段
+    });
     if (res.code === 200) {
       classListData.value = res.data.records.map(c => ({ ...c, checked: selectedScopeClasses.value.some(s => s.id === c.id) }));
       classTotal.value = res.data.total;

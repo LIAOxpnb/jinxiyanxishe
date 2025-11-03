@@ -1,13 +1,15 @@
+// UploadFiles.js (已修复)
 import request from '@/utils/request'; // 确保您的请求封装文件路径正确
 
 /**
  * @description 批量上传文件
  * @param {FileList | File[]} files - 文件列表或文件数组
  * @param {Function} onProgress - 一个用于报告上传进度的回调函数
+ * @param {AbortSignal} signal - 【已添加】用于中止请求的信号
  */
-export function uploadFiles(files, onProgress) {
+export function uploadFiles(files, onProgress, signal) { // 【已修改】
   const formData = new FormData();
-  // 您的 for 循环是正确的，我们保持它
+  
   for (let i = 0; i < files.length; i++) {
     // 后端接收的字段名是 'files'
     formData.append('files', files[i]);
@@ -20,11 +22,14 @@ export function uploadFiles(files, onProgress) {
     '/minio/file/uploadFiles', // 1. URL
     formData, // 2. Data
     { // 3. Config
-      timeout: 0, 
+      timeout: 0, // 0表示无超时限制，适合大文件上传
+      maxContentLength: Infinity, // 取消内容长度限制
+      maxBodyLength: Infinity, // 取消请求体长度限制
       headers: {
         'Content-Type': 'multipart/form-data'
       },
-      onUploadProgress: onProgress 
+      onUploadProgress: onProgress,
+      signal: signal // 【已添加】将中止信号传递给 axios
     }
   );
 }

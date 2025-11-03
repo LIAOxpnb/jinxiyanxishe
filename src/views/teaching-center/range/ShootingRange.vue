@@ -24,7 +24,7 @@
             {{ scope.row.shootingRangeType === 0 ? '训练' : '比武' }}
           </template>
         </el-table-column>
-        <el-table-column label="比赛时间" width="210">
+        <el-table-column label="比武时间" width="210">
           <template #default="scope">
             <div v-if="scope.row.participateDate === 0">不限制</div>
             <div v-else>
@@ -33,7 +33,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="比赛时长" width="100">
+        <el-table-column prop="duration" label="比武时长" width="100">
           <template #default="scope">
             {{ scope.row.duration === -1 ? '不限制' : `${scope.row.duration}分钟` }}
           </template>
@@ -73,10 +73,17 @@
         </el-table-column>
       </el-table>
 
+      <div v-if="selectedRanges.length > 0" style="margin: 10px 0;">
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedRanges.length }})
+        </el-button>
+      </div>
+
       <div class="table-footer">
-        <div>
-          <el-button @click="handleBatchDelete" :disabled="selectedRanges.length === 0">批量删除</el-button>
-        </div>
+        <div></div>
         <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.size"
           :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" :total="pagination.total"
           @size-change="handleSizeChange" @current-change="handleCurrentChange" background />
@@ -292,21 +299,36 @@ const handleSelectionChange = (selection) => {
 
 const handleBatchDelete = () => {
   if (selectedRanges.value.length === 0) {
-    ElMessage.warning('请至少选择一项进行删除');
+    ElMessage.warning('请先选择要删除的靶场');
     return;
   }
-  ElMessageBox.confirm(`确定要删除选中的 ${selectedRanges.value.length} 项靶场吗？`, '批量删除确认', {
-    type: 'warning'
-  }).then(async () => {
-    const ids = selectedRanges.value.map(item => item.id);
+
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedRanges.value.length} 项靶场吗？此操作不可恢复！`, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
     try {
-      await deleteShootingRange(ids);
-      ElMessage.success('批量删除成功！');
+      // 收集所有要删除的靶场ID
+      const deletePromises = selectedRanges.value.map(range => deleteShootingRange([range.id]));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${selectedRanges.value.length} 项靶场！`);
+      selectedRanges.value = [];
       fetchShootingRanges();
     } catch (error) {
-      ElMessage.error('批量删除失败');
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
     }
-  }).catch(() => { });
+  }).catch(() => {
+    // 用户取消操作
+  });
 };
 
 const handleMoreActions = async (command, row) => {

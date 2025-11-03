@@ -170,6 +170,60 @@ export function submitGradePaper(data) {
 }
 
 /**
+ * @description 抽题
+ * @param {object} data - 抽题参数
+ * @param {number} data.examId - 考试ID (必填)
+ * @param {Array<object>} data.questionList - 题目列表 (必填)
+ * @param {number} data.questionList[].groupId - 题目分组ID (必填)
+ * @param {string} data.questionList[].questionCategory - 题目分类 (必填)
+ * @param {string} data.questionList[].questionType - 题目类型 (必填)
+ * @param {number} data.questionList[].creator - 创建者ID (必填)
+ * @param {number} data.questionList[].difficulty0 - 难度等级0的题目数量 (必填)
+ * @param {number} data.questionList[].difficulty1 - 难度等级1的题目数量 (必填)
+ * @param {number} data.questionList[].difficulty2 - 难度等级2的题目数量 (必填)
+ * @param {string} data.questionList[].score - 分数 (必填)
+ */
+export function drawQuestions(data) {
+  return request({
+    url: '/teacher/question/drawQuestions',
+    method: 'post',
+    data: data
+  });
+}
+
+/**
+ * @description 获取题目数量
+ * @param {object} data - 查询参数
+ * @param {number} data.groupId - 题目分组ID (必填)
+ * @param {string} data.id - ID (必填)
+ * @param {string} data.questionCategory - 题目分类 (必填)
+ * @param {string} data.title - 题目标题 (必填)
+ * @param {string} data.questionType - 题目类型 (必填)
+ * @param {number} data.creator - 创建者ID (必填)
+ */
+export function getQuestionCount(data) {
+  return request({
+    url: '/teacher/question/getQuestionCount',
+    method: 'post',
+    data: data
+  });
+}
+
+/**
+ * @description 复制考试
+ * @param {object} params - 复制参数
+ * @param {string} params.id - 考试ID (必填)
+ * @param {string} params.name - 新考试名称 (必填)
+ */
+export function copyExam(params) {
+  return request({
+    url: '/teacher/exam/copy',
+    method: 'get',
+    params: params
+  });
+}
+
+/**
  * @description 获取用户(教师)列表
  * @param {object} params - 查询参数
  */

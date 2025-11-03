@@ -18,7 +18,7 @@
           maxlength="50"
           show-word-limit
         />
-        <div class="form-item-remark">【备注】课程名称重复性校验</div>
+       
       </el-form-item>
       
       <el-form-item label="分类" prop="courseCategory">
@@ -43,7 +43,7 @@
   </el-upload>
   <div class="form-item-hint">建议上传300px*200px (3:2) 的图片，未上传则展示默认图</div>
 </el-form-item>
-      <!-- <el-form-item label="课程讲师" prop="instructorId">
+      <el-form-item label="课程讲师" prop="instructorId">
         <el-select
           v-model="formModel.instructorId"
           placeholder="请搜索或选择讲师"
@@ -57,8 +57,8 @@
             :value="item.value"
           />
         </el-select>
-        <div class="form-item-remark">【备注】默认选择创建人, 可修改, 单选, 支持搜索</div>
-      </el-form-item> -->
+        <!-- <div class="form-item-remark">【备注】默认选择创建人, 可修改, 单选, 支持搜索</div> -->
+      </el-form-item>
       
       <el-form-item label="课程摘要" prop="summary">
         <el-input
@@ -95,6 +95,8 @@ import { Plus } from '@element-plus/icons-vue';
 
 import { createCourse } from '../../../api/teaching-center/CourseManagement.js';
 import { getDictByType } from '@/api/system-management/dictionary.js';
+import { getUserList } from '@/api/system-management/User.js';
+import { getInfo } from '@/api/common/info.js';
 import { uploadFiles } from '../../../api/common/UploadFiles.js';
 import { previewFile } from '../../../api/common/PreviewFile.js';
 
@@ -151,14 +153,53 @@ const fetchCategories = async () => {
     }
 };
 
-// const fetchLecturers = async () => {
-//     // 模拟数据
-//     lecturerOptions.value = [
-//         { label: '张教授', value: 1 },
-//         { label: '李老师', value: 2 },
-//         { label: '王助教', value: 3 },
-//     ];
-// };
+// 获取讲师列表
+const fetchLecturers = async () => {
+  try {
+    const res = await getUserList({
+      teacher: 1,
+      pagination: false
+    });
+    
+    if (res.code === 200 && res.data) {
+      const instructorList = Array.isArray(res.data) ? res.data : res.data.list || [];
+      lecturerOptions.value = instructorList.map(item => ({
+        label: item.name,
+        value: item.id
+      }));
+      console.log('讲师列表:', lecturerOptions.value);
+      
+      // 获取讲师列表后，设置默认选中当前登录用户
+      await setDefaultInstructor();
+    }
+  } catch (error) {
+    console.error('获取讲师列表失败:', error);
+    ElMessage.error('获取讲师列表失败');
+  }
+};
+
+// 设置默认讲师为当前登录用户
+const setDefaultInstructor = async () => {
+  try {
+    const res = await getInfo();
+    if (res.code === 200 && res.data) {
+      const currentUserName = res.data.name;
+      console.log('当前用户:', currentUserName);
+      
+      // 在讲师列表中查找当前用户
+      const currentInstructor = lecturerOptions.value.find(
+        item => item.label === currentUserName
+      );
+      
+      if (currentInstructor) {
+        formModel.instructorId = currentInstructor.value;
+        console.log('默认选中讲师:', currentInstructor);
+      }
+    }
+  } catch (error) {
+    console.error('获取当前用户信息失败:', error);
+  }
+};
 
 watch(() => props.visible, (newVal) => {
   if (newVal) {
@@ -166,8 +207,7 @@ watch(() => props.visible, (newVal) => {
     coverPreviewUrl.value = ''; 
     formRef.value?.clearValidate();
     fetchCategories();
-    // fetchLecturers();
-    formModel.instructorId = 1; // 假设当前登录用户ID是1
+    fetchLecturers();
   }
 });
 
@@ -234,8 +274,10 @@ const submitForm = async () => {
         cover: formModel.cover,
         summary: formModel.summary,
         intro: formModel.intro,
-        // instructorId: formModel.instructorId, // 如果后端需要，取消此行注释
+        instructor: formModel.instructorId, // 课程讲师字段
       };
+      
+      console.log('创建课程提交数据:', payload);
       
       const res = await createCourse(payload);
       if (res.code === 200) {

@@ -10,7 +10,11 @@
         </el-menu-item> -->
         <el-menu-item v-for="group in groupList" :key="group.id" :index="group.id.toString()">
           <span class="group-name">{{ group.name }}</span>
-          <el-dropdown @command="(command) => handleGroupDropdownCommand(command, group)" @click.stop>
+          <el-dropdown 
+            v-if="group.name !== '全部' && group.name !== '未分组'" 
+            @command="(command) => handleGroupDropdownCommand(command, group)" 
+            @click.stop
+          >
             <el-button link size="small" class="group-more-btn" @click.stop>
               <el-icon>
                 <More />
@@ -38,8 +42,9 @@
   @create="handleCreateCourseware"
   @filter="handleFilterCoursewares"
 />
-      <el-table v-loading="tableLoading" :data="tableData" style="width: 100%"
-        :header-cell-style="{ background: '#f5f7fa', color: '#606266' }">
+        <el-table v-loading="tableLoading" :data="tableData" style="width: 100%"
+        :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="课件名称" min-width="200">
           <template #default="scope">
@@ -52,7 +57,7 @@
         <el-table-column prop="duration" label="时长" width="100" />
         <el-table-column prop="category" label="分类" width="120" />
         <el-table-column prop="group" label="课件组" width="120" />
-        <el-table-column prop="creator" label="创建人" width="120" />
+        <el-table-column prop="creatorName" label="创建人" width="120" />
         <el-table-column prop="createTime" label="创建时间" width="180" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
@@ -72,8 +77,18 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div v-if="selectedCoursewares.length > 0" style="margin: 10px 0;">
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedCoursewares.length }})
+        </el-button>
+      </div>
+
       <div class="table-footer">
-        <!-- <el-button>批量操作</el-button> -->
+        <div></div>
         <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.size"
           :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next, jumper" :total="total" background
           @size-change="fetchCoursewares" @current-change="fetchCoursewares" />
@@ -108,6 +123,7 @@
       v-model:visible="uploadDialogVisible"
       :groups="groupList"
       :categories="categoryOptions"
+      :current-group-id="activeGroupId"
       @success="handleUploadSuccess"
       @create-group="handleAddGroup"
     />
@@ -144,12 +160,13 @@ const filters = ref({});
 const categoryOptions = ref([]);
 const fileTypeOptions = ref([]); // 文件类型选项
 const uploadDialogVisible = ref(false);
+const selectedCoursewares = ref([]); // 选中的课件列表
 
 
 // --- 筛选栏配置 ---
 const coursewareFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '课件名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'file_type', placeholder: '文件类型', options: fileTypeOptions },
   { type: 'select', model: 'coursewareCategory', placeholder: '分类', options: categoryOptions },
 ]);
@@ -327,6 +344,44 @@ const handleDeleteCourseware = (row) => {
       ElMessage.success('删除成功！');
       fetchCoursewares();
     }).catch(() => { });
+};
+
+const handleSelectionChange = (selection) => {
+  selectedCoursewares.value = selection;
+};
+
+const handleBatchDelete = () => {
+  if (selectedCoursewares.value.length === 0) {
+    ElMessage.warning('请先选择要删除的课件');
+    return;
+  }
+
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedCoursewares.value.length} 项课件吗？此操作不可恢复！`, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
+    try {
+      // 收集所有要删除的课件ID
+      const deletePromises = selectedCoursewares.value.map(courseware => deleteCourseware([courseware.id]));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${selectedCoursewares.value.length} 项课件！`);
+      selectedCoursewares.value = [];
+      fetchCoursewares();
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
 };
 
 const handleDropdownCommand = (command, row) => {

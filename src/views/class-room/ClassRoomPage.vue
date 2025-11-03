@@ -16,7 +16,13 @@
       <div class="content-card">
         <div class="filter-container">
           <div class="filter-row">
-            <span class="filter-label">所有课程</span>
+            <span 
+              class="filter-tag all-courses-btn"
+              :class="{ active: filters.categoryId === null }"
+              @click="selectAllCourses"
+            >
+              所有课程
+            </span>
             <span 
               v-for="category in categories" 
               :key="category.id" 
@@ -42,9 +48,9 @@
               @click="selectTab('mustLearn')"
             >必学</span>
           </div>
-          <div class="remark">
+          <!-- <div class="remark">
             【备注】列表只显示已上架的课程，时间过期的课程会自动下架不显示
-          </div>
+          </div> -->
         </div>
 
         <div v-if="loading" class="loading-state">
@@ -180,6 +186,13 @@ const fetchCourseList = async () => {
 
 // --- 事件处理 ---
 
+// 选择所有课程
+const selectAllCourses = () => {
+  filters.categoryId = null;
+  pagination.page = 1;
+  fetchCourseList();
+};
+
 // 【已修改】简化分类选择逻辑
 const selectCategory = (categoryId) => {
   filters.categoryId = filters.categoryId === categoryId ? null : categoryId;
@@ -277,6 +290,21 @@ onMounted(() => {
   background-color: #409eff;
   font-weight: 500;
 }
+
+.all-courses-btn {
+  font-weight: 600;
+  border: 1px solid #dcdfe6;
+  background-color: #f5f7fa;
+}
+
+.all-courses-btn:hover {
+  border-color: #409eff;
+}
+
+.all-courses-btn.active {
+  border-color: #409eff;
+  background-color: #409eff;
+}
 .tab-bar {
   display: flex;
   justify-content: space-between;
@@ -338,6 +366,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 .course-meta {

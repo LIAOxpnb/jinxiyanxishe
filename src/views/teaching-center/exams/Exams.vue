@@ -78,10 +78,17 @@
         </el-table-column>
       </el-table>
 
+      <div v-if="selectedExams.length > 0" style="margin: 10px 0;">
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedExams.length }})
+        </el-button>
+      </div>
+
       <div class="table-footer">
-        <div>
-          <el-button @click="handleBatchDelete" :disabled="selectedExams.length === 0">批量删除</el-button>
-        </div>
+        <div></div>
         
         <el-pagination
           v-model:current-page="pagination.page"
@@ -137,6 +144,44 @@
       </template>
     </el-dialog>
 
+    <!-- 复制考试对话框 -->
+    <el-dialog
+      v-model="copyDialogVisible"
+      title="复制考试"
+      width="500px"
+      @close="resetCopyForm"
+    >
+      <el-form
+        ref="copyFormRef"
+        :model="copyForm"
+        :rules="copyFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="原考试名" prop="originalName">
+          <el-input 
+            v-model="copyForm.originalName" 
+            placeholder="原考试名称"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="新考试名" prop="name">
+          <el-input 
+            v-model="copyForm.name" 
+            placeholder="请输入新考试名称"
+            maxlength="30"
+            show-word-limit 
+          />
+          <div class="form-item-hint">【备注】考试名称重复性校验</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="copyDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCopyExam">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -146,7 +191,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, More } from '@element-plus/icons-vue';
 import FilterBar from '@/components/common/FilterBar.vue';
-import { getExamList, addExam, deleteExam,updateExamStatus } from '../../../api/teaching-center/Exams.js';
+import { getExamList, addExam, deleteExam, updateExamStatus, copyExam } from '../../../api/teaching-center/Exams.js';
 import { getDictData } from '@/api/system-management/dictionary';
 
 const router = useRouter();
@@ -215,10 +260,31 @@ const createFormRules = reactive({
   examCategory: [{ required: true, message: '请选择考试分类', trigger: 'change' }],
 });
 
+// --- 复制考试对话框相关 ---
+const copyDialogVisible = ref(false);
+const copyFormRef = ref(null);
+const copyForm = reactive({
+  id: '',
+  originalName: '',
+  name: '',
+});
+const copyFormRules = reactive({
+  name: [{ required: true, message: '请输入新考试名称', trigger: 'blur' }],
+});
+
 const resetCreateForm = () => {
   if (createFormRef.value) {
     createFormRef.value.resetFields();
   }
+};
+
+const resetCopyForm = () => {
+  if (copyFormRef.value) {
+    copyFormRef.value.resetFields();
+  }
+  copyForm.id = '';
+  copyForm.originalName = '';
+  copyForm.name = '';
 };
 
 const fetchExams = async () => {
@@ -231,7 +297,15 @@ const fetchExams = async () => {
     };
     const res = await getExamList(payload);
     if (res.code === 200) {
-      tableData.value = res.data.records || [];
+      // 将分类值转换为分类名称
+      const records = res.data.records || [];
+      tableData.value = records.map(item => {
+        const category = categoryOptions.value.find(c => c.value === item.examCategory);
+        return {
+          ...item,
+          examCategoryName: category ? category.label : item.examCategory
+        };
+      });
       pagination.total = res.data.total || 0;
     } else {
       ElMessage.error(res.msg || '获取列表失败');
@@ -298,6 +372,29 @@ const submitCreateExam = async () => {
   });
 };
 
+const submitCopyExam = async () => {
+  if (!copyFormRef.value) return;
+  await copyFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        const res = await copyExam({
+          id: copyForm.id,
+          name: copyForm.name
+        });
+        if (res.code === 200) {
+          ElMessage.success('复制成功！');
+          copyDialogVisible.value = false;
+          fetchExams();
+        } else {
+          ElMessage.error(res.msg || '复制失败');
+        }
+      } catch (error) {
+        ElMessage.error('复制失败');
+      }
+    }
+  });
+};
+
 const handleEdit = (row) => {
   router.push({
     name: 'TeachingCenter-ExamSettings',
@@ -341,24 +438,44 @@ const handleSelectionChange = (selection) => {
 };
 
 const handleBatchDelete = () => {
-    if (selectedExams.value.length === 0) {
-        ElMessage.warning('请至少选择一项进行删除');
-        return;
+  if (selectedExams.value.length === 0) {
+    ElMessage.warning('请先选择要删除的考试');
+    return;
+  }
+
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedExams.value.length} 项考试吗？此操作不可恢复！`, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
     }
-    ElMessageBox.confirm(`确定要删除选中的 ${selectedExams.value.length} 项考试吗？`, '批量删除确认', {
-        type: 'warning'
-    }).then(async () => {
-        const ids = selectedExams.value.map(item => item.id);
-        try {
-            for (const id of ids) {
-                await deleteExam(id);
-            }
-            ElMessage.success('批量删除成功！');
-            fetchExams();
-        } catch (error) {
-            ElMessage.error('批量删除失败');
-        }
-    }).catch(() => {});
+  ).then(async () => {
+    try {
+      // 收集所有要删除的考试ID
+      const deletePromises = selectedExams.value.map(exam => deleteExam(exam.id));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${selectedExams.value.length} 项考试！`);
+      selectedExams.value = [];
+      fetchExams();
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
+};
+
+const handleCopy = (row) => {
+  copyForm.id = row.id;
+  copyForm.originalName = row.name;
+  copyForm.name = `${row.name}_副本`;
+  copyDialogVisible.value = true;
 };
 
 const handleMoreActions = async (command, row) => {
@@ -374,7 +491,7 @@ const handleMoreActions = async (command, row) => {
       ElMessage.info(`引用班级功能: ${row.id}`);
       break;
     case 'copy':
-      ElMessage.info(`复制考试功能: ${row.id}`);
+      handleCopy(row);
       break;
     case 'delete':
       handleDelete(row);

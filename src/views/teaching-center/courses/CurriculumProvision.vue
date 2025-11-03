@@ -170,15 +170,15 @@
           </div>
           <div class="info-item">
             <span class="info-label">分类</span>
-            <span class="info-value">{{ courseDetail.courseCategory }}</span>
+            <span class="info-value">{{ categoryMap[courseDetail.courseCategory] || courseDetail.courseCategory }}</span>
           </div>
-          <div class="info-item">
+          <!-- <div class="info-item">
             <span class="info-label">讲师</span>
-            <span class="info-value">{{ courseDetail.instructorName || 'N/A' }}</span>
-          </div>
+            <span class="info-value">{{ courseDetail.creatorName || 'N/A' }}</span>
+          </div> -->
           <div class="info-item">
             <span class="info-label">创建人</span>
-            <span class="info-value">{{ courseDetail.creator }}</span>
+            <span class="info-value">{{ courseDetail.creatorName }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">创建时间</span>
@@ -212,7 +212,8 @@
     </div>
 
     <AddCoursewareDialog v-model:visible="addCoursewareDialogVisible" :course-category="courseDetail.courseCategory"
-      @success="handleAddCoursewareSuccess" />
+  :course-id="courseId"
+  @success="handleAddCoursewareSuccess" />
 
     <EditCourseInfoDialog
       v-model:visible="editInfoDialogVisible"
@@ -248,6 +249,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Top, Bottom, Delete, Edit, Plus, CaretTop, CaretBottom, ArrowDown, ArrowLeft } from '@element-plus/icons-vue';
 import { getCourseDetail, updateCourseStatus, getSectionMaterials, saveOrUpdateChaptersAndSections } from '../../../api/teaching-center/CourseManagement';
 import { previewFile } from '../../../api/common/PreviewFile';
+import { getDictByType } from '../../../api/system-management/dictionary.js';
 import AddCoursewareDialog from './AddCoursewareDialog.vue';
 import EditCourseInfoDialog from './EditCourseInfoDialog.vue';
 import EditScopeDialog from './EditScopeDialog.vue';
@@ -493,6 +495,7 @@ const inputRefs = ref({});
 const setInputRef = (el, type, id) => { if (el) { inputRefs.value[`${type}-${id}`] = el; } };
 const courseDetail = reactive({ id: null, name: '', cover: '', coverPreviewUrl: '', courseCategory: '', creator: '', createTime: '', scope: 0, status: 0, instructorName: '', intro: '', summary: '', chapters: [] });
 const scopeMap = { 0: '公开课', 1: '指定人员', 2: '指定班级', 3: '指定组织' };
+const categoryMap = ref({});
 const addCoursewareDialogVisible = ref(false);
 const currentChapterIndex = ref(null);
 const editInfoDialogVisible = ref(false);
@@ -506,6 +509,19 @@ const fetchCourseData = async () => {
     delete basicInfo.courseChapterList;
     Object.assign(courseDetail, basicInfo);
     if (courseDetail.cover) { courseDetail.coverPreviewUrl = await previewFile(courseDetail.cover); }
+    
+    // 获取分类字典映射
+    try {
+      const categoryRes = await getDictByType('course_category');
+      if (categoryRes.code === 200 && categoryRes.data) {
+        categoryMap.value = {};
+        categoryRes.data.forEach(item => {
+          categoryMap.value[item.dictValue] = item.dictLabel;
+        });
+      }
+    } catch (error) {
+      console.error('获取分类字典失败:', error);
+    }
     if (res.data.courseChapterList && res.data.courseChapterList.length > 0) {
       courseDetail.chapters = res.data.courseChapterList.map(chapter => {
         selectionState[chapter.id] = { selectedSectionIds: new Set(), isAllSelected: false, isIndeterminate: false };

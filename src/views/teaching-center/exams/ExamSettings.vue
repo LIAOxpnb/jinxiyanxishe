@@ -22,7 +22,9 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item command="manual_select">手动选题</el-dropdown-item>
-                        <el-dropdown-item command="manual_add">新增试题</el-dropdown-item>
+                        <!-- <el-dropdown-item command="manual_add">新增试题</el-dropdown-item> -->
+                        <el-dropdown-item command="draw_questions">抽取试题</el-dropdown-item>
+                        <el-dropdown-item command="import_questions">导入试题</el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -65,7 +67,7 @@
             <el-descriptions :column="1" border>
               <el-descriptions-item label="考试名称">{{ examDetails.name }}</el-descriptions-item>
               <el-descriptions-item label="分类">{{ examDetails.examCategory }}</el-descriptions-item>
-              <el-descriptions-item label="创建人">{{ examDetails.creator }}</el-descriptions-item>
+              <el-descriptions-item label="创建人">{{ examDetails.creatorName }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ examDetails.createTime }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -249,7 +251,7 @@
         <el-divider />
         <el-form-item label="总共">
           <span class="dialog-stat-text">共{{ totalQuestions }}题</span>
-          <span style="margin-left: 20px;">总分 <span class="stat-value">{{ totalScore }}</span> 分</span>
+          <span style="margin-left: 20px;">总分 <span class="stat-value">{{ batchTotalScore }}</span> 分</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -456,6 +458,95 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- ==================== 【改动8】模板部分 ==================== -->
+    <!-- ✅ 修改：抽取试题弹窗模板 -->
+    <el-dialog v-model="drawQuestionsDialogVisible" title="抽取试题" width="800px" :close-on-click-modal="false">
+      <div class="draw-questions-dialog">
+        <!-- ✅ 新增：循环渲染每个规则 -->
+        <div v-for="(rule, ruleIndex) in drawQuestionsRules" :key="rule.id" class="draw-rule-section">
+          <!-- ✅ 新增：规则标题和删除按钮 -->
+          <div class="rule-header">
+            <span class="rule-title">规则 {{ ruleIndex + 1 }}</span>
+            <el-button 
+              v-if="drawQuestionsRules.length > 1" 
+              type="danger" 
+              link 
+              @click="removeRule(ruleIndex)"
+            >
+              删除此规则
+            </el-button>
+          </div>
+
+          <!-- ✅ 修改：传入ruleIndex和rule.filterData -->
+          <FilterBar 
+            :fields="getDrawQuestionsFilterFields(ruleIndex)"
+            :show-create-button="false"
+            :model-value="rule.filterData"
+            @filter="(data) => handleDrawQuestionsFilter(data, ruleIndex)"
+            @reset="() => handleDrawQuestionsReset(ruleIndex)"
+          />
+
+          <!-- ✅ 修改：使用rule的数据 -->
+          <div class="question-stats">
+            <span>筛选出 {{ rule.availableCount }} 道试题</span>
+            <span class="note">【备注】根据条件查询符合条件的试题数量，筛选后重新填写与分</span>
+          </div>
+
+          <div class="difficulty-section">
+            <div class="difficulty-row">
+              <span class="difficulty-label">难度高 ({{ rule.highCount }}道) ，抽取</span>
+              <el-input-number v-model="rule.difficulty0" :min="0" :max="rule.highCount" controls-position="right" style="width: 80px;" />
+              <span class="difficulty-label">道</span>
+            </div>
+            
+            <div class="difficulty-row">
+              <span class="difficulty-label">难度中 ({{ rule.mediumCount }}道) ，抽取</span>
+              <el-input-number v-model="rule.difficulty1" :min="0" :max="rule.mediumCount" controls-position="right" style="width: 80px;" />
+              <span class="difficulty-label">道</span>
+            </div>
+            
+            <div class="difficulty-row">
+              <span class="difficulty-label">难度低 ({{ rule.lowCount }}道) ，抽取</span>
+              <el-input-number v-model="rule.difficulty2" :min="0" :max="rule.lowCount" controls-position="right" style="width: 80px;" />
+              <span class="difficulty-label">道</span>
+            </div>
+
+            <div class="total-section">
+              <span class="total-label">每题</span>
+              <el-input-number v-model="rule.score" :min="0" controls-position="right" style="width: 80px;" />
+              <span class="total-label">分，共 {{ rule.difficulty0 + rule.difficulty1 + rule.difficulty2 }} 题 {{ (rule.difficulty0 + rule.difficulty1 + rule.difficulty2) * rule.score }} 分</span>
+            </div>
+          </div>
+
+          <!-- ✅ 新增：规则分隔线 -->
+          <el-divider v-if="ruleIndex < drawQuestionsRules.length - 1" />
+        </div>
+
+        <!-- ✅ 新增：总计信息 -->
+        <div class="total-summary">
+          <span class="summary-label">总计：</span>
+          <span class="summary-value">{{ totalDrawQuestions }} 题</span>
+          <span class="summary-value">{{ totalDrawScore }} 分</span>
+        </div>
+
+        <!-- 添加规则按钮（位置不变） -->
+        <div class="add-rule-section">
+          <el-button type="primary" link @click="addNewRule">+ 增加规则</el-button>
+        </div>
+
+        <div class="error-message" v-if="errorMessage">
+          <span class="error-text">【备注】0题或0分时，不能提交；</span>
+        </div>
+      </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="drawQuestionsDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmDrawQuestions" :disabled="!canSubmit">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -463,16 +554,17 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus } from '../../../api/teaching-center/Exams.js';
+import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus, drawQuestions, getQuestionCount } from '../../../api/teaching-center/Exams.js';
 import { getQuestionGroupList } from '@/api/teaching-center/QuestionBank.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
-import { getOrgTree } from '@/api/system-management/Org.js';
+import { getAllOrgTree } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { Edit, ArrowDown, Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
 import ExamQuestionCard from '@/components/exam/ExamQuestionCard.vue';
 import QuestionSelector from '@/components/question/QuestionSelector.vue';
 import QuestionEditDialog from '@/components/question/QuestionEditDialog.vue';
+import FilterBar from '@/components/common/FilterBar.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -482,6 +574,7 @@ const examId = ref(null);
 const examDetails = ref(null);
 const questionList = ref([]);
 const categoryOptions = ref([]);
+const questionCategoryOptions = ref([]);
 
 const basicInfoDialogVisible = ref(false);
 const examSettingsDialogVisible = ref(false);
@@ -519,6 +612,79 @@ const selectedScopeClasses = ref([]);
 const classCurrentPage = ref(1);
 const classPageSize = ref(10);
 const classTotal = ref(0);
+
+// ==================== 【改动1】数据结构改变 ====================
+// 原来的单个表单改为规则数组
+const drawQuestionsDialogVisible = ref(false);
+// ❌ 删除旧的单个规则数据
+// const drawQuestionsForm = ref({...});
+// const drawQuestionsFilterData = ref({...});
+// const availableQuestionCount = ref(0);
+// const highDifficultyCount = ref(0);
+// const mediumDifficultyCount = ref(0);
+// const lowDifficultyCount = ref(0);
+
+// ✅ 新增：改为规则数组
+const drawQuestionsRules = ref([{
+  id: Date.now(),
+  filterData: {
+    questionType: '',
+    questionCategory: '',
+    groupId: '',
+    creator: ''
+  },
+  difficulty0: 0,
+  difficulty1: 0,
+  difficulty2: 0,
+  score: 5,
+  availableCount: 0,    // 新增：每个规则独立统计
+  highCount: 0,          // 新增
+  mediumCount: 0,        // 新增
+  lowCount: 0            // 新增
+}]);
+const creatorOptions = ref([]);
+const errorMessage = ref('');
+
+// 题型选项
+const questionTypeOptions = ref([
+  { label: '单选', value: '单选' },
+  { label: '多选', value: '多选' },
+  { label: '判断', value: '判断' },
+  { label: '论述', value: '论述' },
+  // { label: '情景分析', value: '情景分析' }
+]);
+
+// ==================== 【改动2】FilterBar配置改为函数 ====================
+// ❌ 删除旧的computed
+// const drawQuestionsFilterFields = computed(() => [...]);
+
+// ✅ 新增：改为函数形式，支持多个规则
+const getDrawQuestionsFilterFields = (ruleIndex) => [
+  {
+    model: 'questionType',
+    type: 'select',
+    placeholder: '题型',
+    options: questionTypeOptions.value
+  },
+  {
+    model: 'questionCategory',
+    type: 'select',
+    placeholder: '分类',
+    options: questionCategoryOptions.value
+  },
+  {
+    model: 'groupId',
+    type: 'select',
+    placeholder: '试题组',
+    options: groupList.value.map(item => ({ label: item.name, value: item.id }))
+  },
+  {
+    model: 'creator',
+    type: 'select',
+    placeholder: '创建人',
+    options: creatorOptions.value.map(item => ({ label: item.name, value: item.id }))
+  }
+];
 
 watch(() => editForm.value?.duration, (newVal) => {
   isDurationLimited.value = newVal !== -1;
@@ -562,6 +728,15 @@ const totalScore = computed(() => {
   return questionList.value.reduce((sum, item) => sum + (item.score || 0), 0);
 });
 
+// 批量设置分数时的预览总分
+const batchTotalScore = computed(() => {
+  return questionTypesForBatchScore.value.reduce((sum, typeItem) => {
+    const count = questionCountsByType.value[typeItem.type] || 0;
+    const score = batchScoreForm.value[typeItem.type] || 0;
+    return sum + (count * score);
+  }, 0);
+});
+
 const questionTypesForBatchScore = ref([
   { type: 'SINGLE_CHOICE', name: '单选' },
   { type: 'MULTIPLE_CHOICE', name: '多选' },
@@ -580,6 +755,35 @@ const scopePlaceholder = computed(() => {
   return editForm.value.scope === 1 ? '请输入用户姓名、手机号等搜索' : '请选择指定班级';
 });
 
+// ==================== 【改动3】计算属性改为汇总所有规则 ====================
+// ❌ 删除旧的计算逻辑
+// const totalDrawQuestions = computed(() => {
+//   return drawQuestionsForm.value.difficulty0 + 
+//          drawQuestionsForm.value.difficulty1 + 
+//          drawQuestionsForm.value.difficulty2;
+// });
+
+// ✅ 新增：汇总所有规则的题目数和分数
+const totalDrawQuestions = computed(() => {
+  return drawQuestionsRules.value.reduce((sum, rule) => {
+    return sum + rule.difficulty0 + rule.difficulty1 + rule.difficulty2;
+  }, 0);
+});
+
+const totalDrawScore = computed(() => {
+  return drawQuestionsRules.value.reduce((sum, rule) => {
+    const ruleTotal = rule.difficulty0 + rule.difficulty1 + rule.difficulty2;
+    return sum + (ruleTotal * rule.score);
+  }, 0);
+});
+
+const canSubmit = computed(() => {
+  return drawQuestionsRules.value.every(rule => {
+    const hasQuestions = rule.difficulty0 > 0 || rule.difficulty1 > 0 || rule.difficulty2 > 0;
+    return hasQuestions && rule.score > 0;
+  }) && totalDrawQuestions.value > 0;
+});
+
 const goBack = () => {
   router.back();
 };
@@ -589,8 +793,18 @@ const fetchExamDetails = async () => {
   try {
     const res = await getExamDetail(examId.value);
     if (res.code === 200) {
-      examDetails.value = res.data;
-      questionList.value = res.data.examQuestionList || [];
+      // 将 examCategory 从值映射为可读标签
+      const getCategoryLabel = (categoryValue) => {
+        if (categoryValue === null || categoryValue === undefined || categoryValue === '') return '未分类';
+        const found = categoryOptions.value.find(opt => String(opt.value) === String(categoryValue));
+        return found ? found.label : String(categoryValue);
+      };
+
+      const data = res.data;
+      // 如果字典已加载则直接映射，否则先保持原值（onMounted 已确保通常会先加载字典）
+      data.examCategory = getCategoryLabel(data.examCategory);
+      examDetails.value = data;
+      questionList.value = data.examQuestionList || [];
     } else {
       ElMessage.error(res.msg || '获取考试详情失败');
     }
@@ -611,6 +825,20 @@ const fetchCategories = async () => {
       }));
     }
   } catch (error) { console.error("获取考试分类失败", error); }
+};
+
+const fetchQuestionCategories = async () => {
+  try {
+    const res = await getDictData('question_category');
+    if (res.code === 200) {
+      questionCategoryOptions.value = res.data.map(item => ({
+        label: item.dictLabel,
+        value: item.dictValue,
+      }));
+    }
+  } catch (error) { 
+    console.error("获取题目分类失败", error); 
+  }
 };
 
 const fetchGroupList = async () => {
@@ -678,7 +906,7 @@ const openExamSettingsDialog = async () => {
           // 获取组织树信息以便正确显示部门
           let orgTreeMap = {};
           try {
-            const orgResponse = await getOrgTree();
+            const orgResponse = await getAllOrgTree();
             if (orgResponse.code === 200) {
               const buildOrgMap = (nodes) => {
                 for (const node of nodes) {
@@ -769,7 +997,7 @@ const openExamSettingsDialog = async () => {
           page: 1,
           size: 100,
           name: '',
-          isMe: true,
+          isMe: flase,
           clazzStatus: ''
         });
 
@@ -905,11 +1133,16 @@ const submitBatchScores = async () => {
     sort: q.sort
   }));
   try {
+    // 记录提交前总分
+    const prevTotal = totalScore.value;
+
     const res = await setExamQuestions({ id: examId.value, examQuestionList: examQuestionListPayload });
     if (res.code === 200) {
-      ElMessage.success('批量设置分数成功！');
-      batchSetScoreDialogVisible.value = false;
+      // 刷新考试详情以同步题目分数
       await fetchExamDetails();
+      const newTotal = totalScore.value;
+      ElMessage.success(`批量设置分数成功！总分从 ${prevTotal} 变为 ${newTotal}`);
+      batchSetScoreDialogVisible.value = false;
     } else {
       ElMessage.error(res.msg || '操作失败');
     }
@@ -1021,7 +1254,7 @@ const handleUserSearch = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const response = await getOrgTree({ personnel: true });
+    const response = await getAllOrgTree({ personnel: true });
     if (response.code === 200) {
       orgTreeData.value = transformOrgTreeData(response.data);
       // 在组织树加载完成后同步选中状态
@@ -1070,105 +1303,6 @@ const transformOrgTreeData = (nodes) => {
     return transformedOrg;
   });
 };
-
-// const processOrgTreeWithUsers = async (orgTree) => {
-//   try {
-//     const processTreeNode = async (node) => {
-//       const processedNode = {
-//         id: `org_${node.id}`,
-//         name: node.orgName,
-//         type: 'org',
-//         children: []
-//       };
-
-//       const childOrgs = [];
-//       if (node.children && node.children.length > 0) {
-//         const childNodes = await Promise.all(
-//           node.children.map(child => processTreeNode(child))
-//         );
-//         childOrgs.push(...childNodes);
-//       }
-
-//       const orgUsers = [];
-//       try {
-//         // 尝试不同的参数组合
-//         const userParams1 = {
-//           pageNum: 1,
-//           pageSize: 1000,
-//           orgId: node.id,
-//           pagination: false
-//         };
-
-//         const userParams2 = {
-//           pageNum: 1,
-//           pageSize: 1000,
-//           orgId: node.id,
-//           teacher: 0,
-//           pagination: false
-//         };
-
-//         const userParams3 = {
-//           pageNum: 1,
-//           pageSize: 1000,
-//           orgId: node.id
-//         };
-
-//         let userResponse = await getUserList(userParams1);
-
-//         // 如果第一种方式没有用户，尝试第二种
-//         if (!userResponse.data || !userResponse.data.records || userResponse.data.records.length === 0) {
-//           userResponse = await getUserList(userParams2);
-//         }
-
-//         // 如果还是没有，尝试第三种
-//         if (!userResponse.data || !userResponse.data.records || userResponse.data.records.length === 0) {
-//           userResponse = await getUserList(userParams3);
-//         }
-
-//         if (userResponse.code === 200) {
-//           if (userResponse.data && userResponse.data.records) {
-//             const users = userResponse.data.records.map(user => ({
-//               id: `user_${user.id}`,
-//               originalId: user.id,
-//               name: user.name,
-//               type: 'user',
-//               department: user.orgName || node.orgName,
-//               avatar: user.avatar || '',
-//               policeNumber: user.policeNumber || '',
-//               phone: user.username || ''
-//             }));
-//             orgUsers.push(...users);
-//           } else if (userResponse.data && Array.isArray(userResponse.data)) {
-//             const users = userResponse.data.map(user => ({
-//               id: `user_${user.id}`,
-//               originalId: user.id,
-//               name: user.name,
-//               type: 'user',
-//               department: user.orgName || node.orgName,
-//               avatar: user.avatar || '',
-//               policeNumber: user.policeNumber || '',
-//               phone: user.username || ''
-//             }));
-//             orgUsers.push(...users);
-//           }
-//         }
-//       } catch (error) {
-//         // 获取组织用户失败，忽略错误
-//       }
-
-//       processedNode.children = [...childOrgs, ...orgUsers];
-//       return processedNode;
-//     };
-
-//     const processedTree = await Promise.all(
-//       orgTree.map(node => processTreeNode(node))
-//     );
-
-//     orgTreeData.value = processedTree;
-//   } catch (error) {
-//     ElMessage.error('处理组织树数据失败');
-//   }
-// };
 
 const handleUserCheck = (user) => {
   if (user.checked) {
@@ -1262,6 +1396,11 @@ const addQuestion = (command) => {
     selectorVisible.value = true;
   } else if (command === 'manual_add') {
     router.push({ name: 'TeachingCenter-ManualAddQuestion', query: { examId: examId.value } });
+  } else if (command === 'draw_questions') {
+    openDrawQuestionsDialog();
+  } else if (command === 'import_questions') {
+    // TODO: 实现导入试题功能
+    ElMessage.info('导入试题功能待实现');
   }
 };
 
@@ -1269,14 +1408,217 @@ const handleSelectionSuccess = () => {
   fetchExamDetails();
 };
 
+// ==================== 【改动4】打开弹窗方法 ====================
+// ✅ 修改：重置为单个规则
+const openDrawQuestionsDialog = async () => {
+  // 重置为单个规则
+  drawQuestionsRules.value = [{
+    id: Date.now(),
+    filterData: {
+      questionType: '',
+      questionCategory: '',
+      groupId: '',
+      creator: ''
+    },
+    difficulty0: 0,
+    difficulty1: 0,
+    difficulty2: 0,
+    score: 5,
+    availableCount: 0,
+    highCount: 0,
+    mediumCount: 0,
+    lowCount: 0
+  }];
+  
+  errorMessage.value = '';
+  
+  await fetchQuestionCategories();
+  await fetchCreatorOptions();
+  
+  drawQuestionsDialogVisible.value = true;
+};
+
+const fetchCreatorOptions = async () => {
+  try {
+    const res = await getUserList({ pageNum: 1, pageSize: 100, teacher: 1 });
+    if (res.code === 200) {
+      creatorOptions.value = res.data.records.map(user => ({
+        id: user.id,
+        name: user.name || user.username
+      }));
+    }
+  } catch (error) {
+    console.error('获取创建人列表失败:', error);
+  }
+};
+
+// ==================== 【改动5】筛选和重置方法 ====================
+// ✅ 修改：增加ruleIndex参数，支持多规则
+const handleDrawQuestionsFilter = (filterData, ruleIndex) => {
+  console.log('筛选条件：', filterData, '规则索引：', ruleIndex);
+  drawQuestionsRules.value[ruleIndex].filterData = { ...filterData };
+  updateQuestionCount(ruleIndex);
+};
+
+const handleDrawQuestionsReset = (ruleIndex) => {
+  console.log('重置筛选条件，规则索引：', ruleIndex);
+  drawQuestionsRules.value[ruleIndex].filterData = {
+    questionType: '',
+    questionCategory: '',
+    groupId: '',
+    creator: ''
+  };
+  // 重置数量显示
+  drawQuestionsRules.value[ruleIndex].availableCount = 0;
+  drawQuestionsRules.value[ruleIndex].highCount = 0;
+  drawQuestionsRules.value[ruleIndex].mediumCount = 0;
+  drawQuestionsRules.value[ruleIndex].lowCount = 0;
+};
+
+// ✅ 修改：更新指定规则的题目数量
+const updateQuestionCount = async (ruleIndex) => {
+  const rule = drawQuestionsRules.value[ruleIndex];
+  const filterData = rule.filterData;
+  
+  if (!filterData.groupId && 
+      !filterData.questionCategory && 
+      !filterData.questionType && 
+      !filterData.creator) {
+    rule.availableCount = 0;
+    rule.highCount = 0;
+    rule.mediumCount = 0;
+    rule.lowCount = 0;
+    return;
+  }
+
+  try {
+    const queryData = {
+      groupId: filterData.groupId || null,
+      questionCategory: filterData.questionCategory || '',
+      title: '',
+      questionType: filterData.questionType || '',
+      creator: filterData.creator || null
+    };
+
+    const res = await getQuestionCount(queryData);
+    
+    if (res.code === 200) {
+      if (res.data && typeof res.data === 'object') {
+        rule.highCount = Number(res.data['0']) || 0;
+        rule.mediumCount = Number(res.data['1']) || 0;
+        rule.lowCount = Number(res.data['2']) || 0;
+        rule.availableCount = rule.highCount + rule.mediumCount + rule.lowCount;
+      } else {
+        rule.availableCount = 0;
+        rule.highCount = 0;
+        rule.mediumCount = 0;
+        rule.lowCount = 0;
+      }
+    } else {
+      ElMessage.warning(res.msg || '查询题目数量失败');
+      rule.availableCount = 0;
+      rule.highCount = 0;
+      rule.mediumCount = 0;
+      rule.lowCount = 0;
+    }
+  } catch (error) {
+    console.error('获取题目数量失败:', error);
+    ElMessage.error('获取题目数量失败，请检查网络连接');
+    rule.availableCount = 0;
+    rule.highCount = 0;
+    rule.mediumCount = 0;
+    rule.lowCount = 0;
+  }
+};
+
+// ==================== 【改动6】新增添加和删除规则方法 ====================
+// ✅ 新增：添加新规则
+const addNewRule = () => {
+  drawQuestionsRules.value.push({
+    id: Date.now(),
+    filterData: {
+      questionType: '',
+      questionCategory: '',
+      groupId: '',
+      creator: ''
+    },
+    difficulty0: 0,
+    difficulty1: 0,
+    difficulty2: 0,
+    score: 5,
+    availableCount: 0,
+    highCount: 0,
+    mediumCount: 0,
+    lowCount: 0
+  });
+  ElMessage.success('已添加新规则');
+};
+
+// ✅ 新增：删除规则
+const removeRule = (ruleIndex) => {
+  if (drawQuestionsRules.value.length === 1) {
+    ElMessage.warning('至少需要保留一个规则');
+    return;
+  }
+  drawQuestionsRules.value.splice(ruleIndex, 1);
+  ElMessage.success('已删除规则');
+};
+
+// ==================== 【改动7】确认抽取方法 ====================
+// ✅ 修改：提交所有规则
+const confirmDrawQuestions = async () => {
+  if (!canSubmit.value) {
+    errorMessage.value = '请确保题目数量和分数都大于0';
+    return;
+  }
+
+  try {
+    const drawData = {
+      examId: examId.value,
+      questionList: drawQuestionsRules.value.map(rule => ({
+        groupId: rule.filterData.groupId || null,
+        questionCategory: rule.filterData.questionCategory || '',
+        questionType: rule.filterData.questionType || '',
+        creator: rule.filterData.creator || null,
+        difficulty0: rule.difficulty0,
+        difficulty1: rule.difficulty1,
+        difficulty2: rule.difficulty2,
+        score: rule.score.toString()
+      }))
+    };
+
+    const res = await drawQuestions(drawData);
+    if (res.code === 200) {
+      ElMessage.success('抽取试题成功！');
+      drawQuestionsDialogVisible.value = false;
+      fetchExamDetails();
+    } else {
+      ElMessage.error(res.msg || '抽取试题失败');
+    }
+  } catch (error) {
+    console.error('抽取试题失败:', error);
+    ElMessage.error('抽取试题失败');
+  }
+};
+
 // 题目操作相关方法
 const handleScoreChange = async ({ questionId, newScore }) => {
+  // 找到要修改的题目
+  const questionIndex = questionList.value.findIndex(q => q.questionId === questionId);
+  if (questionIndex === -1) {
+    ElMessage.error('未找到要修改的题目');
+    return;
+  }
+
+  // 备份原始分数
+  const originalScore = questionList.value[questionIndex].score;
+  
   try {
-    // 更新本地数据
-    const questionIndex = questionList.value.findIndex(q => q.questionId === questionId);
-    if (questionIndex !== -1) {
-      questionList.value[questionIndex].score = newScore;
-    }
+    // 记录修改前的总分
+    const prevTotal = totalScore.value;
+
+    // 先更新本地数据
+    questionList.value[questionIndex].score = newScore;
 
     // 构建完整的题目列表并发送到服务器
     const examQuestionList = questionList.value.map(q => ({
@@ -1287,12 +1629,26 @@ const handleScoreChange = async ({ questionId, newScore }) => {
 
     const res = await setExamQuestions({ id: examId.value, examQuestionList });
     if (res.code === 200) {
-      ElMessage.success('分数修改成功！');
+      // 成功后计算新总分并提示
+      const newTotal = totalScore.value;
+      ElMessage.success(`分数修改成功！总分从 ${prevTotal} 变为 ${newTotal}`);
     } else {
-      ElMessage.error(res.msg || '分数修改失败');
+      // 修改失败，还原分数（watch监听器会自动同步到子组件）
+      questionList.value[questionIndex].score = originalScore;
+      
+      // 显示详细的错误信息
+      if (res.code === 500 && res.msg && res.msg.includes('此考试答题记录，无法修改')) {
+        ElMessage.error(`分数修改失败：${res.msg}，分数已还原为 ${originalScore} 分`);
+      } else {
+        ElMessage.error(`分数修改失败：${res.msg || '未知错误'}，分数已还原为 ${originalScore} 分`);
+      }
     }
   } catch (error) {
-    ElMessage.error('分数修改失败');
+    // 网络错误或其他异常，还原分数（watch监听器会自动同步到子组件）
+    questionList.value[questionIndex].score = originalScore;
+    
+    ElMessage.error(`分数修改失败：网络错误或服务器异常，分数已还原为 ${originalScore} 分`);
+    console.error('分数修改异常:', error);
   }
 };
 
@@ -1432,7 +1788,7 @@ const fetchClassList = async () => {
       page: classCurrentPage.value,
       size: classPageSize.value,
       name: classSearchKeyword.value || '',
-      isMe: true,
+      isMe: false,
       clazzStatus: ''
     });
 
@@ -1506,13 +1862,16 @@ const confirmSelectedClasses = () => {
   ElMessage.success(`已选择 ${selectedScopeClasses.value.length} 个班级`);
 };
 
-onMounted(() => {
+onMounted(async () => {
   const id = route.params.id;
   if (id) {
     examId.value = id;
-    fetchExamDetails();
-    fetchCategories();
-    fetchGroupList();
+    // 先加载字典和分组，确保后续映射可用
+    await fetchCategories();
+    await fetchQuestionCategories();
+    await fetchGroupList();
+    // 在字典加载完成后再获取考试详情以便正确映射 examCategory
+    await fetchExamDetails();
   } else {
     ElMessage.error('无效的考试ID');
     loading.value = false;
@@ -1942,5 +2301,119 @@ onMounted(() => {
 .selected-class-item .class-members {
   font-size: 12px;
   color: #909399;
+}
+
+/* 抽取试题弹窗样式 */
+.draw-questions-dialog {
+  padding: 20px 0;
+}
+
+.filter-section {
+  margin-bottom: 20px;
+}
+
+.question-stats {
+  padding: 12px 16px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.question-stats .note {
+  color: #f56c6c;
+  margin-left: 20px;
+}
+
+.difficulty-section {
+  margin-bottom: 20px;
+}
+
+.difficulty-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.difficulty-label {
+  margin-right: 8px;
+  color: #606266;
+}
+
+.total-section {
+  display: flex;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+  font-size: 14px;
+}
+
+.total-label {
+  margin-right: 8px;
+  color: #606266;
+}
+
+.add-rule-section {
+  margin-bottom: 20px;
+}
+
+.error-message {
+  padding: 8px 12px;
+  background-color: #fef0f0;
+  border: 1px solid #fbc4c4;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.error-text {
+  color: #f56c6c;
+  font-size: 12px;
+}
+
+/* ==================== 【改动9】新增样式 ==================== */
+/* ✅ 新增：规则区域样式 */
+.draw-rule-section {
+  margin-bottom: 20px;
+}
+
+/* ✅ 新增：规则标题样式 */
+.rule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #409eff;
+}
+
+.rule-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+/* ✅ 新增：总计信息样式 */
+.total-summary {
+  padding: 16px;
+  background-color: #ecf5ff;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.summary-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.summary-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #409eff;
 }
 </style>

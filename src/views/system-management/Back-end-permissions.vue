@@ -96,6 +96,12 @@
               </el-input>
             </div>
             
+            <!-- 权限操作按钮 -->
+            <div class="permission-actions">
+              <el-button size="small" @click="handleSelectAll">全选</el-button>
+              <el-button size="small" @click="handleUnselectAll">反勾选</el-button>
+            </div>
+            
             <el-tree
               ref="permissionTreeRef"
               :data="filteredPermissionTreeData"
@@ -539,6 +545,52 @@ const handlePermissionSearch = () => {
 const filterPermissionNode = (value, data) => {
   if (!value) return true
   return data.name.toLowerCase().includes(value.toLowerCase())
+}
+
+// 权限操作方法
+const handleSelectAll = () => {
+  if (!permissionTreeRef.value) return
+  
+  // 获取所有节点的key
+  const getAllKeys = (nodes) => {
+    let keys = []
+    nodes.forEach(node => {
+      keys.push(node.dictId)
+      if (node.children && node.children.length > 0) {
+        keys = keys.concat(getAllKeys(node.children))
+      }
+    })
+    return keys
+  }
+  
+  const allKeys = getAllKeys(filteredPermissionTreeData.value)
+  permissionTreeRef.value.setCheckedKeys(allKeys)
+  ElMessage.success('已全选所有权限')
+}
+
+const handleUnselectAll = () => {
+  if (!permissionTreeRef.value) return
+  
+  // 获取所有节点的key
+  const getAllKeys = (nodes) => {
+    let keys = []
+    nodes.forEach(node => {
+      keys.push(node.dictId)
+      if (node.children && node.children.length > 0) {
+        keys = keys.concat(getAllKeys(node.children))
+      }
+    })
+    return keys
+  }
+  
+  const allKeys = getAllKeys(filteredPermissionTreeData.value)
+  const currentCheckedKeys = permissionTreeRef.value.getCheckedKeys()
+  
+  // 反向选择：当前选中的变为未选中，未选中的变为选中
+  const newCheckedKeys = allKeys.filter(key => !currentCheckedKeys.includes(key))
+  
+  permissionTreeRef.value.setCheckedKeys(newCheckedKeys)
+  ElMessage.success('已反向选择权限')
 }
 
 const handleCreate = () => {
@@ -1224,6 +1276,22 @@ onMounted(async () => {
 
 .permission-search {
   margin-bottom: 12px;
+}
+
+.permission-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.permission-actions .el-button {
+  padding: 4px 12px;
+  height: 28px;
+  font-size: 12px;
 }
 
 .permission-tree {

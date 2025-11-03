@@ -31,7 +31,7 @@
               </div>
               
               <div class="certificate-recipient">
-                {{ previewData.recipientName || '用户姓名 同志' }}
+                {{ userName || '用户姓名' }} 同志
               </div>
               
               <div class="certificate-body">
@@ -212,6 +212,7 @@ import { ArrowLeft, Plus, Loading, Close } from '@element-plus/icons-vue'
 import { addCertificate, updateCertificate, getCertificateById } from '@/api/system-management/Certificate-Management.js'
 import { uploadFiles } from '@/api/common/UploadFiles.js'
 import { previewFile } from '@/api/common/PreviewFile.js'
+import { getInfo } from '@/api/common/info.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -248,6 +249,9 @@ const previewData = reactive({
   issueDate: '',
   recipientName: '用户姓名'
 })
+
+// 用户姓名
+const userName = ref('用户姓名')
 
 // 表单验证规则
 const rules = {
@@ -501,6 +505,19 @@ const handleSave = async () => {
   }
 }
 
+// 获取用户信息
+const fetchUserInfo = async () => {
+  try {
+    const response = await getInfo()
+    if (response.code === 200 && response.data?.name) {
+      userName.value = response.data.name
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+    // 静默失败，使用默认值
+  }
+}
+
 // 加载证书数据（编辑模式）
 const loadCertificateData = async () => {
   if (!isEdit.value) {
@@ -570,6 +587,8 @@ onMounted(async () => {
   console.log('路由参数:', route.params)
   console.log('是否编辑模式:', isEdit.value)
   
+  // 获取用户信息
+  await fetchUserInfo()
   await loadCertificateData()
   updatePreview()
   
@@ -629,12 +648,13 @@ onMounted(async () => {
 }
 
 .certificate-content {
-  width: 100%;
+ width: 100%;
   height: 100%;
-  border: 10px solid #4a90a4;
-  border-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M0,0 L100,0 L100,100 L0,100 Z" fill="none" stroke="%234a90a4" stroke-width="2" stroke-dasharray="5,5"/></svg>') 10;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
 }
 
 .certificate-overlay {
@@ -658,71 +678,92 @@ onMounted(async () => {
 }
 
 .certificate-title {
-  font-size: 35px;
+  font-size: 40px;
   font-weight: bold;
-  color: #2c3e50;
-  margin-bottom: 15px;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 20px;
   text-align: center;
-  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+  letter-spacing: 3px;
+  position: relative;
+  text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.5);
 }
 
 .certificate-recipient {
-  font-size: 15px;
-  color: #34495e;
-  margin-bottom: 15px;
+  font-size: 16px;
+  color: #2c3e50;
+  margin-bottom: 50px;
   text-align: center;
-  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+  letter-spacing: 1px;
+  padding: 8px 20px;
+  background: linear-gradient(to right, transparent, rgba(212, 175, 55, 0.1), transparent);
+  border-left: 3px solid #d4af37;
+  border-right: 3px solid #d4af37;
 }
 
 .certificate-body {
-  flex: 1;
+  /* flex: 1; */
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.8;
   color: #2c3e50;
   text-align: center;
-  padding: 0 8px;
+  padding: 0 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+  padding-bottom: 120px;
+  padding-top: 40px;
+  max-width: 380px;
+  margin: 0 auto;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .certificate-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   width: 100%;
-  margin-top: 15px;
+  margin-top: -40px;
 }
 
 .footer-content {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   width: 100%;
-  justify-content: space-between;
+  /* justify-content: space-between; */
+  flex-direction: column-reverse
 }
 
 .unit-date-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  flex: 1;
-  margin-right: 20px;
+  align-items: center;
+  margin-top: -40px; /* 3. 新增：使用负外边距让文字上移，与公章重叠 (您可以调整-50px这个值) */
+  margin-left: -40px;
+  position: relative;   /* 4. 新增：为 z-index 生效 */
+  z-index: 1; 
+            /* 5. 新增：文字图层为 1 */
 }
 
 .unit-name {
-  font-size: 14px;
+  font-size: 17px;
   color: #2c3e50;
   font-weight: bold;
   margin-bottom: 8px;
-  margin-left: 150px;
+  /* margin-left: 150px; */
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .issue-date {
-    margin-left: 150px;
-    margin-bottom: 20px;
+    /* margin-left: 150px;
+    margin-bottom: 20px; */
 
-  font-size: 12px;
+  font-size: 13px;
   color: #2c3e50;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
@@ -730,6 +771,7 @@ onMounted(async () => {
 .seal-container {
   position: relative;
   flex-shrink: 0;
+  z-index: 2
 }
 
 .seal {
@@ -768,8 +810,8 @@ onMounted(async () => {
 }
 
 .seal-image {
-  width: 60px;
-  height: 60px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
   border-radius: 50%;
 }

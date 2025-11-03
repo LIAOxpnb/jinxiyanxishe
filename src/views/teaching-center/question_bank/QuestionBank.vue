@@ -7,7 +7,11 @@
         </el-menu-item> -->
         <el-menu-item v-for="group in groupList" :key="group.id" :index="group.id.toString()">
           <span class="group-name">{{ group.name }}</span>
-          <el-dropdown @command="(command) => handleGroupDropdownCommand(command, group)" @click.stop>
+          <el-dropdown 
+            v-if="group.name !== '全部' && group.name !== '未分组'" 
+            @command="(command) => handleGroupDropdownCommand(command, group)" 
+            @click.stop
+          >
             <el-button link size="small" class="group-more-btn" @click.stop>
               <el-icon>
                 <More />
@@ -31,14 +35,43 @@
       <h1 class="page-title">题库</h1>
       <FilterBar create-button-text="新增试题" :fields="questionFilterFields" :create-options="createOptions"
         @create="handleCreateQuestion" @filter="handleFilterQuestions" />
+      <div v-if="selectedRows.length > 0" style="margin: 10px 0;">
+        <el-button type="warning" @click="handleBatchAbandon">
+          批量废弃 ({{ selectedRows.length }})
+        </el-button>
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+          :disabled="deletableCount === 0"
+        >
+          批量删除 ({{ deletableCount }})
+          <span v-if="abandonedCount > 0" style="color: #909399; font-size: 12px;">
+            / 跳过{{ abandonedCount }}条废弃
+          </span>
+        </el-button>
+      </div>
       <el-table v-loading="tableLoading" :data="tableData" style="width: 100%"
-        :header-cell-style="{ background: '#f5f7fa', color: '#606266' }">
+        :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
+        :row-class-name="({ row }) => row.abandoned === 1 ? 'abandoned-row' : ''"
+        @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="id" label="序号" width="100" />
         <el-table-column prop="title" label="题目">
           <template #default="scope">
-            <el-link type="primary" :underline="false" @click="handleEditQuestion(scope.row)">{{ scope.row.title
-              }}</el-link>
+            <div :class="{ 'abandoned-question': scope.row.abandoned === 1 }">
+              <el-link 
+                :type="scope.row.abandoned === 1 ? 'info' : 'primary'" 
+                :underline="false" 
+                @click="scope.row.abandoned === 1 ? handleAbandonedClick() : handleEditQuestion(scope.row)"
+                :class="{ 'abandoned-link': scope.row.abandoned === 1, 'disabled-link': scope.row.abandoned === 1 }"
+                :style="{ cursor: scope.row.abandoned === 1 ? 'not-allowed' : 'pointer' }"
+              >
+                {{ scope.row.title }}
+              </el-link>
+              <el-tag v-if="scope.row.abandoned === 1" type="warning" size="small" style="margin-left: 8px;">
+                已废弃
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="type" label="题型" width="100" />
@@ -49,11 +82,19 @@
             <span>{{ formatDifficulty(scope.row.difficulty) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="creator" label="创建人" width="100" />
+        <el-table-column prop="creatorName" label="创建人" width="100" />
         <el-table-column prop="creationTime" label="创建时间" width="180" />
         <el-table-column label="操作" width="150">
           <template #default="scope">
-            <el-button link type="primary" size="small" @click="handleEditQuestion(scope.row)">编辑</el-button>
+            <el-button 
+              link 
+              :type="scope.row.abandoned === 1 ? 'info' : 'primary'" 
+              size="small" 
+              :disabled="scope.row.abandoned === 1"
+              @click="scope.row.abandoned === 1 ? handleAbandonedClick() : handleEditQuestion(scope.row)"
+            >
+              编辑
+            </el-button>
             <el-dropdown @command="(command) => handleDropdownCommand(command, scope.row)">
               <el-button link size="small" class="more-btn">
                 <el-icon>
@@ -62,7 +103,9 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="delete">删除</el-dropdown-item>
+                  <el-dropdown-item v-if="scope.row.abandoned !== 1" command="abandon">废弃</el-dropdown-item>
+                  <el-dropdown-item v-if="scope.row.abandoned === 1" command="restore">恢复</el-dropdown-item>
+                  <el-dropdown-item v-if="scope.row.abandoned !== 1" command="delete">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -132,8 +175,23 @@
             <el-radio :label="true">设置解析</el-radio>
           </el-radio-group>
           <div v-if="showAnalysis" style="margin-top: 10px;">
-            <el-input v-model="questionForm.analysis" type="textarea" :rows="6" style="width: 450px;"
-              placeholder="请输入答案解析" />
+            <div style="border: 1px solid #ccc; width: 450px;">
+              <Toolbar
+                ref="analysisToolbarRef"
+                style="border-bottom: 1px solid #ccc"
+                :editor="analysisEditor"
+                :defaultConfig="{}"
+                mode="default"
+              />
+              <Editor
+                ref="analysisEditorRef"
+                v-model="questionForm.analysis"
+                style="height: 200px; overflow-y: hidden;"
+                :defaultConfig="analysisEditorConfig"
+                mode="default"
+                @onCreated="handleAnalysisCreated"
+              />
+            </div>
           </div>
         </el-form-item>
       </el-form>
@@ -148,11 +206,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, onMounted, watch, onBeforeUnmount, shallowRef, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { Delete, More } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import FilterBar from '@/components/common/FilterBar.vue';
+import '@wangeditor/editor/dist/css/style.css';
+import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
+import { uploadFiles } from '@/api/common/UploadFiles.js';
+import { previewFile } from '@/api/common/PreviewFile.js';
 
 import {
   getQuestionGroupList,
@@ -163,6 +225,7 @@ import {
   updateQuestion,
   getQuestionDetail,
   deleteQuestion,
+  abandonQuestion,
 } from '@/api/teaching-center/QuestionBank';
 import { getDictByType } from '@/api/system-management/dictionary';
 
@@ -176,6 +239,22 @@ const total = ref(0);
 const activeGroupId = ref('all');
 const pagination = reactive({ page: 1, size: 10 });
 const filters = ref({});
+const selectedRows = ref([]); // 选中的行
+
+// 计算可删除的题目数量
+const deletableCount = computed(() => {
+  return selectedRows.value.filter(row => row.abandoned !== 1).length;
+});
+
+// 计算废弃题目数量
+const abandonedCount = computed(() => {
+  return selectedRows.value.filter(row => row.abandoned === 1).length;
+});
+
+// 富文本编辑器相关
+const analysisEditorRef = shallowRef();
+const analysisToolbarRef = ref();
+const analysisEditor = shallowRef();
 
 // --- 筛选栏选项配置 ---
 
@@ -201,7 +280,7 @@ const difficultyOptions = ref([
 const questionFilterFields = ref([
   { type: 'input', model: 'id', placeholder: '序号' },
   { type: 'input', model: 'title', placeholder: '题目' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'questionType', placeholder: '题型', options: typeOptions },
   { type: 'select', model: 'questionCategory', placeholder: '分类', options: categoryOptions },
   { type: 'select', model: 'difficulty', placeholder: '难度', options: difficultyOptions },
@@ -228,6 +307,51 @@ const questionForm = reactive({
   answer: '',
 });
 const rules = reactive({});
+
+// 富文本编辑器配置
+const analysisEditorConfig = {
+  placeholder: '请输入解析内容...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          if (file.size > 5 * 1024 * 1024) {
+            ElMessage.error('图片大小不能超过5MB');
+            return;
+          }
+          
+          uploadFiles([file]).then(async (uploadRes) => {
+            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
+              const relativePath = uploadRes.data;
+              
+              // 获取预览URL
+              const previewUrl = await previewFile(relativePath);
+              
+              // 插入图片到编辑器
+              insertFn(previewUrl, file.name, previewUrl);
+              ElMessage.success('图片上传成功');
+            } else {
+              ElMessage.error(uploadRes.msg || '图片上传失败');
+            }
+          }).catch((error) => {
+            console.error('上传或预览过程中出错:', error);
+            ElMessage.error(error.message || '图片上传失败');
+          });
+        };
+        input.click();
+      }
+    }
+  }
+};
 
 // --- API 调用与事件处理 ---
 const fetchDictOptions = async (dictType, optionsRef) => {
@@ -297,6 +421,13 @@ const fetchQuestions = async () => {
     console.log('向API发送的最终参数:', params);
     const res = await getQuestionList(params);
     if (res.code === 200 && res.data) {
+      // 将 API 返回的 questionCategory 映射为可读标签
+      const getCategoryLabel = (categoryValue) => {
+        if (categoryValue === null || categoryValue === undefined || categoryValue === '') return '未分类';
+        // categoryOptions 存储为 { label, value }
+        const found = categoryOptions.value.find(opt => String(opt.value) === String(categoryValue));
+        return found ? found.label : String(categoryValue);
+      };
       const getGroupNameById = (groupId) => {
         if (!groupId && groupId !== 0) return '未分组';
         const group = groupList.value.find(g => g.id == groupId);
@@ -306,10 +437,10 @@ const fetchQuestions = async () => {
         id: item.id,
         title: item.title,
         type: item.questionType,
-        category: item.questionCategory,
+        category: getCategoryLabel(item.questionCategory),
         group: getGroupNameById(item.groupId),
         difficulty: item.difficulty,
-        creator: item.creator,
+        creatorName: item.creatorName,
         creationTime: item.createTime,
       }));
       total.value = res.data.total;
@@ -378,7 +509,18 @@ const handleCreateQuestion = (command) => {
   }
 };
 
+// 处理废弃题目的点击
+const handleAbandonedClick = () => {
+  ElMessage.warning('已废弃的题目无法编辑，请先恢复题目');
+};
+
 const handleEditQuestion = async (row) => {
+  // 检查题目是否已废弃
+  if (row.abandoned === 1) {
+    ElMessage.warning('已废弃的题目无法编辑，请先恢复题目');
+    return;
+  }
+  
   try {
     const res = await getQuestionDetail(row.id);
     if (res.code === 200 && res.data) {
@@ -393,8 +535,8 @@ const handleEditQuestion = async (row) => {
 
       if (data.questionType === '判断') {
         questionForm.options = [
-          { value: '1', text: '正确' },
-          { value: '0', text: '错误' }
+          { value: '0', text: '正确' },
+          { value: '1', text: '错误' }
         ];
         questionForm.answer = data.answer;
       } else {
@@ -426,18 +568,29 @@ const handleEditQuestion = async (row) => {
 
 const handleSubmit = async () => {
   let finalAnswer = '';
+  let detailsForBackend = '';
+  
   if (questionForm.questionType === '多选') {
     const correctAnswers = [];
     questionForm.options.forEach(opt => { if (opt.isCorrect) correctAnswers.push(opt.value); });
     finalAnswer = correctAnswers.join('#@#');
+    detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
+      option: uiOpt.value,
+      value: uiOpt.text
+    })));
+  } else if (questionForm.questionType === '单选') {
+    finalAnswer = questionForm.answer;
+    detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
+      option: uiOpt.value,
+      value: uiOpt.text
+    })));
+  } else if (questionForm.questionType === '判断') {
+    finalAnswer = questionForm.answer;
+    detailsForBackend = ''; // 判断题不需要details
   } else {
     finalAnswer = questionForm.answer;
+    detailsForBackend = '';
   }
-
-  const detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
-    option: uiOpt.value,
-    value: uiOpt.text
-  })));
 
   try {
     const dataToSubmit = {
@@ -472,15 +625,158 @@ const removeOption = (index) => {
 const handleDropdownCommand = (command, row) => {
   if (command === 'delete') {
     handleDeleteQuestion(row);
+  } else if (command === 'abandon') {
+    handleAbandonQuestion(row);
+  } else if (command === 'restore') {
+    handleRestoreQuestion(row);
   }
 };
 
 const handleDeleteQuestion = (row) => {
+  // 检查题目是否已废弃
+  if (row.abandoned === 1) {
+    ElMessage.warning('已废弃的题目无法删除，请先恢复题目');
+    return;
+  }
+  
   ElMessageBox.confirm('确定要删除该试题吗？', '删除提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
     .then(async () => {
       try { await deleteQuestion(row.id); ElMessage.success('删除成功！'); fetchQuestions(); }
       catch (error) { ElMessage.error('删除失败'); }
     }).catch(() => { });
+};
+
+const handleAbandonQuestion = (row) => {
+  ElMessageBox.confirm('确定要废弃该试题吗？废弃后题目将以灰色显示。', '废弃提示', { 
+    type: 'warning', 
+    confirmButtonText: '废弃', 
+    cancelButtonText: '取消' 
+  })
+    .then(async () => {
+      try { 
+        await abandonQuestion(row.id, 1); 
+        ElMessage.success('废弃成功！'); 
+        // 更新本地数据状态而不是重新获取
+        row.abandoned = 1;
+      }
+      catch (error) { 
+        console.error('废弃失败:', error);
+        ElMessage.error('废弃失败'); 
+      }
+    }).catch(() => { });
+};
+
+const handleRestoreQuestion = (row) => {
+  ElMessageBox.confirm('确定要恢复该试题吗？', '恢复提示', { 
+    type: 'info', 
+    confirmButtonText: '恢复', 
+    cancelButtonText: '取消' 
+  })
+    .then(async () => {
+      try { 
+        await abandonQuestion(row.id, 0); 
+        ElMessage.success('恢复成功！'); 
+        // 更新本地数据状态
+        row.abandoned = 0;
+      }
+      catch (error) { 
+        console.error('恢复失败:', error);
+        ElMessage.error('恢复失败'); 
+      }
+    }).catch(() => { });
+};
+
+// 处理表格选择变化
+const handleSelectionChange = (selection) => {
+  selectedRows.value = selection;
+};
+
+// 批量废弃
+const handleBatchAbandon = () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要废弃的试题');
+    return;
+  }
+
+  ElMessageBox.confirm(
+    `确定要废弃选中的 ${selectedRows.value.length} 条试题吗？废弃后题目将以灰色显示。`, 
+    '批量废弃确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定废弃', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
+    try {
+      // 收集所有要废弃的试题ID
+      const abandonPromises = selectedRows.value.map(row => abandonQuestion(row.id, 1));
+      
+      // 并发执行所有废弃操作
+      await Promise.all(abandonPromises);
+      
+      // 更新本地数据状态
+      selectedRows.value.forEach(row => {
+        row.abandoned = 1;
+      });
+      
+      ElMessage.success(`成功废弃 ${selectedRows.value.length} 条试题！`);
+      selectedRows.value = [];
+    } catch (error) {
+      console.error('批量废弃失败:', error);
+      ElMessage.error('批量废弃失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
+};
+
+// 批量删除
+const handleBatchDelete = () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先选择要删除的试题');
+    return;
+  }
+
+  // 过滤出可以删除的题目（非废弃状态）
+  const deletableRows = selectedRows.value.filter(row => row.abandoned !== 1);
+  const abandonedRows = selectedRows.value.filter(row => row.abandoned === 1);
+
+  if (deletableRows.length === 0) {
+    ElMessage.warning('所选题目均为已废弃状态，无法删除');
+    return;
+  }
+
+  let confirmMessage = `确定要删除选中的 ${deletableRows.length} 条试题吗？此操作不可恢复！`;
+  if (abandonedRows.length > 0) {
+    confirmMessage += `\n注意：已跳过 ${abandonedRows.length} 条废弃题目`;
+  }
+
+  ElMessageBox.confirm(
+    confirmMessage, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
+    try {
+      // 收集所有要删除的试题ID（仅非废弃题目）
+      const deletePromises = deletableRows.map(row => deleteQuestion(row.id));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${deletableRows.length} 条试题！${abandonedRows.length > 0 ? `已跳过 ${abandonedRows.length} 条废弃题目。` : ''}`);
+      selectedRows.value = [];
+      fetchQuestions();
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
 };
 
 // 【修改点】移除不再需要的API调用
@@ -491,6 +787,18 @@ onMounted(async () => {
     fetchDictOptions('question_category', categoryOptions),
   ]);
   fetchQuestions();
+});
+
+// 处理富文本编辑器创建
+const handleAnalysisCreated = (editor) => {
+  analysisEditor.value = editor;
+};
+
+// 组件销毁前清理编辑器
+onBeforeUnmount(() => {
+  const editor = analysisEditor.value;
+  if (editor == null) return;
+  editor.destroy();
 });
 
 watch(() => [pagination.page, pagination.size], () => {
@@ -599,5 +907,41 @@ watch(() => [pagination.page, pagination.size], () => {
 
 .delete-option-btn {
   margin-left: 10px;
+}
+
+/* 废弃题目样式 */
+.abandoned-question {
+  opacity: 0.6;
+}
+
+.abandoned-link {
+  text-decoration: line-through !important;
+  color: #909399 !important;
+}
+
+.abandoned-link:hover {
+  color: #606266 !important;
+}
+
+.disabled-link {
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+
+/* 废弃行样式 */
+:deep(.abandoned-row) {
+  background-color: #fafafa !important;
+  opacity: 0.7;
+}
+
+:deep(.abandoned-row td) {
+  color: #909399 !important;
+}
+
+/* 默认插入图片的显示比例（无内联样式时生效），用户通过编辑器工具栏更改样式会覆盖 */
+:deep(.w-e-text-container img) {
+  width: 50%;
+  height: auto;
+  max-width: none;
 }
 </style>2

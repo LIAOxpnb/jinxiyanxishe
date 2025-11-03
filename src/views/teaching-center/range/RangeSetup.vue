@@ -30,6 +30,18 @@
                   </el-dropdown>
                   <span>试题数 <span class="stat-value">{{ totalQuestions }}</span> 道</span>
                   <span>总分 <span class="stat-value">{{ totalScore }}</span> 分</span>
+                  <span>合格分 <span class="stat-value">{{ shootingRangeDetails.qualified || 0 }}</span> 分</span>
+                  <el-button type="primary" link @click="openBatchSetScoreDialog">批量设置分数</el-button>
+                  <el-dropdown @command="handleScoreCommands">
+                    <el-button type="primary" link>
+                      设置合格分<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="setPassingScore">设置合格分</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                   <el-button type="success" @click="saveCluesAndQuestions" style="margin-left: auto;">保存左侧内容</el-button>
                   <div class="header-remark">【备注】操作后请点击保存</div>
                 </div>
@@ -85,7 +97,7 @@
               <el-descriptions-item label="靶场名称">{{ shootingRangeDetails.name }}</el-descriptions-item>
               <el-descriptions-item label="靶场简介">{{ shootingRangeDetails.introduction }}</el-descriptions-item>
               <el-descriptions-item label="分类">{{ categoryName }}</el-descriptions-item>
-              <el-descriptions-item label="靶场类型">{{ shootingRangeDetails.shootingRangeType === 0 ? '训练' : '比赛' }}</el-descriptions-item>
+              <el-descriptions-item label="靶场类型">{{ shootingRangeDetails.shootingRangeType === 0 ? '训练' : '比武' }}</el-descriptions-item>
               <el-descriptions-item label="创建人">{{ shootingRangeDetails.creatorName }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ shootingRangeDetails.createTime }}</el-descriptions-item>
             </el-descriptions>
@@ -100,9 +112,9 @@
             </template>
             <el-descriptions :column="1" border>
               <el-descriptions-item label="闯关模式">{{ shootingRangeDetails.challengeMode === 1 ? '开启' : '关闭' }}</el-descriptions-item>
-              <el-descriptions-item label="比赛时间">{{ shootingRangeDetails.participateDate === 0 ? '不限制' : `${shootingRangeDetails.startTime} ~ ${shootingRangeDetails.endTime}` }}</el-descriptions-item>
-              <el-descriptions-item label="比赛时长">{{ shootingRangeDetails.duration === -1 ? '不限制' : `${shootingRangeDetails.duration}分钟` }}</el-descriptions-item>
-              <el-descriptions-item label="比赛人员">{{ ['不限制', '指定人员', '指定班级'][shootingRangeDetails.scope] || '未知' }}</el-descriptions-item>
+              <el-descriptions-item label="比武时间">{{ shootingRangeDetails.participateDate === 0 ? '不限制' : `${shootingRangeDetails.startTime} ~ ${shootingRangeDetails.endTime}` }}</el-descriptions-item>
+              <el-descriptions-item label="比武时长">{{ shootingRangeDetails.duration === -1 ? '不限制' : `${shootingRangeDetails.duration}分钟` }}</el-descriptions-item>
+              <el-descriptions-item label="比武人员">{{ ['不限制', '指定人员', '指定班级'][shootingRangeDetails.scope] || '未知' }}</el-descriptions-item>
               <el-descriptions-item label="禁止复制">{{ shootingRangeDetails.disableCopy === 1 ? '开启' : '关闭' }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -182,7 +194,7 @@
         <el-form-item label="靶场类型" prop="shootingRangeType">
            <el-radio-group v-model="editForm.shootingRangeType" disabled>
             <el-radio :value="0">训练</el-radio>
-            <el-radio :value="1">比赛</el-radio>
+            <el-radio :value="1">比武</el-radio>
           </el-radio-group>
            <div class="form-hint">【备注】类型不可修改</div>
         </el-form-item>
@@ -285,6 +297,47 @@
       </template>
     </el-dialog>
     
+    
+    <el-dialog v-model="batchSetScoreDialogVisible" title="批量设置分数" width="500px">
+      <el-form :model="batchScoreForm" label-width="80px">
+        <el-form-item v-for="item in questionTypesForBatchScore" :key="item.type">
+          <template #label>{{ item.name }}</template>
+          <span class="dialog-stat-text">共{{ questionCountsByType[item.type] || 0 }}题</span>
+          <span class="dialog-stat-text">单题</span>
+          <el-input-number v-model="batchScoreForm[item.type]" :min="0" controls-position="right"
+            style="width: 100px;" />
+          <span class="dialog-stat-text">分, 共{{ (questionCountsByType[item.type] || 0) * (batchScoreForm[item.type] ||
+            0)
+          }}分</span>
+        </el-form-item>
+        <el-divider />
+        <el-form-item label="总共">
+          <span class="dialog-stat-text">共{{ totalQuestions }}题</span>
+          <span style="margin-left: 20px;">总分 <span class="stat-value">{{ calculatedTotalScore }}</span> 分</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchSetScoreDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitBatchScores">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="setPassingScoreDialogVisible" title="合格分设置" width="500px">
+      <el-form :model="passingScoreForm" label-width="80px">
+        <el-form-item label="总共">
+          <span class="dialog-stat-text">共{{ totalQuestions }}题</span>
+          <span class="dialog-stat-text">合格</span>
+          <el-input-number v-model="passingScoreForm.qualified" :min="0" :max="totalScore" controls-position="right"
+            style="width: 100px;" />
+          <span class="dialog-stat-text">分, 共{{ totalScore }}分</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="setPassingScoreDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitPassingScore">确定</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="userSelectionDialogVisible" title="选择人员" width="1000px" :close-on-click-modal="false">
         <div class="add-member-dialog">
           <div class="user-tree-section">
@@ -294,7 +347,29 @@
               </el-input>
             </div>
             <div class="user-tree-container">
-                <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id" @check="handleOrgTreeCheck">
+              <!-- 搜索结果 -->
+              <div v-if="userSearchKeyword" class="search-results">
+                <div class="search-tip">
+                  包含 "{{ userSearchKeyword }}" 的搜索结果
+                </div>
+                <div v-for="user in searchedUsers" :key="user.id" class="user-item search-result">
+                  <el-checkbox v-model="user.checked" @change="handleUserCheck(user)">
+                    <div class="user-info">
+                      <el-avatar :size="24" :src="user.avatar">
+                        <el-icon>
+                          <User />
+                        </el-icon>
+                      </el-avatar>
+                      <span class="user-name">{{ user.name }}</span>
+                      <span class="user-dept">{{ user.department }}</span>
+                    </div>
+                  </el-checkbox>
+                </div>
+              </div>
+
+              <!-- 组织树 -->
+              <div v-else class="org-tree">
+                <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id" :default-expand-all="true" @check="handleOrgTreeCheck">
                   <template #default="{ data }">
                     <div class="tree-node">
                       <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
@@ -304,6 +379,7 @@
                     </div>
                   </template>
                 </el-tree>
+              </div>
             </div>
           </div>
           <div class="selected-users-section">
@@ -375,7 +451,7 @@
 import { ref, onMounted, computed, watch, shallowRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList } from '@/api/teaching-center/ShootingRange.js';
+import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList, setShootingRangeQualified } from '@/api/teaching-center/ShootingRange.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
 import { getOrgTree } from '@/api/system-management/Org.js';
@@ -428,8 +504,58 @@ const editorRef = shallowRef(null);
 const clueForm = ref(null);
 const attachmentList = ref([]);
 
+// 批量设置分数相关
+const batchSetScoreDialogVisible = ref(false);
+const batchScoreForm = ref({
+  SINGLE_CHOICE: 5,
+  MULTIPLE_CHOICE: 5,
+  TRUE_FALSE: 5,
+  FILL_IN_BLANK: 5,
+  ESSAY: 10
+});
+
+// 设置合格分相关
+const setPassingScoreDialogVisible = ref(false);
+const passingScoreForm = ref({
+  qualified: 60
+});
+
 const totalQuestions = computed(() => questionList.value.length);
 const totalScore = computed(() => questionList.value.reduce((sum, item) => sum + (Number(item.score) || 0), 0));
+
+// 批量设置分数相关计算属性
+const questionTypesForBatchScore = computed(() => [
+  { type: 'SINGLE_CHOICE', name: '单选题' },
+  { type: 'MULTIPLE_CHOICE', name: '多选题' },
+  { type: 'TRUE_FALSE', name: '判断题' },
+  { type: 'FILL_IN_BLANK', name: '填空题' },
+  { type: 'ESSAY', name: '论述题' }
+].filter(item => questionCountsByType.value[item.type] > 0));
+
+const questionCountsByType = computed(() => {
+  const counts = {
+    SINGLE_CHOICE: 0,
+    MULTIPLE_CHOICE: 0,
+    TRUE_FALSE: 0,
+    FILL_IN_BLANK: 0,
+    ESSAY: 0
+  };
+  
+  questionList.value.forEach(q => {
+    if (counts.hasOwnProperty(q.questionType)) {
+      counts[q.questionType]++;
+    }
+  });
+  
+  return counts;
+});
+
+const calculatedTotalScore = computed(() => {
+  return Object.keys(questionCountsByType.value).reduce((sum, type) => {
+    return sum + (questionCountsByType.value[type] * (batchScoreForm.value[type] || 0));
+  }, 0);
+});
+
 const categoryName = computed(() => {
   if (!shootingRangeDetails.value || !categoryOptions.value.length) return '';
   const category = categoryOptions.value.find(c => c.value == shootingRangeDetails.value.shootingRangeCategory);
@@ -574,10 +700,7 @@ const saveCluesAndQuestions = async () => {
         }
       } else if (q.questionType === 'TRUE_FALSE') {
         backendQuestion.answer = q.answer;
-        backendQuestion.details = JSON.stringify([
-          { option: 'A', value: '正确' },
-          { option: 'B', value: '错误' }
-        ]);
+        backendQuestion.details = ''; // 判断题不需要details
       } else if (q.questionType === 'FILL_IN_BLANK') {
         backendQuestion.answer = q.answer ? q.answer.join('#@#') : '';
       } else {
@@ -632,7 +755,7 @@ const addQuestion = (type) => {
   const base = createBaseQuestion(type);
   switch (type) {
     case 'MULTIPLE_CHOICE': base.answer = []; break;
-    case 'TRUE_FALSE': base.answer = '1'; break;
+    case 'TRUE_FALSE': base.answer = '0'; break; // 默认设置为正确
     case 'FILL_IN_BLANK': base.answer = ['']; base.options = []; break;
     case 'ESSAY': base.answer = ''; base.options = []; break;
   }
@@ -694,6 +817,72 @@ const copyQuestion = (index) => {
   const copiedQuestion = JSON.parse(JSON.stringify(originalQuestion));
   copiedQuestion.uid = uuidv4();
   questionList.value.splice(index + 1, 0, copiedQuestion);
+};
+
+// 批量设置分数和设置合格分相关方法
+const openBatchSetScoreDialog = () => {
+  // 初始化表单数据
+  batchScoreForm.value = {
+    SINGLE_CHOICE: 5,
+    MULTIPLE_CHOICE: 5,
+    TRUE_FALSE: 5,
+    FILL_IN_BLANK: 5,
+    ESSAY: 10
+  };
+  batchSetScoreDialogVisible.value = true;
+};
+
+const handleScoreCommands = (command) => {
+  if (command === 'setPassingScore') {
+    openPassingScoreDialog();
+  }
+};
+
+const openPassingScoreDialog = () => {
+  passingScoreForm.value.qualified = shootingRangeDetails.value?.qualified || 60;
+  setPassingScoreDialogVisible.value = true;
+};
+
+const submitBatchScores = async () => {
+  try {
+    // 更新本地题目的分数
+    questionList.value.forEach(question => {
+      if (batchScoreForm.value[question.questionType] !== undefined) {
+        question.score = batchScoreForm.value[question.questionType];
+      }
+    });
+    
+    // 保存到后端
+    await saveCluesAndQuestions();
+    
+    batchSetScoreDialogVisible.value = false;
+    ElMessage.success('批量设置分数成功！');
+  } catch (error) {
+    ElMessage.error('批量设置分数失败');
+  }
+};
+
+const submitPassingScore = async () => {
+  try {
+    const res = await setShootingRangeQualified({
+      id: rangeId.value,
+      qualified: passingScoreForm.value.qualified
+    });
+    
+    if (res.code === 200) {
+      // 更新本地数据
+      if (shootingRangeDetails.value) {
+        shootingRangeDetails.value.qualified = passingScoreForm.value.qualified;
+      }
+      
+      setPassingScoreDialogVisible.value = false;
+      ElMessage.success('设置合格分成功！');
+    } else {
+      ElMessage.error(res.msg || '设置合格分失败');
+    }
+  } catch (error) {
+    ElMessage.error('设置合格分失败');
+  }
 };
 
 const handleAttachmentUpload = async ({ file }) => {
@@ -818,7 +1007,16 @@ const transformOrgTreeData = (nodes) => {
   return (nodes || []).map(node => {
     const transformedNode = { id: `org_${node.id}`, name: node.orgName, type: 'org', children: [] };
     if (node.users) {
-      transformedNode.children.push(...node.users.map(u => ({ id: `user_${u.id}`, originalId: u.id, name: u.name, type: 'user', department: node.orgName })));
+      transformedNode.children.push(...node.users.map(u => ({ 
+        id: `user_${u.id}`, 
+        originalId: u.id, 
+        name: u.name, 
+        type: 'user', 
+        department: node.orgName,
+        avatar: u.avatar,
+        policeNumber: u.policeNumber,
+        phone: u.username || u.phone
+      })));
     }
     if (node.children) {
       transformedNode.children.push(...transformOrgTreeData(node.children));
@@ -832,11 +1030,49 @@ const handleUserSearch = async () => {
     return;
   }
   try {
-    const res = await getUserList({ pageNum: 1, pageSize: 50, param: userSearchKeyword.value.trim() });
-    if (res.code === 200) {
-      searchedUsers.value = res.data.records.map(u => ({ ...u, checked: selectedScopeUsers.value.some(su => su.id === u.id) }));
+    const response = await getUserList({
+      pageNum: 1,
+      pageSize: 50,
+      param: userSearchKeyword.value.trim(),
+      pagination: true
+    });
+
+    if (response.code === 200) {
+      searchedUsers.value = response.data.records.map(user => {
+        let department = user.orgName || user.organizationName || user.deptName || user.department;
+
+        // 如果搜索结果中没有部门信息，尝试从组织树中查找
+        if (!department && orgTreeData.value.length > 0) {
+          const findUserInTree = (nodes) => {
+            for (const node of nodes) {
+              if (node.type === 'user' && node.originalId === user.id) {
+                return node.department;
+              }
+              if (node.children && node.children.length > 0) {
+                const found = findUserInTree(node.children);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+
+          department = findUserInTree(orgTreeData.value);
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          department: department || '未知部门',
+          avatar: user.avatar || '',
+          policeNumber: user.policeNumber || '',
+          phone: user.username || '',
+          checked: selectedScopeUsers.value.some(u => u.id === user.id)
+        };
+      });
     }
-  } catch (e) { ElMessage.error("搜索用户失败"); }
+  } catch (error) {
+    ElMessage.error('搜索用户失败');
+  }
 };
 const handleUserCheck = (user) => {
   if (user.checked) {
@@ -846,7 +1082,16 @@ const handleUserCheck = (user) => {
   }
 };
 const handleOrgTreeCheck = (data, { checkedNodes }) => {
-  selectedScopeUsers.value = checkedNodes.filter(n => n.type === 'user').map(u => ({ id: u.originalId, name: u.name, department: u.department }));
+  const users = checkedNodes.filter(node => node.type === 'user');
+  
+  selectedScopeUsers.value = users.map(user => ({
+    id: user.originalId || user.id,
+    name: user.name,
+    department: user.department,
+    avatar: user.avatar,
+    policeNumber: user.policeNumber,
+    phone: user.phone
+  }));
 };
 const removeSelectedUser = (user) => {
   selectedScopeUsers.value = selectedScopeUsers.value.filter(u => u.id !== user.id);
@@ -953,6 +1198,12 @@ onMounted(() => {
 .stat-value {
   color: #303133;
   font-weight: bold;
+}
+
+.dialog-stat-text {
+  margin: 0 10px;
+  color: #606266;
+  font-size: 14px;
 }
 
 .content-list-container {
@@ -1063,6 +1314,39 @@ onMounted(() => {
   flex-direction: column;
   border-left: 1px solid #e4e7ed;
   padding-left: 20px;
+}
+
+.search-results {
+  height: 100%;
+}
+
+.search-tip {
+  color: #909399;
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+
+.user-item {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-name {
+  font-weight: 500;
+}
+
+.user-dept {
+  color: #909399;
+  font-size: 12px;
 }
 
 .section-header {

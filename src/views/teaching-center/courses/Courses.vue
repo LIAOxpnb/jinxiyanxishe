@@ -31,21 +31,25 @@
             >{{ scope.row.status === 1 ? '已发布' : '未发布' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="courseCategory" label="分类" min-width="100" />
+        <el-table-column prop="courseCategory" label="分类" min-width="100">
+          <template #default="scope">
+            {{ (categoryOptions.find(opt => String(opt.value) === String(scope.row.courseCategory)) || {}).label || scope.row.courseCategory }}
+          </template>
+        </el-table-column>
         <el-table-column prop="scope" label="学习范围" width="120">
             <template #default="scope">
                 {{ scopeMap[scope.row.scope] || '未知' }}
             </template>
         </el-table-column>
-        <el-table-column prop="studentCount" label="学习人数" width="100" />
-        <el-table-column prop="classCount" label="班级" width="80" />
-        <el-table-column prop="creator" label="创建人" width="120" />
+        <el-table-column prop="userCount" label="学习人数" width="100" />
+        <el-table-column prop="clazzCount" label="班级数" width="80" />
+        <el-table-column prop="creatorName" label="创建人" width="120" />
         <el-table-column prop="createTime" label="创建时间" width="160" />
 
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleProvision(scope.row)">课程设置</el-button>
-            <el-button link type="primary" size="small" @click="handleStatistics(scope.row)">统计</el-button>
+            <!-- <el-button link type="primary" size="small" @click="handleStatistics(scope.row)">统计</el-button> -->
             
             <el-dropdown trigger="click" @command="(command) => handleMoreActions(command, scope.row)">
               <span class="el-dropdown-link">
@@ -69,10 +73,17 @@
         </el-table-column>
       </el-table>
 
+      <div v-if="selectedCourses.length > 0" style="margin: 10px 0;">
+        <el-button 
+          type="danger" 
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedCourses.length }})
+        </el-button>
+      </div>
+
       <div class="table-footer">
-        <div>
-          <el-button @click="handleBatchDelete" :disabled="selectedCourses.length === 0">批量删除</el-button>
-        </div>
+        <div></div>
         
         <el-pagination
           v-model:current-page="pagination.page"
@@ -115,7 +126,7 @@ const selectedCourses = ref([]); // 表格中选中的行
 // 筛选参数
 const filterParams = reactive({
   name: '',
-  creator: '',
+  creatorName : '',
   scope: '',
   courseCategory: '',
   status: '',
@@ -140,7 +151,7 @@ const scopeMap = { // 用于在表格中显示学习范围的文本
 // FilterBar 的配置
 const courseFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '课程名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
+  { type: 'input', model: 'creatorName ', placeholder: '创建人' },
   { 
     type: 'select', 
     model: 'scope', 
@@ -297,13 +308,37 @@ const handleSelectionChange = (selection) => {
 };
 
 const handleBatchDelete = () => {
-  ElMessageBox.confirm(`确定要删除选中的 ${selectedCourses.value.length} 项课程吗？`, '批量删除', { type: 'warning' })
-    .then(async () => {
-      const ids = selectedCourses.value.map(item => item.id);
-      await deleteCourse(ids); // 【API】批量删除课程
-      ElMessage.success('批量删除成功！');
+  if (selectedCourses.value.length === 0) {
+    ElMessage.warning('请先选择要删除的课程');
+    return;
+  }
+
+  ElMessageBox.confirm(
+    `确定要删除选中的 ${selectedCourses.value.length} 项课程吗？此操作不可恢复！`, 
+    '批量删除确认', 
+    { 
+      type: 'warning', 
+      confirmButtonText: '确定删除', 
+      cancelButtonText: '取消' 
+    }
+  ).then(async () => {
+    try {
+      // 收集所有要删除的课程ID
+      const deletePromises = selectedCourses.value.map(course => deleteCourse([course.id]));
+      
+      // 并发执行所有删除操作
+      await Promise.all(deletePromises);
+      
+      ElMessage.success(`成功删除 ${selectedCourses.value.length} 项课程！`);
+      selectedCourses.value = [];
       fetchCourses();
-    }).catch(() => {});
+    } catch (error) {
+      console.error('批量删除失败:', error);
+      ElMessage.error('批量删除失败，请重试');
+    }
+  }).catch(() => {
+    // 用户取消操作
+  });
 };
 
 const handleMoreActions = (command, row) => {

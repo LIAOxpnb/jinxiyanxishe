@@ -41,24 +41,21 @@
 
           <!-- 统计信息 -->
           <div class="stats">
-            <span class="stat-item">{{ classItem.studentCount }} 学员</span>
+            <span class="stat-item">{{ classItem.userCount }} 学员</span>
             <span class="stat-item">{{ classItem.courseCount }} 课程</span>
-            <span class="stat-item">{{ classItem.practiceCount }} 练习</span>
+            <span class="stat-item">{{ classItem.examCount }} 练习</span>
             <span class="stat-item">{{ classItem.examCount }} 考试</span>
-            <span class="stat-item">{{ classItem.rangeCount }} 靶场</span>
+            <span class="stat-item">{{ classItem.shootingRangeCount }} 靶场</span>
           </div>
 
           <!-- 操作按钮 -->
           <div class="class-actions">
-            <!-- 只在班级未到期时显示班级设置和成员管理按钮 -->
-            <template v-if="classItem.clazzStatus !== 2">
-              <el-button size="small" @click="handleClassSettings(classItem)">
-                班级设置
-              </el-button>
-              <el-button size="small" @click="handleMemberManage(classItem)">
-                成员管理
-              </el-button>
-            </template>
+            <el-button size="small" @click="handleClassSettings(classItem)">
+              班级设置
+            </el-button>
+            <el-button size="small" @click="handleMemberManage(classItem)">
+              成员管理
+            </el-button>
             <el-dropdown @command="(command) => handleMoreActions(command, classItem)">
               <el-button size="small">
                 <el-icon><MoreFilled /></el-icon>
@@ -115,19 +112,19 @@
         <el-form-item v-if="formData.studyDate === 1" label="开始时间" prop="startTime">
           <el-date-picker
             v-model="formData.startTime"
-            type="datetime"
-            placeholder="选择开始时间"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
+            type="date"
+            placeholder="选择开始日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
           />
         </el-form-item>
         <el-form-item v-if="formData.studyDate === 1" label="结束时间" prop="endTime">
           <el-date-picker
             v-model="formData.endTime"
-            type="datetime"
-            placeholder="选择结束时间"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
+            type="date"
+            placeholder="选择结束日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
           />
         </el-form-item>
       </el-form>
@@ -320,12 +317,13 @@ const handleMoreActions = (command, classItem) => {
 // 处理编辑
 const handleEdit = (classItem) => {
   isEdit.value = true;
+  
   Object.assign(formData, {
     id: classItem.id,
     name: classItem.name,
     studyDate: classItem.studyDate,
-    startTime: classItem.startTime,
-    endTime: classItem.endTime
+    startTime: classItem.startTime || '',
+    endTime: classItem.endTime || ''
   });
   dialogVisible.value = true;
 };

@@ -17,7 +17,7 @@
       <el-table-column prop="duration" label="时长" />
       <el-table-column prop="category" label="分类" />
       <el-table-column prop="group" label="课件分组" />
-      <el-table-column prop="creator" label="创建人" />
+      <el-table-column prop="creatorName" label="创建人" />
       <el-table-column prop="createTime" label="创建时间" />
     </el-table>
     <div class="dialog-footer-bar">
@@ -40,8 +40,12 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue';
 import FilterBar from '@/components/common/FilterBar.vue';
-import { getCoursewareList } from '../../../api/teaching-center/CoursewareManagement';
+import { getCoursewareList, getCoursewareGroupList } from '../../../api/teaching-center/CoursewareManagement';
 import { getDictByType } from '../../../api/system-management/dictionary.js';
+
+const props = defineProps({
+  currentCourseId: [String, Number]
+});
 
 const loading = ref(true);
 const tableData = ref([]);
@@ -50,45 +54,38 @@ const filters = ref({});
 // 【已添加】用于存储勾选的行
 const selectedItems = ref([]);
 
-// 【已添加】处理勾选变化的函数
-const handleSelectionChange = (selection) => {
-  selectedItems.value = selection;
-};
-
-// 【已添加】将 selectedItems 暴露给父组件
-defineExpose({
-  selectedItems,
-});
-
-
 const categoryOptions = ref([]);
 const groupOptions = ref([]);
 const fileTypeOptions = ref([]);
+// 用于存储分类和课件组的映射关系
+const categoryMap = ref({});
+const groupMap = ref({});
 const coursewareFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '课件名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'coursewareCategory', placeholder: '分类', options: categoryOptions },
   { type: 'select', model: 'groupId', placeholder: '课件组', options: groupOptions },
   { type: 'select', model: 'fileType', placeholder: '文件类型', options: fileTypeOptions },
 ]);
 
-const handleFilter = (data) => {
-  filters.value = data;
-  pagination.page = 1;
-  fetchData();
-};
-
+// 定义 fetchData 函数
 const fetchData = async () => {
   loading.value = true;
   try {
     const params = { 
         ...filters.value, 
         page: pagination.page, 
-        size: pagination.size 
+        size: pagination.size,
+        currentCourseId: props.currentCourseId // 传入当前课程ID用于过滤已添加的课件
     };
     const res = await getCoursewareList(params);
     if (res.code === 200) {
-      tableData.value = res.data.records || [];
+      // 处理数据，将ID转换为名称
+      tableData.value = (res.data.records || []).map(item => ({
+        ...item,
+        category: categoryMap.value[item.coursewareCategory] || item.coursewareCategory || '-',
+        group: groupMap.value[item.groupId] || '-'
+      }));
       pagination.total = res.data.total || 0;
     }
   } finally {
@@ -96,14 +93,57 @@ const fetchData = async () => {
   }
 };
 
-onMounted(() => {
-  getDictByType('courseware_category').then(res => {
-    categoryOptions.value = res.data.map(d => ({ label: d.dictLabel, value: d.dictValue }));
-  });
-  getDictByType('file_type').then(res => {
-    fileTypeOptions.value = res.data.map(d => ({ label: d.dictLabel, value: d.dictValue }));
-  });
+// 【已添加】处理勾选变化的函数
+const handleSelectionChange = (selection) => {
+  selectedItems.value = selection;
+};
+
+const handleFilter = (data) => {
+  filters.value = data;
+  pagination.page = 1;
   fetchData();
+};
+
+// 【已添加】将 selectedItems 和 fetchData 暴露给父组件
+defineExpose({
+  selectedItems,
+  fetchData
+});
+
+onMounted(async () => {
+  // 加载字典和分组数据
+  try {
+    const [categoryRes, fileTypeRes, groupRes] = await Promise.all([
+      getDictByType('courseware_category'),
+      getDictByType('file_type'),
+      getCoursewareGroupList()
+    ]);
+    
+    if (categoryRes.data) {
+      categoryOptions.value = categoryRes.data.map(d => ({ label: d.dictLabel, value: d.dictValue }));
+      categoryMap.value = categoryRes.data.reduce((map, d) => {
+        map[d.dictValue] = d.dictLabel;
+        return map;
+      }, {});
+    }
+    
+    if (fileTypeRes.data) {
+      fileTypeOptions.value = fileTypeRes.data.map(d => ({ label: d.dictLabel, value: d.dictValue }));
+    }
+    
+    if (groupRes.code === 200 && groupRes.data) {
+      groupOptions.value = groupRes.data.map(group => ({ label: group.name, value: group.id }));
+      groupMap.value = groupRes.data.reduce((map, group) => {
+        map[group.id] = group.name;
+        return map;
+      }, {});
+    }
+  } catch (error) {
+    console.error('加载字典数据失败:', error);
+  }
+  
+  // 不在这里自动调用 fetchData，等待父组件主动调用
+  // fetchData();
 });
 </script>
 

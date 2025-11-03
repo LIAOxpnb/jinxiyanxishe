@@ -17,6 +17,15 @@ export function getOrgTree(data) {
 }
 
 /**
+ * @description 获取全组织树
+ * @param {object} data - 请求参数
+ * @param {boolean} data.personnel - 是否包含人员
+ */
+export function getAllOrgTree(data) {
+  return request.post('/admin/organization/allTree', data);
+}
+
+/**
  * @description 获取组织详情
  * @param {number} id - 组织ID
  */
