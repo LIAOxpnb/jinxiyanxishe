@@ -12,10 +12,10 @@
       <div class="result-content">
         <div class="left-panel">
           <el-descriptions title="练习信息" :column="1" border>
-            <el-descriptions-item label="最终得分">
+            <!-- <el-descriptions-item label="最终得分">
               <span style="color: #409eff; font-weight: bold; font-size: 16px;">{{ recordDetail.score }}</span>
-            </el-descriptions-item>
-            <el-descriptions-item label="练习总分">{{ recordDetail.practice?.totalScore }}</el-descriptions-item>
+            </el-descriptions-item> -->
+            <!-- <el-descriptions-item label="练习总分">{{ recordDetail.practice?.totalScore }}</el-descriptions-item> -->
             <el-descriptions-item label="提交时间">{{ recordDetail.createTime }}</el-descriptions-item>
           </el-descriptions>
           <div class="question-nav">

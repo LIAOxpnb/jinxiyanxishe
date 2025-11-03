@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <el-icon :size="32" color="#fff" class="header-icon"><Collection /></el-icon>
-      <h1>随堂练习</h1>
+      <h1 style="color: #3370FF;">随堂练习</h1>
     </div>
 
     <div class="main-content">
@@ -12,9 +12,9 @@
         @filter="handleFilter"
       />
 
-      <div class="remark-bar">
+      <!-- <div class="remark-bar">
         <span>【备注】练习需批阅，已批阅的显示分数，未批阅的显示待批阅</span>
-      </div>
+      </div> -->
 
       <el-table :data="tableData" v-loading="loading" style="width: 100%" class="practice-table">
         <el-table-column prop="name" label="标题" min-width="250">
@@ -214,7 +214,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   padding: 24px;
-  min-height: 140px;
+  min-height: 150px;
   background-image: url('@/assets/img/u4247.png');
   background-size: cover;
   background-position: center;

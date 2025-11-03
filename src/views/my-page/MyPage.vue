@@ -144,7 +144,7 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="我开的课" name="myTaughtCourses">
+      <el-tab-pane v-if="isTeacher" label="我开的课" name="myTaughtCourses">
         <div v-loading="loading.myTaughtCourses">
           <div v-if="myTaughtCourses.length > 0" class="course-grid">
             <el-card
@@ -274,6 +274,7 @@ const myCertificates = ref([]);
 const myTaughtCourses = ref([]);
 const userProfile = reactive({ name: '', orgName: '', avatar: '' });
 const userBadges = ref([]);
+const isTeacher = ref(false); // 是否为教师
 const certificateDialogVisible = ref(false);
 const currentCertificate = reactive({ 
   url: '', 
@@ -448,6 +449,18 @@ const fetchUserProfile = async () => {
   }
 };
 
+// 获取教师状态
+const fetchTeacherStatus = async () => {
+  try {
+    const res = await getInfo();
+    if (res?.data?.teacher !== undefined) {
+      isTeacher.value = res.data.teacher !== 0;
+    }
+  } catch (e) {
+    console.warn('获取教师状态失败:', e);
+  }
+};
+
 // 我开的课：仅加载当前登录讲师创建的课程
 const fetchMyTaughtCourses = async () => {
   if (myTaughtCourses.value.length > 0) return;
@@ -541,12 +554,21 @@ const handleTabClick = (tab) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  // 先获取教师状态
+  await fetchTeacherStatus();
+  
   const tabFromQuery = route.query.tab;
   const validTabs = ['personalHome', 'myClasses', 'myCertificates', 'myTaughtCourses'];
   if (tabFromQuery && validTabs.includes(tabFromQuery)) {
     activeTab.value = tabFromQuery;
   }
+  
+  // 如果默认tab是"我开的课"但用户不是教师，则切换到个人首页
+  if (activeTab.value === 'myTaughtCourses' && !isTeacher.value) {
+    activeTab.value = 'personalHome';
+  }
+  
   if (activeTab.value === 'myClasses') {
     fetchMyClasses();
   } else if (activeTab.value === 'myCertificates') {
@@ -615,7 +637,7 @@ watch(() => route.query.tab, (newTab) => {
 }
 /* 顶部个人信息横幅 */
 .profile-hero {
-  height: 140px;
+  height: 160px;
   display: flex;
   align-items: center;
   gap: 16px;

@@ -115,8 +115,8 @@ const router = useRouter();
 const features = ref([
   { title: '金析课堂', icon: School, routeName: 'Courses' },
   { title: '随堂练习', icon: Edit, routeName: 'Practice' },
-  { title: '实战靶场', icon: TrendCharts, routeName: 'ShootingRange' },
   { title: '正式考试', icon: Reading, routeName: 'Student-Exams' },
+  { title: '实战靶场', icon: TrendCharts, routeName: 'ShootingRange' },
   { title: '我的班级', icon: User, routeName: 'Classes' }
 ]);
 

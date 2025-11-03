@@ -9,7 +9,7 @@
               ref="videoPlayerRef"
               class="video-js vjs-big-play-centered"
               controls
-              preload="auto"
+              preload="metadata"
             >
               <source :src="currentCourseware.url" :type="currentCourseware.mimeType" />
               您的浏览器不支持视频播放
@@ -304,10 +304,10 @@
       </el-aside>
     </el-container>
     
-    <div class="details-footer">
+    <!-- <div class="details-footer">
       <span>重庆市公安局经侦总队</span>
       <span>产品说明文档</span>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -631,10 +631,24 @@ const initVideoPlayer = () => {
   nextTick(() => {
     if (videoPlayerRef.value && currentCourseware.type === 'video') {
       player.value = videojs(videoPlayerRef.value, {
-        controls: true, autoplay: false, preload: 'auto', fluid: true,
-        playbackRates: [0.5, 1, 1.5, 2], language: 'zh-CN',
+        controls: true, 
+        autoplay: false, 
+        preload: 'metadata', 
+        fluid: true,
+        playbackRates: [0.5, 1, 1.5, 2], 
+        language: 'zh-CN',
         sources: [{ src: currentCourseware.url, type: currentCourseware.mimeType }],
       });
+      
+      // 监听 loadedmetadata 事件，在视频元数据加载后捕获第一帧作为封面
+      player.value.on('loadedmetadata', () => {
+        // 确保视频已经有了时长信息
+        if (player.value.duration() > 0) {
+          // 设置当前时间为0.1秒（避免全黑帧）
+          player.value.currentTime(0.1);
+        }
+      });
+      
       player.value.on('play', () => {
         lastHeartbeatTime = Date.now();
         startHeartbeat();

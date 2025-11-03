@@ -7,7 +7,7 @@
       <div class="banner-content">
         <h1 class="banner-title">
           <el-icon><Compass /></el-icon>
-          <span>金榜课堂</span>
+          <span>金析课堂</span>
         </h1>
       </div>
     </div>
@@ -220,12 +220,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 样式与之前版本相同，无需修改 */
 .classroom-page {
   background-color: #f5f7fa;
 }
 .banner {
-  height: 130px;
+  height: 200px;
   background-blend-mode: overlay;
   background-size: cover;
   background-position: center;
@@ -234,7 +233,7 @@ onMounted(() => {
   padding: 0 5%;
 }
 .banner-title {
-  color: black;
+  color: #3370FF;
   font-size: 32px;
   font-weight: 600;
   text-shadow: 0 2px 4px rgba(0,0,0,0.3);

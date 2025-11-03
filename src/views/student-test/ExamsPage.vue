@@ -306,11 +306,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 24px;
-  min-height: 140px;
+  min-height: 150px;
   background-image: url('/src/assets/img/u4045.png');
   background-size: cover;
   background-position: center;
-  border-radius: 8px 8px 0 0;
+  /* border-radius: 8px 8px 0 0; */
 }
 .header-icon {
   background-color: #fff;

@@ -22,7 +22,7 @@
             :class="{ active: filters.shootingRangeType === 1 }" 
             @click="selectTab(1)"
           >比武</span>
-          <span class="tab-item">我的比赛</span>
+          <!-- <span class="tab-item">我的比赛</span> -->
         </div>
         <div class="search-and-filter">
           <el-input v-model="filters.name" placeholder="搜索" class="search-input" @keyup.enter="handleSearch">
@@ -141,7 +141,7 @@ onMounted(() => {
 
 <style scoped>
 .shooting-range-page { background-color: #f5f7fa; min-height: 100%; }
-.banner { height: 150px; background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%); display: flex; align-items: center; padding: 0 5%; }
+.banner { height: 200px; display: flex; align-items: center; padding: 0 5%;background-image: url('@/assets/img/u4188.png'); }
 .banner h1 { color: white; font-size: 32px; display: flex; align-items: center; gap: 12px; }
 .main-content { padding: 24px; }
 .filter-bar { display: flex; justify-content: space-between; align-items: center; background-color: #fff; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
