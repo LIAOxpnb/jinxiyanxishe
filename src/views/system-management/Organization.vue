@@ -14,7 +14,7 @@
       </el-dropdown>
     </div>
     
-    <div class="table-note">【备注】父部门数据包含子部门</div>
+    <!-- <div class="table-note">【备注】父部门数据包含子部门</div> -->
 
     <el-table
       :data="orgTreeData"

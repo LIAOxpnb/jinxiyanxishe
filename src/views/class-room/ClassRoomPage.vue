@@ -65,8 +65,8 @@
             <div class="course-info">
               <div class="course-tags">
                 <el-tag v-if="course.mustLearn" size="small" type="danger" style="margin-right: 5px;">必学</el-tag>
-                <el-tag v-if="course.type === '录播课'" size="small" type="success">{{ course.type }}</el-tag>
-                <el-tag v-if="course.isNew" size="small" type="warning">知识扩充</el-tag>
+                <!-- <el-tag v-if="course.type === '录播课'" size="small" type="success">{{ course.type }}</el-tag> -->
+                <!-- <el-tag v-if="course.isNew" size="small" type="warning">知识扩充</el-tag> -->
               </div>
               <h3 class="course-title">{{ course.name }}</h3>
               <div class="course-meta">

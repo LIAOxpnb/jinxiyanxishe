@@ -31,11 +31,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="questionCount" label="试题数" width="120" />
-        <el-table-column prop="score" label="最高分/总分" width="150">
+        <!-- <el-table-column prop="score" label="最高分/总分" width="150">
           <template #default="scope">
             {{ `${scope.row.highestScore || '-'}/${scope.row.totalScore || 100}` }}
           </template>
-        </el-table-column>
+        </el-table-column> -->
         <el-table-column prop="relatedCourseName" label="关联课程" width="200" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">

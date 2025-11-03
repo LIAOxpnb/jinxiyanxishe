@@ -1,6 +1,6 @@
 <template>
   <el-card class="question-editor-card">
-    <template #header>
+    <template #header v-if="!hideHeader">
       <div class="card-header">
         <span class="card-title">【{{ questionTypeName }}】第 {{ index + 1 }} 题</span>
         <div class="card-actions">
@@ -157,6 +157,7 @@ const fileList = ref([]);
 const props = defineProps({
   modelValue: { type: Object, required: true },
   index: { type: Number, required: true },
+  hideHeader: { type: Boolean, default: false }, // 是否隐藏头部
 });
 const emit = defineEmits(['update:modelValue', 'delete', 'copy']);
 

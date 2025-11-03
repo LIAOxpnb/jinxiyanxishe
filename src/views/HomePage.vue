@@ -117,11 +117,14 @@ const features = ref([
   { title: '随堂练习', icon: Edit, routeName: 'Practice' },
   { title: '正式考试', icon: Reading, routeName: 'Student-Exams' },
   { title: '实战靶场', icon: TrendCharts, routeName: 'ShootingRange' },
-  { title: '我的班级', icon: User, routeName: 'Classes' }
+  { title: '我的班级', icon: User, routeName: 'MyClasses' }
 ]);
 
 const navigateTo = (routeName) => {
-  if (routeName) {
+  if (routeName === 'MyClasses') {
+    // 跳转到我的页面，并选中"我的班级"标签页
+    router.push({ path: '/my-page', query: { tab: 'myClasses' } });
+  } else if (routeName) {
     router.push({ name: routeName });
   } else {
     ElMessage.warning('功能正在开发中');

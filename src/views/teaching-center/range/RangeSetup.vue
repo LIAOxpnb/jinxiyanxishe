@@ -42,8 +42,15 @@
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
-                  <el-button type="success" @click="saveCluesAndQuestions" style="margin-left: auto;">保存左侧内容</el-button>
-                  <div class="header-remark">【备注】操作后请点击保存</div>
+                  <span v-if="lastSaveTime" class="save-status">
+                    <el-icon class="save-icon"><Check /></el-icon>
+                    已自动保存 {{ formatSaveTime(lastSaveTime) }}
+                  </span>
+                  <span v-else-if="hasUnsavedChanges" class="unsaved-status">
+                    <el-icon class="unsaved-icon"><Loading /></el-icon>
+                    保存中...
+                  </span>
+                  <el-button type="success" @click="saveCluesAndQuestions" style="margin-left: auto;">手动保存</el-button>
                 </div>
               </div>
             </template>
@@ -72,15 +79,39 @@
               <el-divider />
 
               <div class="section-title">靶场试题</div>
-              <QuestionEditor
-                v-for="(question, index) in questionList"
-                :key="question.uid"
-                :index="index"
-                v-model="questionList[index]"
-                @delete="handleDeleteQuestion(index)"
-                @copy="copyQuestion(index)"
-              />
-              <el-empty v-if="questionList.length === 0" description="请从“新增内容”下拉菜单中添加试题" :image-size="80" />
+              <div v-for="(question, index) in questionList" :key="question.uid" class="item-card">
+                <div class="card-header">
+                  <div class="header-left">
+                    <span class="item-index">【{{ getQuestionTypeName(question.questionType) }}】第 {{ index + 1 }} 题</span>
+                    <div class="item-score">
+                      <span>分数:</span>
+                      <el-input-number v-model="question.score" :min="0" :max="100" controls-position="right" size="small" />
+                    </div>
+                  </div>
+                  <div class="item-actions">
+                    <el-button :icon="Top" circle plain size="small" @click="moveQuestionUp(index)" :disabled="index === 0" title="上移" />
+                    <el-button :icon="Bottom" circle plain size="small" @click="moveQuestionDown(index)" :disabled="index === questionList.length - 1" title="下移" />
+                    <el-button :icon="Edit" circle plain size="small" @click="toggleQuestionEditor(index)" :title="question.showEditor ? '收起' : '展开'" />
+                    <el-button :icon="CopyDocument" circle plain size="small" @click="copyQuestion(index)" title="复制" />
+                    <el-button :icon="Delete" circle plain type="danger" size="small" @click="handleDeleteQuestion(index)" title="删除" />
+                  </div>
+                </div>
+                <div class="item-body">
+                  <QuestionEditor
+                    v-if="question.showEditor"
+                    :index="index"
+                    v-model="questionList[index]"
+                    :hide-header="true"
+                    @delete="handleDeleteQuestion(index)"
+                    @copy="copyQuestion(index)"
+                    style="border: none; box-shadow: none;"
+                  />
+                  <div v-else class="question-preview">
+                    <div class="question-title" v-html="question.title || '(未填写题目内容)'"></div>
+                  </div>
+                </div>
+              </div>
+              <el-empty v-if="questionList.length === 0" description="请从【新增内容】下拉菜单中添加试题" :image-size="80" />
             </div>
           </el-card>
         </div>
@@ -124,11 +155,20 @@
               <span>证书</span>
             </template>
             <div class="certificate-section">
-                <div class="form-hint">【备注】初始状态人员显示为未颁定</div>
+                <!-- <div class="form-hint">【备注】初始状态人员显示为未颁定</div> -->
                 <div>暂无证书，请联系管理员配置</div>
                 <el-button disabled>证书名称</el-button>
             </div>
           </el-card>
+
+          <div class="action-buttons">
+            <el-button 
+              :type="shootingRangeDetails.status === 1 ? 'danger' : 'primary'" 
+              @click="togglePublishStatus"
+            >
+              {{ shootingRangeDetails.status === 1 ? '取消发布' : '发布' }}
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -448,15 +488,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, shallowRef } from 'vue';
+import { ref, onMounted, computed, watch, shallowRef, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList, setShootingRangeQualified } from '@/api/teaching-center/ShootingRange.js';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList, setShootingRangeQualified, updateShootingRangeStatus } from '@/api/teaching-center/ShootingRange.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
 import { getOrgTree } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
-import { Edit, ArrowDown, Delete, Document, Top, Bottom, Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
+import { Edit, ArrowDown, Delete, Document, Top, Bottom, Search, User, OfficeBuilding, Close, CopyDocument, Check, Loading } from '@element-plus/icons-vue';
 import QuestionEditor from '@/components/question/QuestionEditor.vue';
 import { v4 as uuidv4 } from 'uuid';
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
@@ -503,6 +543,12 @@ const clueEditorVisible = ref(false);
 const editorRef = shallowRef(null);
 const clueForm = ref(null);
 const attachmentList = ref([]);
+
+// 自动保存相关状态
+const STORAGE_KEY_PREFIX = 'shooting_range_draft_';
+const lastSaveTime = ref(null);
+const hasUnsavedChanges = ref(false);
+let saveTimer = null;
 
 // 批量设置分数相关
 const batchSetScoreDialogVisible = ref(false);
@@ -583,6 +629,132 @@ watch(() => editForm.value?.duration, (newVal) => {
   }
 });
 
+// 自动保存功能
+const getStorageKey = () => `${STORAGE_KEY_PREFIX}${rangeId.value}`;
+
+const saveDraft = () => {
+  try {
+    if (!rangeId.value) return;
+    
+    const draftData = {
+      clues: clues.value,
+      questionList: questionList.value,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(getStorageKey(), JSON.stringify(draftData));
+    lastSaveTime.value = new Date();
+    hasUnsavedChanges.value = false;
+    console.log('靶场数据已自动保存到本地');
+  } catch (error) {
+    console.error('保存草稿失败:', error);
+  }
+};
+
+const loadDraft = () => {
+  try {
+    if (!rangeId.value) return;
+    
+    const savedData = localStorage.getItem(getStorageKey());
+    if (savedData) {
+      const draftData = JSON.parse(savedData);
+      const savedTime = new Date(draftData.timestamp);
+      const timeDiff = Date.now() - draftData.timestamp;
+      
+      // 如果暂存数据在24小时内，提示恢复
+      if (timeDiff < 24 * 60 * 60 * 1000 && (draftData.clues?.length > 0 || draftData.questionList?.length > 0)) {
+        ElMessageBox.confirm(
+          `检测到未完成的靶场编辑数据（${formatSaveTime(savedTime)}），是否恢复？`,
+          '发现暂存数据',
+          {
+            confirmButtonText: '恢复数据',
+            cancelButtonText: '放弃暂存',
+            type: 'info',
+          }
+        ).then(() => {
+          if (draftData.clues) clues.value = draftData.clues;
+          if (draftData.questionList) questionList.value = draftData.questionList;
+          lastSaveTime.value = savedTime;
+          hasUnsavedChanges.value = false;
+          ElMessage.success('已恢复暂存数据');
+        }).catch(() => {
+          clearDraft();
+        });
+      }
+    }
+  } catch (error) {
+    console.error('加载草稿失败:', error);
+    clearDraft();
+  }
+};
+
+const clearDraft = () => {
+  if (!rangeId.value) return;
+  localStorage.removeItem(getStorageKey());
+  lastSaveTime.value = null;
+  hasUnsavedChanges.value = false;
+};
+
+// 防抖保存
+const debouncedSave = () => {
+  hasUnsavedChanges.value = true;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  saveTimer = setTimeout(() => {
+    saveDraft();
+  }, 2000); // 2秒后自动保存
+};
+
+// 格式化保存时间
+const formatSaveTime = (time) => {
+  if (!time) return '';
+  const now = new Date();
+  const diff = now - time;
+  
+  if (diff < 60000) {
+    return '刚刚';
+  } else if (diff < 3600000) {
+    return `${Math.floor(diff / 60000)}分钟前`;
+  } else {
+    return time.toLocaleTimeString('zh-CN', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  }
+};
+
+// 监听数据变化，自动保存
+watch(
+  [clues, questionList],
+  () => {
+    debouncedSave();
+  },
+  { deep: true }
+);
+
+// 浏览器刷新或关闭时的提醒
+const handleBeforeUnload = (event) => {
+  if (hasUnsavedChanges.value) {
+    const message = '您有未保存的数据，建议手动保存后再离开';
+    event.preventDefault();
+    event.returnValue = message;
+    saveDraft();
+    return message;
+  }
+};
+
+// 获取题目类型名称
+const getQuestionTypeName = (type) => {
+  const typeMap = {
+    SINGLE_CHOICE: '单选题',
+    MULTIPLE_CHOICE: '多选题',
+    TRUE_FALSE: '判断题',
+    FILL_IN_BLANK: '填空题',
+    ESSAY: '论述题'
+  };
+  return typeMap[type] || type;
+};
+
 const handleClueEditorCreated = (editor) => { editorRef.value = editor; };
 const destroyClueEditor = () => {
   const editor = editorRef.value;
@@ -613,6 +785,7 @@ const transformBackendToFrontend = (backendQuestions = []) => {
       editMode: 'simple',
       options: [],
       answer: null,
+      showEditor: true, // 从后端加载的题目默认展开
     };
 
     try {
@@ -722,6 +895,7 @@ const saveCluesAndQuestions = async () => {
 
     await setClueAndQuestionList(payload);
     ElMessage.success('保存成功！');
+    clearDraft(); // 保存成功后清除暂存
     fetchShootingRangeDetails();
   } catch (error) {
     ElMessage.error('保存失败');
@@ -749,6 +923,7 @@ const createBaseQuestion = (type) => ({
   answer: null,
   editMode: 'simple',
   score: 5,
+  showEditor: true, // 新建题目默认展开
 });
 
 const addQuestion = (type) => {
@@ -760,6 +935,7 @@ const addQuestion = (type) => {
     case 'ESSAY': base.answer = ''; base.options = []; break;
   }
   questionList.value.push(base);
+  debouncedSave();
 };
 
 const addClue = () => {
@@ -810,13 +986,41 @@ const moveClueDown = (index) => {
   }
 };
 
-const handleDeleteQuestion = (index) => { questionList.value.splice(index, 1); };
+const handleDeleteQuestion = (index) => { 
+  questionList.value.splice(index, 1); 
+  debouncedSave();
+};
 
 const copyQuestion = (index) => {
   const originalQuestion = questionList.value[index];
   const copiedQuestion = JSON.parse(JSON.stringify(originalQuestion));
   copiedQuestion.uid = uuidv4();
+  copiedQuestion.showEditor = true; // 默认收起
   questionList.value.splice(index + 1, 0, copiedQuestion);
+  ElMessage.success('复制成功');
+  debouncedSave();
+};
+
+const moveQuestionUp = (index) => {
+  if (index > 0) {
+    [questionList.value[index - 1], questionList.value[index]] = [questionList.value[index], questionList.value[index - 1]];
+    debouncedSave();
+  }
+};
+
+const moveQuestionDown = (index) => {
+  if (index < questionList.value.length - 1) {
+    [questionList.value[index + 1], questionList.value[index]] = [questionList.value[index], questionList.value[index + 1]];
+    debouncedSave();
+  }
+};
+
+const toggleQuestionEditor = (index) => {
+  if (!questionList.value[index].hasOwnProperty('showEditor')) {
+    questionList.value[index].showEditor = true;
+  } else {
+    questionList.value[index].showEditor = !questionList.value[index].showEditor;
+  }
 };
 
 // 批量设置分数和设置合格分相关方法
@@ -1135,15 +1339,65 @@ const clearSelectedClasses = () => {
 };
 const confirmSelectedClasses = () => { classSelectionDialogVisible.value = false; };
 
+// 切换发布状态
+const togglePublishStatus = async () => {
+  const currentStatus = shootingRangeDetails.value.status;
+  const newStatus = currentStatus === 1 ? 0 : 1;
+  const actionText = newStatus === 1 ? '发布' : '取消发布';
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要${actionText}该靶场吗？`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+    
+    const res = await updateShootingRangeStatus({
+      id: rangeId.value,
+      status: newStatus
+    });
+    
+    if (res.code === 200) {
+      shootingRangeDetails.value.status = newStatus;
+      ElMessage.success(`${actionText}成功！`);
+    } else {
+      ElMessage.error(res.msg || `${actionText}失败`);
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(`${actionText}失败`);
+    }
+  }
+};
+
 onMounted(() => {
   rangeId.value = route.params.id;
   if (rangeId.value) {
     fetchShootingRangeDetails();
     fetchCategories();
+    
+    // 监听浏览器刷新或关闭事件
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // 延迟加载暂存数据，确保组件完全加载
+    setTimeout(() => {
+      loadDraft();
+    }, 500);
   } else {
     ElMessage.error('无效的靶场ID');
     loading.value = false;
   }
+});
+
+onBeforeUnmount(() => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  window.removeEventListener('beforeunload', handleBeforeUnload);
 });
 </script>
 
@@ -1226,8 +1480,16 @@ onMounted(() => {
 .item-card .card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
 }
 
 .item-index {
@@ -1236,7 +1498,6 @@ onMounted(() => {
 }
 
 .item-score {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1247,7 +1508,8 @@ onMounted(() => {
 }
 
 .item-actions {
-  margin-left: auto;
+  display: flex;
+  gap: 8px;
 }
 
 .item-body .item-title {
@@ -1278,6 +1540,17 @@ onMounted(() => {
 .certificate-section {
   color: #909399;
   font-size: 14px;
+}
+
+.action-buttons {
+  margin-top: 20px;
+  display: flex;
+}
+
+.action-buttons .el-button {
+  width: 100%;
+  height: 40px;
+  font-size: 16px;
 }
 
 .add-member-dialog,
@@ -1436,5 +1709,52 @@ onMounted(() => {
   color: #909399;
   font-size: 12px;
   margin-left: 5px;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  color: #67c23a;
+  font-size: 12px;
+  margin-left: 16px;
+}
+
+.save-icon {
+  margin-right: 4px;
+}
+
+.unsaved-status {
+  display: flex;
+  align-items: center;
+  color: #e6a23c;
+  font-size: 12px;
+  margin-left: 16px;
+}
+
+.unsaved-icon {
+  margin-right: 4px;
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.question-preview {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  min-height: 50px;
+}
+
+.question-title {
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
 }
 </style>
