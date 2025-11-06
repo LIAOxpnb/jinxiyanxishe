@@ -445,17 +445,25 @@
     <el-dialog v-model="classSelectionDialogVisible" title="选择班级" width="1000px" :close-on-click-modal="false">
         <div class="add-class-dialog">
           <div class="class-list-section">
+            <!-- 标签页切换 -->
+            <div class="class-tabs">
+              <el-radio-group v-model="classTabActive" @change="handleClassTabChange">
+                <el-radio-button label="my">我的班级</el-radio-button>
+                <el-radio-button label="all">全部班级</el-radio-button>
+              </el-radio-group>
+            </div>
+            
             <div class="search-section">
               <el-input v-model="classSearchKeyword" placeholder="班级名称" @input="handleClassSearch" clearable>
                 <template #append><el-button @click="handleClassSearch"><el-icon><Search /></el-icon></el-button></template>
               </el-input>
             </div>
             <div class="class-list-container">
-              <div v-for="clazz in classListData" :key="clazz.id" class="class-item">
-                <el-checkbox v-model="clazz.checked" @change="handleClassCheck(clazz)">
+              <div v-for="clazz in classListData" :key="clazz.id" class="class-item" :class="{ 'disabled-class': clazz.disabled }">
+                <el-checkbox v-model="clazz.checked" @change="handleClassCheck(clazz)" :disabled="clazz.disabled">
                   <div class="class-info">
                     <el-icon class="class-icon"><OfficeBuilding /></el-icon>
-                    <div class="class-details"><span class="class-name">{{ clazz.name }}</span><span class="class-members">({{ clazz.userCount }}人)</span></div>
+                    <div class="class-details"><span class="class-name">{{ clazz.name }}</span><span class="class-members">({{ clazz.userCount }}人)</span><span v-if="clazz.disabled" class="status-tag">已结束</span></div>
                   </div>
                 </el-checkbox>
               </div>
@@ -494,7 +502,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList, setShootingRangeQualified, updateShootingRangeStatus } from '@/api/teaching-center/ShootingRange.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
-import { getOrgTree } from '@/api/system-management/Org.js';
+import { getAllOrgTree } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { Edit, ArrowDown, Delete, Document, Top, Bottom, Search, User, OfficeBuilding, Close, CopyDocument, Check, Loading } from '@element-plus/icons-vue';
 import QuestionEditor from '@/components/question/QuestionEditor.vue';
@@ -538,6 +546,7 @@ const classSearchKeyword = ref('');
 const classCurrentPage = ref(1);
 const classPageSize = ref(10);
 const classTotal = ref(0);
+const classTabActive = ref('my'); // 'my' 或 'all'
 
 const clueEditorVisible = ref(false);
 const editorRef = shallowRef(null);
@@ -765,6 +774,41 @@ const destroyClueEditor = () => {
 
 const goBack = () => router.back();
 
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
 const transformBackendToFrontend = (backendQuestions = []) => {
   const typeMapReverse = {
     '单选': 'SINGLE_CHOICE', '多选': 'MULTIPLE_CHOICE', '判断': 'TRUE_FALSE',
@@ -824,8 +868,25 @@ const fetchShootingRangeDetails = async () => {
     const res = await getShootingRangeDetail({ id: rangeId.value });
     if (res.code === 200 && res.data) {
       shootingRangeDetails.value = res.data;
-      clues.value = (res.data.clues || []).map(c => ({ ...c, uid: uuidv4() }));
-      questionList.value = transformBackendToFrontend(res.data.questions);
+      
+      // 转换线索中的图片
+      clues.value = await Promise.all(
+        (res.data.clues || []).map(async (c) => ({
+          ...c,
+          uid: uuidv4(),
+          title: await convertImagesToPreviewUrls(c.title)
+        }))
+      );
+      
+      // 转换题目
+      const transformedQuestions = transformBackendToFrontend(res.data.questions);
+      questionList.value = await Promise.all(
+        transformedQuestions.map(async (q) => ({
+          ...q,
+          title: await convertImagesToPreviewUrls(q.title),
+          analysisContent: await convertImagesToPreviewUrls(q.analysisContent)
+        }))
+      );
     } else {
       ElMessage.error(res.msg || '获取靶场详情失败');
     }
@@ -1193,6 +1254,39 @@ const submitUpdate = async () => {
 const openUserSelectionDialog = async () => {
   userSelectionDialogVisible.value = true;
   await fetchOrgTree();
+  // 同步已选用户的状态到组织树
+  syncSelectedUsersToTree();
+};
+
+// 新增方法：同步已选用户状态到组织树
+const syncSelectedUsersToTree = () => {
+  if (!orgTreeRef.value || selectedScopeUsers.value.length === 0) return;
+
+  // 收集已选用户的树节点ID
+  const checkedKeys = [];
+  const collectUserNodeIds = (nodes) => {
+    for (const node of nodes) {
+      if (node.type === 'user') {
+        // 检查这个用户是否已被选中
+        if (selectedScopeUsers.value.some(user => user.id === node.originalId)) {
+          checkedKeys.push(node.id); // 使用树节点的ID（user_xxx格式）
+        }
+      }
+      if (node.children && node.children.length > 0) {
+        collectUserNodeIds(node.children);
+      }
+    }
+  };
+
+  collectUserNodeIds(orgTreeData.value);
+
+  // 使用树组件的API设置选中状态
+  setTimeout(() => {
+    if (orgTreeRef.value && checkedKeys.length > 0) {
+      orgTreeRef.value.setCheckedKeys(checkedKeys);
+      console.log('设置树选中状态:', checkedKeys);
+    }
+  }, 100); // 给一点延迟确保DOM已渲染
 };
 const openClassSelectionDialog = async () => {
   classSelectionDialogVisible.value = true;
@@ -1201,11 +1295,19 @@ const openClassSelectionDialog = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const res = await getOrgTree({ personnel: true });
+    const res = await getAllOrgTree({ personnel: true });
     if (res.code === 200) {
       orgTreeData.value = transformOrgTreeData(res.data);
+      // 在组织树加载完成后同步选中状态
+      setTimeout(() => {
+        syncSelectedUsersToTree();
+      }, 200);
+    } else {
+      ElMessage.error(res.msg || '获取组织树失败');
     }
-  } catch (e) { ElMessage.error("获取组织树失败"); }
+  } catch (error) {
+    ElMessage.error('获取组织树失败');
+  }
 };
 const transformOrgTreeData = (nodes) => {
   return (nodes || []).map(node => {
@@ -1312,15 +1414,43 @@ const confirmSelectedUsers = () => { userSelectionDialogVisible.value = false; }
 
 const fetchClassList = async () => {
   try {
-    const res = await getClassList({ page: classCurrentPage.value, size: classPageSize.value, name: classSearchKeyword.value });
+    const res = await getClassList({ 
+      page: classCurrentPage.value, 
+      size: classPageSize.value, 
+      name: classSearchKeyword.value,
+      isMe: classTabActive.value === 'my', // 根据标签页切换 isMe 参数
+      clazzStatus: ''
+    });
     if (res.code === 200) {
-      classListData.value = res.data.records.map(c => ({ ...c, checked: selectedScopeClasses.value.some(s => s.id === c.id) }));
-      classTotal.value = res.data.total;
+      // 将 clazzStatus == 2 的班级设置为禁用状态
+      classListData.value = res.data.records.map(c => ({ 
+        id: c.id,
+        name: c.name,
+        // 后端返回的字段是 clazzUserCount
+        userCount: c.clazzUserCount || c.userCount || 0, 
+        checked: selectedScopeClasses.value.some(s => s.id === c.id),
+        disabled: c.clazzStatus == 2, // 已结束的班级设置为禁用
+        clazzStatus: c.clazzStatus
+      }));
+      classTotal.value = res.data.total || 0;
     }
   } catch (e) { ElMessage.error("获取班级列表失败"); }
 };
-const handleClassSearch = () => { fetchClassList(); };
-const handleClassPageChange = (page) => { classCurrentPage.value = page; fetchClassList(); };
+
+const handleClassSearch = () => { 
+  classCurrentPage.value = 1;
+  fetchClassList(); 
+};
+
+const handleClassPageChange = (page) => { 
+  classCurrentPage.value = page; 
+  fetchClassList(); 
+};
+
+const handleClassTabChange = () => {
+  classCurrentPage.value = 1; // 切换标签页时重置到第一页
+  fetchClassList();
+};
 const handleClassCheck = (clazz) => {
   if (clazz.checked) {
     if (!selectedScopeClasses.value.some(c => c.id === clazz.id)) selectedScopeClasses.value.push(clazz);
@@ -1686,7 +1816,40 @@ onBeforeUnmount(() => {
 .remove-btn { color: #f56c6c; }
 .tree-node, .user-info, .class-info { display: flex; align-items: center; gap: 8px; }
 .user-dept, .class-members { font-size: 12px; color: #909399; }
+.class-tabs {
+  margin-bottom: 16px;
+}
+
+.class-tabs .el-radio-group {
+  width: 100%;
+  display: flex;
+}
+
+.class-tabs .el-radio-button {
+  flex: 1;
+}
+
+.class-tabs .el-radio-button__inner {
+  width: 100%;
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.class-tabs .el-radio-button:first-child .el-radio-button__inner {
+  border-radius: 4px 0 0 4px;
+}
+
+.class-tabs .el-radio-button:last-child .el-radio-button__inner {
+  border-radius: 0 4px 4px 0;
+}
+
 .class-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.class-item { padding: 8px; border-bottom: 1px solid #f0f0f0; }
+.class-item.disabled-class { opacity: 0.6; background-color: #f5f7fa; }
+.class-details { display: flex; align-items: center; gap: 8px; }
+.status-tag { font-size: 12px; color: #909399; background-color: #f0f0f0; padding: 2px 8px; border-radius: 4px; }
 .selected-users-display, .selected-classes-display {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
@@ -1756,5 +1919,17 @@ onBeforeUnmount(() => {
   color: #606266;
   font-size: 14px;
   line-height: 1.5;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.question-title :deep(img),
+.item-title :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
 }
 </style>

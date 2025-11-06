@@ -139,6 +139,13 @@ const loadUserPermissions = () => {
 // 获取用户信息
 const loadUserInfo = async () => {
   try {
+    // 检查是否有 token，没有则不调用接口
+    const token = sessionStorage.getItem('token')
+    if (!token) {
+      console.warn('未登录，跳过获取用户信息')
+      return
+    }
+    
     const res = await getInfo()
     if (res.code === 200 && res.data) {
       userName.value = res.data.name || ''
@@ -218,6 +225,7 @@ const handleLogout = async () => {
   font-size: 13px;
   font-family: 'Microsoft YaHei', sans-serif;
   text-decoration: none;
+  cursor: pointer;
 }
 .nav-item:hover, .router-link-active, .nav-item.active {
   color: #409EFF;
@@ -251,6 +259,7 @@ const handleLogout = async () => {
   font-size: 13px;
   font-family: 'Microsoft YaHei', sans-serif;
   text-decoration: none;
+  cursor: pointer;
 }
 .user-action:hover, .user-action.active, .user-action.router-link-active {
   color: #409EFF;

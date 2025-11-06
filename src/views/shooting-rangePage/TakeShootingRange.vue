@@ -92,6 +92,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Paperclip, Document } from '@element-plus/icons-vue';
 import { getShootingRangeDetail, getShootingRangeClues, getShootingRangeQuestions, submitShootingRangePaper, submitShootingRangeRecord, getShootingRangeResult } from '@/api/shooting-range.js';
+import { saveRecordUseTime, getRecordUseTime } from '@/api/exams.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
 import TakeRangeQuestionCard from '@/components/range/TakeRangeQuestionCard.vue';
 
@@ -111,32 +112,111 @@ const isRangeSubmitted = ref(false); // 是否已交卷
 const isRestoringAnswers = ref(false); // 是否正在恢复答案
 
 let timerInterval = null;
+let saveTimeInterval = null; // 保存时间的定时器
 const remainingSeconds = ref(0);
+const usedSeconds = ref(0); // 已使用的秒数
 const formattedCountdown = computed(() => {
+  // 无时间限制
+  if (remainingSeconds.value === Infinity || remainingSeconds.value === -1) {
+    return '无时间限制';
+  }
+  // 时间已用完
   if (remainingSeconds.value <= 0) return '00:00:00';
+  // 正常倒计时
   const hours = Math.floor(remainingSeconds.value / 3600);
   const minutes = Math.floor((remainingSeconds.value % 3600) / 60);
   const seconds = remainingSeconds.value % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 });
+
 const startTimer = (durationMinutes) => {
+  // 先清除旧的定时器
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  if (saveTimeInterval) {
+    clearInterval(saveTimeInterval);
+    saveTimeInterval = null;
+  }
+  
   if (durationMinutes <= 0 || durationMinutes === -1) {
     remainingSeconds.value = Infinity; // 不限时
     return;
   }
-  remainingSeconds.value = durationMinutes * 60;
+  
+  remainingSeconds.value = Math.floor(durationMinutes * 60);
   timerInterval = setInterval(() => {
     if (remainingSeconds.value > 0 && remainingSeconds.value !== Infinity) {
       remainingSeconds.value--;
+      usedSeconds.value++; // 增加已使用时间
     } else if (remainingSeconds.value === 0) {
       clearInterval(timerInterval);
+      clearInterval(saveTimeInterval);
       ElMessage.warning('时间到，系统将自动提交！');
       submitReport();
     }
   }, 1000);
+  
+  // 每10秒保存一次已使用时间
+  saveTimeInterval = setInterval(() => {
+    saveUsedTime();
+  }, 10000);
+};
+
+// 保存已使用时间
+const saveUsedTime = async () => {
+  if (!rangeRecordId.value || rangeRecordId.value <= 0) {
+    return;
+  }
+  
+  try {
+    await saveRecordUseTime({
+      type: 1, // 0-考试，1-靶场
+      recordId: rangeRecordId.value,
+      useTime: usedSeconds.value // 已使用的秒数
+    });
+  } catch (error) {
+    // 静默处理错误
+    console.error('保存已使用时间失败:', error);
+  }
+};
+
+// 获取已使用时间
+const getUsedTime = async () => {
+  if (!rangeRecordId.value || rangeRecordId.value <= 0) {
+    return 0;
+  }
+  
+  try {
+    const res = await getRecordUseTime({
+      type: 1, // 0-考试，1-靶场
+      recordId: rangeRecordId.value
+    });
+    
+    if (res.code === 200 && res.data !== undefined && res.data !== null) {
+      // 如果返回的是数字，直接返回
+      if (typeof res.data === 'number') {
+        return res.data;
+      }
+      // 如果返回的是对象，尝试获取时间字段
+      if (typeof res.data === 'object') {
+        return res.data.useTime || res.data.time || 0;
+      }
+    }
+  } catch (error) {
+    console.error('获取已使用时间失败:', error);
+  }
+  
+  return 0;
 };
 onBeforeUnmount(() => {
   if (timerInterval) clearInterval(timerInterval);
+  if (saveTimeInterval) clearInterval(saveTimeInterval);
+  
+  // 组件销毁前保存一次时间
+  saveUsedTime();
+  
   // 移除页面关闭监听
   window.removeEventListener('beforeunload', handleBeforeUnload);
 });
@@ -213,17 +293,28 @@ const saveRangeRecord = async () => {
   try {
     const res = await submitShootingRangeRecord(payload);
     console.log('暂存响应:', res);
+    console.log('响应详情 - code:', res.code, 'msg:', res.msg, 'data:', res.data);
     
-    if (res.code === 200 && res.data && res.data.id) {
-      // 保存返回的暂存记录ID
-      rangeRecordId.value = res.data.id;
-      console.log('暂存成功，记录ID:', rangeRecordId.value);
+    if (res.code === 200) {
+      // 检查是否有返回的记录ID
+      if (res.data && res.data.id) {
+        // 保存返回的暂存记录ID
+        rangeRecordId.value = res.data.id;
+        console.log('暂存成功，记录ID:', rangeRecordId.value);
+      } else {
+        console.warn('暂存接口返回成功但没有记录ID，响应data:', res.data);
+        // 某些情况下后端可能返回200但没有data.id，这时不抛出错误
+        // 因为数据可能已经保存成功
+      }
     } else {
       console.error('暂存失败，响应:', res);
-      throw new Error(res.msg || '暂存失败');
+      const errorMsg = res.msg || '暂存失败';
+      console.error('错误信息:', errorMsg);
+      throw new Error(errorMsg);
     }
   } catch (error) {
     console.error('暂存异常:', error);
+    console.error('异常详情:', error.message, error.stack);
     throw error; // 重新抛出错误，让调用方处理
   }
 };
@@ -298,41 +389,33 @@ const confirmSubmit = () => {
 const submitReport = async () => {
   console.log('开始提交报告，rangeRecordId:', rangeRecordId.value);
   
-  // 检查是否有答题记录ID，如果没有，先尝试暂存
-  if (!rangeRecordId.value) {
-    console.log('没有rangeRecordId，尝试先暂存答案');
-    try {
-      // 先尝试暂存一次
-      await saveRangeRecord();
-      
-      // 如果暂存后还是没有ID，则无法提交
-      if (!rangeRecordId.value) {
-        ElMessage.error('无法保存答题记录，请稍后重试');
-        return;
-      }
-    } catch (error) {
-      console.error('暂存失败:', error);
-      ElMessage.error('保存答题记录失败，无法提交');
-      return;
-    }
+  // 提交前先尝试暂存一次（确保最新答案已保存）
+  try {
+    console.log('提交前暂存答案...');
+    await saveRangeRecord();
+    console.log('暂存完成，rangeRecordId:', rangeRecordId.value);
+  } catch (error) {
+    console.error('暂存失败:', error);
+    // 暂存失败也继续提交，因为可能之前已经保存过
+    console.warn('暂存失败但继续提交流程');
   }
+  
+  // 提交前保存一次已使用时间
+  await saveUsedTime();
 
   isRangeSubmitted.value = true; // 标记为已交卷
 
   try {
-    console.log('提交答卷，使用rangeRecordId:', rangeRecordId.value);
-    // 提交时传递答题记录ID
-    const res = await submitShootingRangePaper(rangeRecordId.value);
+    console.log('提交答卷，使用靶场ID:', detail.value.id);
+    // 提交时传递靶场ID（不是答题记录ID）
+    const res = await submitShootingRangePaper(detail.value.id);
     console.log('提交结果:', res);
     
     if (res.code === 200) {
       ElMessage.success('提交成功！');
       
-      // 【备注2】根据靶场类型显示不同结果
-      // 训练模式(shootingRangeType === 0)：直接显示训练结果
-      // 比武模式(shootingRangeType === 1)：显示比武结果
-      // 显示结果时使用靶场ID
-      showResultDialog(detail.value.id);
+      // 提交成功后直接返回靶场详情页,不显示得分弹窗
+      router.push({ name: 'ShootingRangeDetail', params: { id: detail.value.id } });
     } else {
       ElMessage.error(res.msg || '提交失败');
       isRangeSubmitted.value = false;
@@ -512,7 +595,57 @@ onMounted(async () => {
         }
       }
       
-      startTimer(detail.value.duration);
+      // 获取已使用时间并启动计时器
+      console.log('📋 靶场-检查是否需要恢复时间:', {
+        recordId,
+        isRestart,
+        rangeRecordId: rangeRecordId.value,
+        duration: detail.value.duration,
+        condition: recordId && !isRestart && rangeRecordId.value && rangeRecordId.value > 0
+      });
+      
+      if (recordId && !isRestart && rangeRecordId.value && rangeRecordId.value > 0) {
+        console.log('✅ 满足条件，开始获取已使用时间');
+        // 继续答题：获取已使用时间
+        const usedTime = await getUsedTime();
+        usedSeconds.value = usedTime;
+        console.log('⏱️ 已使用时间(秒):', usedTime);
+        
+        // 根据已使用时间调整剩余时间
+        if (detail.value.duration > 0) {
+          const totalSeconds = detail.value.duration * 60;
+          const remainingTime = totalSeconds - usedTime;
+          
+          console.log('⏰ 时间计算:', {
+            总时长秒: totalSeconds,
+            已使用秒: usedTime,
+            剩余秒: remainingTime,
+            剩余分钟: remainingTime / 60
+          });
+          
+          if (remainingTime > 0) {
+            // 使用调整后的时长启动计时器（分钟）
+            startTimer(remainingTime / 60);
+            
+            if (usedTime > 0) {
+              ElMessage.info(`已恢复靶场进度，已用时 ${Math.floor(usedTime / 60)} 分钟`);
+            }
+          } else {
+            // 时间已用完，自动提交
+            ElMessage.warning('靶场时间已用完,系统将自动提交!');
+            await submitReport();
+            loading.value = false;
+            return;
+          }
+        } else {
+          startTimer(detail.value.duration);
+        }
+      } else {
+        // 首次答题或重新答题
+        console.log('🆕 首次答题，从完整时长开始');
+        usedSeconds.value = 0;
+        startTimer(detail.value.duration);
+      }
     }
 
     // 处理线索

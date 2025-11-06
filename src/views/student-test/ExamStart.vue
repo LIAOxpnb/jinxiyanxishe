@@ -46,7 +46,7 @@
           </div>
           <div class="info-item">
             <span>考试时间:</span>
-            <span class="info-value">
+            <span class="info-value" style="white-space: nowrap;">
               <template v-if="examDetail.examDate === 0">不限时</template>
               <template v-else>
                 {{ examDetail.startTime || 'YY-MM-DD HH:mm' }} 至 {{ examDetail.endTime || 'YY-MM-DD HH:mm' }}
@@ -249,7 +249,7 @@ onMounted(() => {
 .card-wrapper {
   /* 4. 移除负边距，让 flex 布局处理居中 */
   width: 90%; /* 使用百分比宽度，并设置最大宽度 */
-  max-width: 800px;
+  max-width: 1000px; /* 增加最大宽度到1000px */
   max-height: 90vh; /* 限制最大高度，确保不超出视口 */
   z-index: 1; /* 确保卡片在背景层之上 */
   margin: 0; /* 移除所有外边距 */
@@ -277,7 +277,7 @@ onMounted(() => {
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* 响应式网格，减小最小宽度以适应窄屏 */
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); /* 增加最小宽度，确保考试时间不换行 */
   gap: 15px 30px; /* 减小间距以节省空间 */
   text-align: left;
   margin-bottom: 30px; /* 减小底部边距 */

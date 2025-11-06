@@ -84,6 +84,13 @@ const handleSave = async () => {
       ElMessage.success('保存成功')
       // 更新原始数据
       originalData.watermark = formData.watermark
+      
+      // 提示用户刷新页面使水印配置生效
+      ElMessage({
+        message: '水印配置已更新，建议刷新页面使其在所有页面生效',
+        type: 'info',
+        duration: 3000
+      })
     } else {
       ElMessage.error(res.msg || '保存失败')
     }

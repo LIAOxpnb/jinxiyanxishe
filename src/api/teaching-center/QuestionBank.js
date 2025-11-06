@@ -1,4 +1,5 @@
-import request from '../../utils/request'; // 1. 路径风格与 user.js 保持一致import request from '../../utils/request';
+import request from '../../utils/request';
+import axios from 'axios';
 
 // --- 题库分组相关接口 ---
 
@@ -115,6 +116,33 @@ export function abandonQuestion(id, abandoned = 1) {
     params: {
       id,
       abandoned
+    }
+  });
+}
+
+/**
+ * 下载试题导入模板
+ */
+export function downloadQuestionTemplate() {
+  const token = sessionStorage.getItem('token');
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
+  
+  return axios.get(`${baseURL}/teacher/question/downloadTemplate`, {
+    responseType: 'blob',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : ''
+    }
+  }).then(response => response.data);
+}
+
+/**
+ * 上传试题模板（批量导入）
+ * @param {FormData} formData - 包含文件和examId的表单数据
+ */
+export function uploadQuestionTemplate(formData) {
+  return request.post('/teacher/question/uploadTemplate', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
     }
   });
 }

@@ -112,7 +112,7 @@ const tableData = ref([]);
 // 筛选字段配置
 const filterFields = [
   {
-    model: 'studentName',
+    model: 'username',
     type: 'input',
     placeholder: '学员姓名',
     defaultValue: ''
@@ -141,7 +141,7 @@ const filterFields = [
 
 // 筛选参数
 const filterParams = reactive({
-  studentName: '',
+  username: '',
   qualified: '',
   status: ''
 });
@@ -167,6 +167,7 @@ const fetchSubmissions = async () => {
   try {
     const payload = {
       shootingRangeId: shootingRangeId.value,
+      username: filterParams.username,
       qualified: filterParams.qualified,
       status: filterParams.status,
       page: pagination.page,
@@ -206,7 +207,7 @@ const handleFilter = (data) => {
 
 const handleReset = () => {
   Object.assign(filterParams, {
-    studentName: '',
+    username: '',
     qualified: '',
     status: ''
   });

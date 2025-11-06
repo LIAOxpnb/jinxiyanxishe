@@ -178,7 +178,7 @@ export function delClazzBind(data) {
  * @returns {Promise} 返回模板文件blob
  */
 export function downloadUserTemplate() {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
   
   return axios.get(`${baseURL}/teacher/clazz/downloadUserTemplate`, {

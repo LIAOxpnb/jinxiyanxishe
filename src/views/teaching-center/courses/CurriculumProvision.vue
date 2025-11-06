@@ -493,7 +493,7 @@ const handleBatchDelete = (chapterId) => {
 const editingState = reactive({ type: null, id: null, text: '' });
 const inputRefs = ref({});
 const setInputRef = (el, type, id) => { if (el) { inputRefs.value[`${type}-${id}`] = el; } };
-const courseDetail = reactive({ id: null, name: '', cover: '', coverPreviewUrl: '', courseCategory: '', creator: '', createTime: '', scope: 0, status: 0, instructorName: '', intro: '', summary: '', chapters: [] });
+const courseDetail = reactive({ id: null, name: '', cover: '', coverPreviewUrl: '', courseCategory: '', creator: '', createTime: '', scope: 0, status: 0, instructorName: '', intro: '', summary: '', canEdit: true, chapters: [] });
 const scopeMap = { 0: '公开课', 1: '指定人员', 2: '指定班级', 3: '指定组织' };
 const categoryMap = ref({});
 const addCoursewareDialogVisible = ref(false);
@@ -552,6 +552,14 @@ const fetchCourseData = async () => {
       });
     });
     await Promise.all(materialPromises);
+    
+    // 检查编辑权限
+    if (courseDetail.canEdit === false) {
+      ElMessageBox.alert('无权限操作', '提示', {
+        confirmButtonText: '知道了',
+        type: 'warning'
+      });
+    }
   } catch (error) {
     console.error(error);
     ElMessage.error('获取课程详情接口异常');

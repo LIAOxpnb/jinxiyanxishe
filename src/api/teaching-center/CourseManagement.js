@@ -137,6 +137,13 @@ export function getSectionMaterials(id) {
 }
 
 /**
+ * 删除小节资料
+ */
+export function deleteSectionMaterial(id) {
+  return request.delete(`/teacher/course/material/${id}`);
+}
+
+/**
  * @description 章节小节保存修改
  * @param {Array<Object>} data - 章节及小节数据
  * @returns {Promise}

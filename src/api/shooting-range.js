@@ -63,7 +63,7 @@ export function submitShootingRangeRecord(data) {
 
 /**
  * @description 交卷
- * @param {string} id - 答题记录ID
+ * @param {string|number} id - 靶场ID（不是答题记录ID）
  * @returns {Promise}
  */
 export function submitShootingRangePaper(id) {
@@ -79,6 +79,28 @@ export function submitShootingRangePaper(id) {
  */
 export function getShootingRangeResult(id) {
   return request.get('/student/shootingRange/result', {
+    params: { id }
+  });
+}
+
+/**
+ * @description 获取靶场打分详情（教师端）
+ * @param {string|number} id - 提交记录ID
+ * @returns {Promise}
+ */
+export function getShootingRangeGradePaperDetail(id) {
+  return request.get('/teacher/shootingRange/gradePaperDetail', {
+    params: { id }
+  });
+}
+
+/**
+ * @description 查看靶场记录详情（学生端）
+ * @param {string|number} id - 答题记录ID
+ * @returns {Promise}
+ */
+export function getShootingRangeRecordDetail(id) {
+  return request.get('/student/shootingRange/shootingRangeRecordDetail', {
     params: { id }
   });
 }

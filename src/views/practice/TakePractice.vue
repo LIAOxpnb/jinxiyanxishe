@@ -15,7 +15,7 @@
             <template #header>
               <div class="clearfix">
                 <span>答题卡</span>
-                <span style="float right;">{{ answeredCount }}/{{ questionList.length }}</span>
+                <span style="float: right;">{{ answeredCount }}/{{ questionList.length }}</span>
               </div>
             </template>
             <div class="question-nav-grid">
@@ -24,8 +24,10 @@
                 :key="q.id"
                 class="nav-item"
                 :class="{
-                  'answered': isAnswered(q.id),
-                  'current': currentQuestionIndex === index
+                  'current': currentQuestionIndex === index,
+                  'correct': questionStatus[q.id]?.submitted && questionStatus[q.id]?.correct,
+                  'incorrect': questionStatus[q.id]?.submitted && !questionStatus[q.id]?.correct,
+                  'answered': !questionStatus[q.id]?.submitted && isAnswered(q.id)
                 }"
                 @click="goToQuestion(index)"
               >
@@ -42,31 +44,11 @@
             :question-data="questionList[currentQuestionIndex]"
             :index="currentQuestionIndex"
             :practice-id="practiceId"
+            :is-last-question="currentQuestionIndex === questionList.length - 1"
             v-model="answers[questionList[currentQuestionIndex].id]"
+            @submit-answer="handleAnswerSubmit"
+            @next-question="nextQuestion"
           />
-          
-          <div class="pagination-controls">
-            <el-button 
-              @click="previousQuestion" 
-              :disabled="currentQuestionIndex === 0"
-              size="large"
-            >
-              上一题
-            </el-button>
-            
-            <span class="question-progress">
-              第 {{ currentQuestionIndex + 1 }} / {{ questionList.length }} 题
-            </span>
-            
-            <el-button 
-              @click="nextQuestion" 
-              :disabled="currentQuestionIndex === questionList.length - 1"
-              type="primary"
-              size="large"
-            >
-              下一题
-            </el-button>
-          </div>
         </div>
       </div>
     </template>
@@ -75,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getStudentPracticeDetail, submitPracticePaper } from '@/api/practice.js';
@@ -93,6 +75,9 @@ const questionList = ref([]);
 const answers = reactive({});
 const currentQuestionIndex = ref(0);
 const rightPanelRef = ref(null);
+
+// 新增：记录每道题的提交状态和正确性
+const questionStatus = reactive({}); // { questionId: { submitted: boolean, correct: boolean } }
 
 const answeredCount = computed(() => {
     // 【BUG修复 Part 3】answeredCount 逻辑也基于 q.id
@@ -123,6 +108,14 @@ const nextQuestion = () => {
   if (currentQuestionIndex.value < listLength - 1) {
     currentQuestionIndex.value++;
   }
+};
+
+// 处理答案提交
+const handleAnswerSubmit = (questionId, isCorrect) => {
+  questionStatus[questionId] = {
+    submitted: true,
+    correct: isCorrect
+  };
 };
 
 const confirmSubmit = () => {
@@ -199,7 +192,14 @@ watch(currentQuestionIndex, () => {
   });
 });
 
+// 监听子组件触发的上一题事件
+const handlePreviousFromChild = () => {
+  previousQuestion();
+};
+
 onMounted(async () => {
+  // 监听上一题事件
+  window.addEventListener('previous-question', handlePreviousFromChild);
   practiceId.value = parseInt(route.params.id);
   if (!practiceId.value) {
     ElMessage.error('无效的练习ID');
@@ -224,11 +224,17 @@ onMounted(async () => {
         }
         
         // 【BUG修复 Part 6】初始化 answers 对象时，使用唯一的 q.id 作为 key
-        if (q.question.questionType === '多选题' || q.question.questionType === '填空题') {
+        if (q.question.questionType === '多选' || q.question.questionType === '填空') {
           answers[q.id] = [];
         } else {
           answers[q.id] = '';
         }
+        
+        // 初始化题目状态
+        questionStatus[q.id] = {
+          submitted: false,
+          correct: false
+        };
       });
       
       questionList.value = rawQuestionList;
@@ -243,6 +249,11 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+// 清理事件监听
+onUnmounted(() => {
+  window.removeEventListener('previous-question', handlePreviousFromChild);
 });
 </script>
 
@@ -283,22 +294,24 @@ onMounted(async () => {
   padding: 20px;
   gap: 20px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .left-panel {
   width: 240px;
   flex-shrink: 0;
   overflow-y: auto;
+  max-height: 100%;
 }
 
 .right-panel {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
+  flex: 1;
   background-color: #fff;
   padding: 20px;
   border-radius: 4px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .question-nav-grid {
@@ -322,35 +335,39 @@ onMounted(async () => {
 }
 
 .nav-item.answered {
-  background-color: #409eff;
+  background-color: #909399;
   color: #fff;
-  border-color: #409eff;
+  border-color: #909399;
 }
 
 .nav-item.current {
-  border-color: #f56c6c;
+  border-color: #409eff;
+  background-color: #409eff;
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+}
+
+.nav-item.correct {
+  background-color: #67c23a;
+  color: #fff;
+  border-color: #67c23a;
+}
+
+.nav-item.incorrect {
   background-color: #f56c6c;
   color: #fff;
-  box-shadow: 0 2px 4px rgba(245, 108, 108, 0.3);
+  border-color: #f56c6c;
+}
+
+/* 当前题目的优先级最高 */
+.nav-item.current.correct,
+.nav-item.current.incorrect {
+  border-color: #409eff;
+  background-color: #409eff;
 }
 
 .box-card {
   border-radius: 4px;
 }
 
-.pagination-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid #dcdfe6;
-  flex-shrink: 0;
-}
-
-.question-progress {
-  font-size: 16px;
-  font-weight: 500;
-  color: #606266;
-}
 </style>

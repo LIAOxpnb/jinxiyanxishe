@@ -8,7 +8,7 @@
         <span>{{ index + 1 }}.</span>
         <el-tag>{{ record.question.questionType }}</el-tag>
       </div>
-      <div class="question-title" v-html="record.question.title"></div>
+      <div class="question-title" v-html="processedTitle"></div>
 
       <div class="answer-area">
         <el-radio-group v-if="record.question.questionType === '单选'" :model-value="record.userAnswer" disabled>
@@ -48,8 +48,8 @@
       <div class="feedback-section">
         <p v-if="!['填空', '论述', '简答'].includes(record.question.questionType)"><strong>你的答案：</strong> <span :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">{{ formatUserAnswer(record.userAnswer) || '未作答' }}</span></p>
         <p><strong>正确答案：</strong> {{ formatCorrectAnswer(record.question.answer) }}</p>
-        <p v-if="record.question.analysis"><strong>题目解析：</strong></p>
-        <div v-if="record.question.analysis" v-html="record.question.analysis"></div>
+        <p v-if="processedAnalysis"><strong>题目解析：</strong></p>
+        <div v-if="processedAnalysis" v-html="processedAnalysis"></div>
       </div>
        <div class="attachment-wrapper" v-if="record.question.filePath">
         <el-link :icon="Link" type="primary">{{ record.question.fileName || '附件' }}</el-link>
@@ -64,8 +64,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link } from '@element-plus/icons-vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const props = defineProps({
   record: { type: Object, required: true },
@@ -73,6 +74,53 @@ const props = defineProps({
 });
 
 defineEmits(['prev', 'next']);
+
+// 转换HTML中的图片URL为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
+// 处理后的题目标题
+const processedTitle = ref('');
+// 处理后的解析
+const processedAnalysis = ref('');
+
+// 监听 record 变化，处理图片
+watch(() => props.record, async (newRecord) => {
+  if (newRecord && newRecord.question) {
+    processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+  }
+}, { immediate: true });
 
 const parsedOptions = computed(() => {
   if (props.record.question.details) {
@@ -153,7 +201,23 @@ const formatCorrectAnswer = (answer) => {
 .stamp.correct { background-color: #67c23a; }
 .stamp.incorrect { background-color: #f56c6c; }
 .question-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 16px; }
-.question-title { font-size: 15px; line-height: 1.7; color: #303133; margin-bottom: 20px; }
+.question-title { 
+  font-size: 15px; 
+  line-height: 1.7; 
+  color: #303133; 
+  margin-bottom: 20px;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.question-title :deep(img),
+.feedback-section :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
 .answer-area { margin-bottom: 15px; }
 .el-radio-group, .el-checkbox-group { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; }
 .el-radio, .el-checkbox { cursor: default; }

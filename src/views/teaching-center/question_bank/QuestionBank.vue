@@ -202,13 +202,67 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 批量导入对话框 -->
+    <el-dialog v-model="batchImportDialogVisible" title="批量导入" width="800px" :before-close="handleBatchImportDialogClose">
+      <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px;">
+          第一步：上传前请先下载模板，按照模板标准要求内容填入到模板中
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <el-button type="primary" @click="downloadTemplate">下载模板</el-button>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          第二步：上传文件
+        </div>
+
+        <el-upload
+          ref="uploadRef"
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          :limit="1"
+          accept=".xlsx,.xls"
+          drag
+          style="width: 100%;"
+        >
+          <div class="upload-content">
+            <el-icon class="upload-icon" style="font-size: 67px; color: #c0c4cc; margin: 40px 0 16px;">
+              <Upload />
+            </el-icon>
+            <div class="upload-text" style="color: #606266; font-size: 14px;">点击或拖拽文件到此处上传</div>
+          </div>
+        </el-upload>
+
+        <div v-if="importResult" style="margin-top: 10px; color: #f56c6c; font-size: 14px;">
+          正确数 {{ importResult.successCount }}，错误数 {{ importResult.errorCount }}，
+          <a 
+            v-if="importResult.errorCount > 0 && importResult.errorFileUrl" 
+            href="#" 
+            @click.prevent="downloadErrorResult" 
+            style="color: #409eff; text-decoration: underline;"
+          >
+            下载结果
+          </a>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="handleBatchImportDialogClose">取消</el-button>
+        <el-button type="primary" @click="handleBatchImportSubmit" :loading="batchImportLoading">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, watch, onBeforeUnmount, shallowRef, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { Delete, More } from '@element-plus/icons-vue';
+import { Delete, More, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import FilterBar from '@/components/common/FilterBar.vue';
 import '@wangeditor/editor/dist/css/style.css';
@@ -226,6 +280,8 @@ import {
   getQuestionDetail,
   deleteQuestion,
   abandonQuestion,
+  downloadQuestionTemplate,
+  uploadQuestionTemplate,
 } from '@/api/teaching-center/QuestionBank';
 import { getDictByType } from '@/api/system-management/dictionary';
 
@@ -240,6 +296,13 @@ const activeGroupId = ref('all');
 const pagination = reactive({ page: 1, size: 10 });
 const filters = ref({});
 const selectedRows = ref([]); // 选中的行
+
+// 批量导入相关
+const batchImportDialogVisible = ref(false);
+const uploadRef = ref();
+const batchImportLoading = ref(false);
+const importFile = ref(null);
+const importResult = ref(null); // 导入结果
 
 // 计算可删除的题目数量
 const deletableCount = computed(() => {
@@ -260,6 +323,9 @@ const analysisEditor = shallowRef();
 
 // 【修改点】分类选项保持从字典API动态获取
 const categoryOptions = ref([]);
+
+// 试题分组选项
+const groupOptions = ref([]);
 
 // 【修改点】题型选项 - 修改为静态数据
 const typeOptions = ref([
@@ -283,11 +349,13 @@ const questionFilterFields = ref([
   { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'questionType', placeholder: '题型', options: typeOptions },
   { type: 'select', model: 'questionCategory', placeholder: '分类', options: categoryOptions },
+  { type: 'select', model: 'groupId', placeholder: '试题分组', options: groupOptions },
   { type: 'select', model: 'difficulty', placeholder: '难度', options: difficultyOptions },
 ]);
 
 const createOptions = ref([
   { label: '手动新增', value: 'manual' },
+  { label: '批量导入', value: 'batch-import' },
 ]);
 
 // --- 编辑弹窗的状态 ---
@@ -377,6 +445,8 @@ const fetchGroups = async () => {
     const res = await getQuestionGroupList();
     if (res.code === 200 && res.data) {
       groupList.value = res.data;
+      // 同时更新筛选条件的分组选项
+      groupOptions.value = res.data.map(item => ({ label: item.name, value: item.id }));
     }
   } catch (error) {
     ElMessage.error('获取分组列表失败');
@@ -504,6 +574,9 @@ const handleCreateQuestion = (command) => {
       query.groupId = activeGroupId.value;
     }
     router.push({ path: '/teaching-center/question/manual-add', query });
+  } else if (command === 'batch-import') {
+    // 批量导入
+    batchImportDialogVisible.value = true;
   } else {
     ElMessage.info(`'${command}' 功能待开发`);
   }
@@ -512,6 +585,59 @@ const handleCreateQuestion = (command) => {
 // 处理废弃题目的点击
 const handleAbandonedClick = () => {
   ElMessage.warning('已废弃的题目无法编辑，请先恢复题目');
+};
+
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  // 使用DOMParser解析HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  // 收集所有需要转换的图片
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    
+    // 跳过base64图片
+    if (src.startsWith('data:')) return;
+    
+    try {
+      // 如果是完整的URL（MinIO临时URL），需要提取相对路径
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        // 从完整URL中提取路径部分
+        // 例如: http://183.230.195.24:7028/joyas/20251104/u4436%282%29.png?X-Amr-... 
+        // 需要提取出: /20251104/u4436(2).png (去掉bucket名称 joyas)
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname); // 得到 /joyas/20251104/u4436(2).png
+        
+        // 去掉第一个路径段（bucket名称）
+        // /joyas/20251104/u4436(2).png => /20251104/u4436(2).png
+        const pathParts = pathname.split('/').filter(p => p); // ['joyas', '20251104', 'u4436(2).png']
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/'); // /20251104/u4436(2).png
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      console.log('调用预览接口，fileName:', relativePath);
+      // 调用预览接口获取新的临时URL
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  // 等待所有图片路径转换完成
+  await Promise.all(imagePromises);
+  
+  // 返回转换后的HTML
+  return doc.body.innerHTML;
 };
 
 const handleEditQuestion = async (row) => {
@@ -531,7 +657,13 @@ const handleEditQuestion = async (row) => {
       questionForm.questionCategory = data.questionCategory;
       questionForm.groupId = data.groupId;
       questionForm.difficulty = data.difficulty;
-      questionForm.analysis = data.analysis;
+      
+      // 处理解析内容中的图片预览
+      if (data.analysis) {
+        questionForm.analysis = await convertImagesToPreviewUrls(data.analysis);
+      } else {
+        questionForm.analysis = '';
+      }
 
       if (data.questionType === '判断') {
         questionForm.options = [
@@ -804,6 +936,113 @@ onBeforeUnmount(() => {
 watch(() => [pagination.page, pagination.size], () => {
   fetchQuestions();
 });
+
+// 文件变化处理
+const handleFileChange = (uploadFile) => {
+  importFile.value = uploadFile.raw;
+};
+
+// 文件移除处理
+const handleFileRemove = () => {
+  importFile.value = null;
+};
+
+// 提交批量导入
+const handleBatchImportSubmit = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择要导入的文件');
+    return;
+  }
+
+  batchImportLoading.value = true;
+  try {
+    // 创建表单数据
+    const formData = new FormData();
+    formData.append('file', importFile.value);
+    // 根据API文档，参数名称是examId
+    if (activeGroupId.value && activeGroupId.value !== 'all') {
+      formData.append('examId', activeGroupId.value);
+    }
+    
+    // 调用批量导入API
+    const response = await uploadQuestionTemplate(formData);
+
+    if (response.code === 200) {
+      // 保存导入结果
+      importResult.value = {
+        successCount: response.data?.successCount || 0,
+        errorCount: response.data?.errorCount || 0,
+        errorFileUrl: response.data?.errorFileUrl || null
+      };
+      
+      ElMessage.success(`批量导入成功！正确数: ${importResult.value.successCount}, 错误数: ${importResult.value.errorCount}`);
+      
+      // 如果全部成功，延迟关闭对话框并刷新列表
+      if (importResult.value.errorCount === 0) {
+        setTimeout(() => {
+          handleBatchImportDialogClose();
+          fetchQuestions();
+        }, 1500);
+      } else {
+        // 有错误时刷新列表但不关闭对话框，让用户可以下载错误结果
+        fetchQuestions();
+      }
+    } else {
+      ElMessage.error(response.msg || '导入失败');
+    }
+  } catch (error) {
+    console.error('批量导入错误:', error);
+    ElMessage.error('批量导入失败');
+  } finally {
+    batchImportLoading.value = false;
+  }
+};
+
+// 下载模板
+const downloadTemplate = async () => {
+  try {
+    const response = await downloadQuestionTemplate();
+    
+    // 创建blob对象
+    const blob = new Blob([response], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '试题导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    
+    // 清理
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    ElMessage.success('模板下载成功');
+  } catch (error) {
+    console.error('下载模板失败:', error);
+    ElMessage.error('下载模板失败');
+  }
+};
+
+// 关闭批量导入对话框
+const handleBatchImportDialogClose = () => {
+  batchImportDialogVisible.value = false;
+  importFile.value = null;
+  importResult.value = null;
+  uploadRef.value?.clearFiles();
+};
+
+// 下载错误结果
+const downloadErrorResult = () => {
+  if (importResult.value?.errorFileUrl) {
+    window.open(importResult.value.errorFileUrl, '_blank');
+  } else {
+    ElMessage.warning('暂无错误结果可下载');
+  }
+};
 </script>
 
 <style scoped>

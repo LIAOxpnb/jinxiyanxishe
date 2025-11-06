@@ -67,6 +67,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ArrowLeft } from '@element-plus/icons-vue';
 import { getGradePaperDetail, submitGradePaper } from '../../../api/teaching-center/Exams.js';
+import { previewFile } from '@/api/common/PreviewFile.js';
 import ExamQuestionCardForMarking from '@/components/exam/ExamQuestionCardForMarking.vue';
 
 const route = useRoute();
@@ -101,17 +102,76 @@ const scrollToQuestion = (elementId) => {
   }
 };
 
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  // 使用DOMParser解析HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  // 收集所有需要转换的图片
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    
+    // 跳过base64图片
+    if (src.startsWith('data:')) return;
+    
+    try {
+      // 如果是完整的URL（MinIO临时URL），需要提取相对路径
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        // 从完整URL中提取路径部分
+        // 例如: http://183.230.195.24:7028/joyas/20251104/u4436%282%29.png?X-Amr-... 
+        // 需要提取出: /20251104/u4436(2).png (去掉bucket名称 joyas)
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname); // 得到 /joyas/20251104/u4436(2).png
+        
+        // 去掉第一个路径段（bucket名称）
+        // /joyas/20251104/u4436(2).png => /20251104/u4436(2).png
+        const pathParts = pathname.split('/').filter(p => p); // ['joyas', '20251104', 'u4436(2).png']
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/'); // /20251104/u4436(2).png
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      // 调用预览接口获取新的临时URL
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  // 等待所有图片路径转换完成
+  await Promise.all(imagePromises);
+  
+  // 返回转换后的HTML
+  return doc.body.innerHTML;
+};
+
 const fetchPaperDetails = async () => {
   loading.value = true;
   try {
     const res = await getGradePaperDetail(submissionId.value);
     if (res.code === 200) {
       if (res.data && res.data.examSubmitRecordList) {
-        // [修改点] 移除之前的前端数据预处理逻辑
-        // 前端完全信任后端返回的数据状态
-        res.data.examSubmitRecordList.forEach((item, index) => {
-          item.originalIndex = index;
-        });
+        // 转换题目列表中的图片预览URL
+        const processedRecords = await Promise.all(
+          res.data.examSubmitRecordList.map(async (item, index) => {
+            item.originalIndex = index;
+            // 转换解析内容中的图片
+            if (item.question && item.question.analysis) {
+              item.question.analysis = await convertImagesToPreviewUrls(item.question.analysis);
+            }
+            return item;
+          })
+        );
+        res.data.examSubmitRecordList = processedRecords;
       }
       paperDetails.value = res.data;
     } else {

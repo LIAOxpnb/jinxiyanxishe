@@ -159,6 +159,7 @@ const pagination = reactive({ page: 1, size: 10 });
 const filters = ref({});
 const categoryOptions = ref([]);
 const fileTypeOptions = ref([]); // 文件类型选项
+const groupOptions = ref([]); // 课件分组选项
 const uploadDialogVisible = ref(false);
 const selectedCoursewares = ref([]); // 选中的课件列表
 
@@ -169,6 +170,7 @@ const coursewareFilterFields = ref([
   { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'file_type', placeholder: '文件类型', options: fileTypeOptions },
   { type: 'select', model: 'coursewareCategory', placeholder: '分类', options: categoryOptions },
+  { type: 'select', model: 'groupId', placeholder: '课件分组', options: groupOptions },
 ]);
 
 // --- 编辑/新增弹窗 ---
@@ -194,6 +196,8 @@ const fetchGroups = async () => {
     const res = await getCoursewareGroupList();
     if (res.code === 200 && res.data) {
       groupList.value = res.data;
+      // 填充筛选用的分组选项（包括"全部"和"未分组"）
+      groupOptions.value = res.data.map(g => ({ label: g.name, value: g.id }));
     }
   } catch (error) { ElMessage.error('获取分组列表失败'); }
 };
@@ -202,11 +206,25 @@ const fetchCoursewares = async () => {
   tableLoading.value = true;
   const cleanFilters = Object.fromEntries(Object.entries(filters.value).filter(([_, v]) => v != null && v !== ''));
 
+  // 优先使用筛选条件中的 groupId，如果没有，再使用左侧菜单选择的 groupId
   let groupId = null;
-  if (activeGroupId.value !== 'all' && activeGroupId.value !== 'none') {
+  if (cleanFilters.groupId) {
+    // 筛选条件中有 groupId，使用它
+    const selectedGroup = groupList.value.find(g => g.id == cleanFilters.groupId);
+    if (selectedGroup) {
+      if (selectedGroup.name === '全部') {
+        groupId = null; // 全部不传 groupId
+      } else if (selectedGroup.name === '未分组') {
+        groupId = 0; // 未分组传 0
+      } else {
+        groupId = cleanFilters.groupId; // 其他分组传实际 ID
+      }
+    }
+  } else if (activeGroupId.value !== 'all' && activeGroupId.value !== 'none') {
+    // 左侧菜单选择了具体分组
     groupId = activeGroupId.value;
-  }
-  if (activeGroupId.value === 'none') {
+  } else if (activeGroupId.value === 'none') {
+    // 左侧菜单选择了"未分组"
     groupId = 0;
   }
 

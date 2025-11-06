@@ -11,9 +11,9 @@ const service = axios.create({
 // --- 请求拦截器 (核心修改点) ---
 service.interceptors.request.use(
   (config) => {
-    // *** 修改点 1: 从 localStorage 读取 Token ***
+    // *** 修改点 1: 从 sessionStorage 读取 Token ***
     // 确保与您 Login.vue 文件中的存储方式一致
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     
     if (token) {
       config.headers = config.headers || {};

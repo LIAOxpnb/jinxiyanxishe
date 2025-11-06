@@ -387,6 +387,14 @@
       <div class="add-class-dialog">
         <!-- 左侧：班级列表 -->
         <div class="class-list-section">
+          <!-- 标签页切换 -->
+          <div class="class-tabs">
+            <el-radio-group v-model="classTabActive" @change="handleClassTabChange">
+              <el-radio-button label="my">我的班级</el-radio-button>
+              <el-radio-button label="all">全部班级</el-radio-button>
+            </el-radio-group>
+          </div>
+          
           <!-- 搜索框 -->
           <div class="search-section">
             <el-input v-model="classSearchKeyword" placeholder="班级名称" @input="handleClassSearch" clearable>
@@ -402,8 +410,8 @@
 
           <!-- 班级列表 -->
           <div class="class-list-container">
-            <div v-for="clazz in classListData" :key="clazz.id" class="class-item">
-              <el-checkbox v-model="clazz.checked" @change="handleClassCheck(clazz)">
+            <div v-for="clazz in classListData" :key="clazz.id" class="class-item" :class="{ 'disabled-class': clazz.disabled }">
+              <el-checkbox v-model="clazz.checked" @change="handleClassCheck(clazz)" :disabled="clazz.disabled">
                 <div class="class-info">
                   <el-icon class="class-icon">
                     <OfficeBuilding />
@@ -411,6 +419,7 @@
                   <div class="class-details">
                     <span class="class-name">{{ clazz.name }}</span>
                     <span class="class-members">({{ clazz.userCount }}人)</span>
+                    <span v-if="clazz.disabled" class="status-tag">已结束</span>
                   </div>
                 </div>
               </el-checkbox>
@@ -547,6 +556,60 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 批量导入对话框 -->
+    <el-dialog v-model="batchImportDialogVisible" title="导入试题" width="800px" :before-close="handleBatchImportDialogClose">
+      <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px;">
+          第一步：上传前请先下载模板，按照模板标准要求内容填入到模板中
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <el-button type="primary" @click="downloadTemplate">下载模板</el-button>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+          第二步：上传文件
+        </div>
+
+        <el-upload
+          ref="uploadRef"
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          :limit="1"
+          accept=".xlsx,.xls"
+          drag
+          style="width: 100%;"
+        >
+          <div class="upload-content">
+            <el-icon class="upload-icon" style="font-size: 67px; color: #c0c4cc; margin: 40px 0 16px;">
+              <Upload />
+            </el-icon>
+            <div class="upload-text" style="color: #606266; font-size: 14px;">点击或拖拽文件到此处上传</div>
+          </div>
+        </el-upload>
+
+        <div v-if="importResult" style="margin-top: 10px; color: #f56c6c; font-size: 14px;">
+          正确数 {{ importResult.successCount }}，错误数 {{ importResult.errorCount }}，
+          <a 
+            v-if="importResult.errorCount > 0 && importResult.errorFileUrl" 
+            href="#" 
+            @click.prevent="downloadErrorResult" 
+            style="color: #409eff; text-decoration: underline;"
+          >
+            下载结果
+          </a>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="handleBatchImportDialogClose">取消</el-button>
+        <el-button type="primary" @click="handleBatchImportSubmit" :loading="batchImportLoading">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -555,12 +618,13 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExamStatus, drawQuestions, getQuestionCount } from '../../../api/teaching-center/Exams.js';
-import { getQuestionGroupList } from '@/api/teaching-center/QuestionBank.js';
+import { getQuestionGroupList, downloadQuestionTemplate, uploadQuestionTemplate } from '@/api/teaching-center/QuestionBank.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
 import { getAllOrgTree } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
-import { Edit, ArrowDown, Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
+import { previewFile } from '@/api/common/PreviewFile.js';
+import { Edit, ArrowDown, Search, User, OfficeBuilding, Close, Upload } from '@element-plus/icons-vue';
 import ExamQuestionCard from '@/components/exam/ExamQuestionCard.vue';
 import QuestionSelector from '@/components/question/QuestionSelector.vue';
 import QuestionEditDialog from '@/components/question/QuestionEditDialog.vue';
@@ -606,12 +670,20 @@ const orgTreeRef = ref(null);
 
 // 班级选择弹窗相关
 const classSelectionDialogVisible = ref(false);
+const classTabActive = ref('my'); // 'my' 或 'all'
 const classSearchKeyword = ref('');
 const classListData = ref([]);
 const selectedScopeClasses = ref([]);
 const classCurrentPage = ref(1);
 const classPageSize = ref(10);
 const classTotal = ref(0);
+
+// 批量导入相关
+const batchImportDialogVisible = ref(false);
+const uploadRef = ref();
+const batchImportLoading = ref(false);
+const importFile = ref(null);
+const importResult = ref(null);
 
 // ==================== 【改动1】数据结构改变 ====================
 // 原来的单个表单改为规则数组
@@ -696,7 +768,16 @@ watch(() => editForm.value?.duration, (newVal) => {
 const timeRange = computed({
   get() {
     if (editForm.value && editForm.value.startTime && editForm.value.endTime) {
-      return [editForm.value.startTime, editForm.value.endTime];
+      // 确保时间格式正确，如果后端返回的格式是 "YYYY-MM-DD HH:mm"，需要补充秒数
+      const formatTime = (time) => {
+        if (!time) return null;
+        // 如果时间格式是 "YYYY-MM-DD HH:mm"，补充 ":00"
+        if (time.length === 16 && time.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
+          return time + ':00';
+        }
+        return time;
+      };
+      return [formatTime(editForm.value.startTime), formatTime(editForm.value.endTime)];
     }
     return [];
   },
@@ -804,7 +885,18 @@ const fetchExamDetails = async () => {
       // 如果字典已加载则直接映射，否则先保持原值（onMounted 已确保通常会先加载字典）
       data.examCategory = getCategoryLabel(data.examCategory);
       examDetails.value = data;
-      questionList.value = data.examQuestionList || [];
+      
+      // 转换题目列表中的图片预览URL
+      const examQuestionList = data.examQuestionList || [];
+      const processedQuestions = await Promise.all(
+        examQuestionList.map(async (item) => {
+          if (item.question && item.question.analysis) {
+            item.question.analysis = await convertImagesToPreviewUrls(item.question.analysis);
+          }
+          return item;
+        })
+      );
+      questionList.value = processedQuestions;
     } else {
       ElMessage.error(res.msg || '获取考试详情失败');
     }
@@ -813,6 +905,58 @@ const fetchExamDetails = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  // 使用DOMParser解析HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  // 收集所有需要转换的图片
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    
+    // 跳过base64图片
+    if (src.startsWith('data:')) return;
+    
+    try {
+      // 如果是完整的URL（MinIO临时URL），需要提取相对路径
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        // 从完整URL中提取路径部分
+        // 例如: http://183.230.195.24:7028/joyas/20251104/u4436%282%29.png?X-Amr-... 
+        // 需要提取出: /20251104/u4436(2).png (去掉bucket名称 joyas)
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname); // 得到 /joyas/20251104/u4436(2).png
+        
+        // 去掉第一个路径段（bucket名称）
+        // /joyas/20251104/u4436(2).png => /20251104/u4436(2).png
+        const pathParts = pathname.split('/').filter(p => p); // ['joyas', '20251104', 'u4436(2).png']
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/'); // /20251104/u4436(2).png
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      // 调用预览接口获取新的临时URL
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  // 等待所有图片路径转换完成
+  await Promise.all(imagePromises);
+  
+  // 返回转换后的HTML
+  return doc.body.innerHTML;
 };
 
 const fetchCategories = async () => {
@@ -1015,7 +1159,7 @@ const openExamSettingsDialog = async () => {
               return {
                 id: classInfo.id,
                 name: classInfo.name || `班级ID:${classInfo.id}`,
-                userCount: classInfo.userCount || 0
+                userCount: classInfo.clazzUserCount || classInfo.userCount || 0
               };
             } else {
               // 如果找不到，使用原始数据
@@ -1023,7 +1167,7 @@ const openExamSettingsDialog = async () => {
               return {
                 id: classId,
                 name: originalItem?.clazzName || `班级ID:${classId}`,
-                userCount: originalItem?.userCount || 0
+                userCount: originalItem?.clazzUserCount || originalItem?.userCount || 0
               };
             }
           });
@@ -1032,7 +1176,7 @@ const openExamSettingsDialog = async () => {
           selectedScopeClasses.value = editForm.value.clazzUserBindList.map(item => ({
             id: item.clazzId,
             name: item.clazzName || `班级ID:${item.clazzId}`,
-            userCount: item.userCount || 0
+            userCount: item.clazzUserCount || item.userCount || 0
           }));
         }
       } catch (error) {
@@ -1041,7 +1185,7 @@ const openExamSettingsDialog = async () => {
         selectedScopeClasses.value = editForm.value.clazzUserBindList.map(item => ({
           id: item.clazzId,
           name: item.clazzName || `班级ID:${item.clazzId}`,
-          userCount: item.userCount || 0
+          userCount: item.clazzUserCount || item.userCount || 0
         }));
       }
     }
@@ -1072,7 +1216,8 @@ const submitUpdate = async () => {
     editForm.value.clazzUserBindList = selectedScopeClasses.value.map(clazz => ({
       clazzId: clazz.id,
       clazzName: clazz.name,
-      userCount: clazz.userCount
+      clazzUserCount: clazz.userCount, // 保存为 clazzUserCount 字段
+      userCount: clazz.userCount // 同时保留 userCount 以兼容
     }));
   } else {
     editForm.value.clazzUserBindList = [];
@@ -1399,8 +1544,9 @@ const addQuestion = (command) => {
   } else if (command === 'draw_questions') {
     openDrawQuestionsDialog();
   } else if (command === 'import_questions') {
-    // TODO: 实现导入试题功能
-    ElMessage.info('导入试题功能待实现');
+    // 打开批量导入对话框
+    batchImportDialogVisible.value = true;
+    importResult.value = null;
   }
 };
 
@@ -1788,16 +1934,20 @@ const fetchClassList = async () => {
       page: classCurrentPage.value,
       size: classPageSize.value,
       name: classSearchKeyword.value || '',
-      isMe: false,
+      isMe: classTabActive.value === 'my', // 根据标签页切换 isMe 参数
       clazzStatus: ''
     });
 
     if (response.code === 200) {
+      // 将 clazzStatus == 2 的班级设置为禁用状态
       classListData.value = response.data.records.map(clazz => ({
         id: clazz.id,
         name: clazz.name,
-        userCount: clazz.userCount || 0,
-        checked: selectedScopeClasses.value.some(selected => selected.id === clazz.id)
+        // 后端返回的字段是 clazzUserCount
+        userCount: clazz.clazzUserCount || clazz.userCount || 0,
+        checked: selectedScopeClasses.value.some(selected => selected.id === clazz.id),
+        disabled: clazz.clazzStatus == 2, // 已结束的班级设置为禁用
+        clazzStatus: clazz.clazzStatus
       }));
       classTotal.value = response.data.total || 0;
     }
@@ -1816,6 +1966,11 @@ const handleClassPageChange = (page) => {
   fetchClassList();
 };
 
+const handleClassTabChange = () => {
+  classCurrentPage.value = 1; // 切换标签页时重置到第一页
+  fetchClassList();
+};
+
 const handleClassCheck = (clazz) => {
   if (clazz.checked) {
     // 添加到已选列表
@@ -1823,7 +1978,7 @@ const handleClassCheck = (clazz) => {
       selectedScopeClasses.value.push({
         id: clazz.id,
         name: clazz.name,
-        userCount: clazz.userCount
+        userCount: clazz.userCount || 0
       });
     }
   } else {
@@ -1877,6 +2032,111 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+// ==================== 批量导入相关函数 ====================
+// 文件变化处理
+const handleFileChange = (uploadFile) => {
+  importFile.value = uploadFile.raw;
+};
+
+// 文件移除处理
+const handleFileRemove = () => {
+  importFile.value = null;
+};
+
+// 提交批量导入
+const handleBatchImportSubmit = async () => {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择要导入的文件');
+    return;
+  }
+
+  batchImportLoading.value = true;
+  try {
+    // 创建表单数据
+    const formData = new FormData();
+    formData.append('file', importFile.value);
+    formData.append('examId', examId.value);
+    
+    // 调用批量导入API
+    const response = await uploadQuestionTemplate(formData);
+
+    if (response.code === 200) {
+      // 保存导入结果
+      importResult.value = {
+        successCount: response.data?.successCount || 0,
+        errorCount: response.data?.errorCount || 0,
+        errorFileUrl: response.data?.errorFileUrl || null
+      };
+      
+      ElMessage.success(`批量导入成功！正确数: ${importResult.value.successCount}, 错误数: ${importResult.value.errorCount}`);
+      
+      // 如果全部成功，延迟关闭对话框并刷新列表
+      if (importResult.value.errorCount === 0) {
+        setTimeout(() => {
+          handleBatchImportDialogClose();
+          fetchExamDetails();
+        }, 1500);
+      } else {
+        // 有错误时刷新列表但不关闭对话框，让用户可以下载错误结果
+        fetchExamDetails();
+      }
+    } else {
+      ElMessage.error(response.msg || '导入失败');
+    }
+  } catch (error) {
+    console.error('批量导入错误:', error);
+    ElMessage.error('批量导入失败');
+  } finally {
+    batchImportLoading.value = false;
+  }
+};
+
+// 下载模板
+const downloadTemplate = async () => {
+  try {
+    const response = await downloadQuestionTemplate();
+    
+    // 创建blob对象
+    const blob = new Blob([response], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '试题导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    
+    // 清理
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    ElMessage.success('模板下载成功');
+  } catch (error) {
+    console.error('下载模板失败:', error);
+    ElMessage.error('下载模板失败');
+  }
+};
+
+// 关闭批量导入对话框
+const handleBatchImportDialogClose = () => {
+  batchImportDialogVisible.value = false;
+  importFile.value = null;
+  importResult.value = null;
+  uploadRef.value?.clearFiles();
+};
+
+// 下载错误结果
+const downloadErrorResult = () => {
+  if (importResult.value?.errorFileUrl) {
+    window.open(importResult.value.errorFileUrl, '_blank');
+  } else {
+    ElMessage.warning('暂无错误结果可下载');
+  }
+};
 </script>
 
 <style scoped>
@@ -2195,6 +2455,35 @@ onMounted(async () => {
   padding-right: 20px;
 }
 
+.class-tabs {
+  margin-bottom: 16px;
+}
+
+.class-tabs .el-radio-group {
+  width: 100%;
+  display: flex;
+}
+
+.class-tabs .el-radio-button {
+  flex: 1;
+}
+
+.class-tabs .el-radio-button__inner {
+  width: 100%;
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.class-tabs .el-radio-button:first-child .el-radio-button__inner {
+  border-radius: 4px 0 0 4px;
+}
+
+.class-tabs .el-radio-button:last-child .el-radio-button__inner {
+  border-radius: 0 4px 4px 0;
+}
+
 .class-list-container {
   flex: 1;
   overflow-y: auto;
@@ -2204,6 +2493,11 @@ onMounted(async () => {
 .class-item {
   padding: 8px;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.class-item.disabled-class {
+  opacity: 0.6;
+  background-color: #f5f7fa;
 }
 
 .class-info {
@@ -2218,6 +2512,9 @@ onMounted(async () => {
 
 .class-details {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .class-name {
@@ -2229,6 +2526,14 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-left: 5px;
+}
+
+.status-tag {
+  font-size: 12px;
+  color: #909399;
+  background-color: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .class-pagination {

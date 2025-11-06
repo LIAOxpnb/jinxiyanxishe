@@ -73,7 +73,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getStudentExamDetail, submitStudentExamPaper, submitStudentExamRecord } from '@/api/exams.js';
+import { getStudentExamDetail, submitStudentExamPaper, submitStudentExamRecord, saveRecordUseTime, getRecordUseTime } from '@/api/exams.js';
 import TakeExamQuestionCard from '@/components/exam/TakeExamQuestionCard.vue';
 
 const route = useRoute();
@@ -94,7 +94,9 @@ let lastSavedState = ''; // 【新增】跟踪上次保存的状态
 
 // --- 倒计时逻辑 ---
 let timerInterval = null;
+let saveTimeInterval = null; // 保存时间的定时器
 const remainingSeconds = ref(0);
+const usedSeconds = ref(0); // 已使用的秒数
 const formattedCountdown = computed(() => {
   if (remainingSeconds.value === Infinity) return '不限时';
   const hours = Math.floor(remainingSeconds.value / 3600);
@@ -112,12 +114,82 @@ const startTimer = (durationMinutes) => {
   timerInterval = setInterval(() => {
     if (remainingSeconds.value > 0) {
       remainingSeconds.value--;
+      usedSeconds.value++; // 增加已使用时间
     } else {
       clearInterval(timerInterval);
       ElMessage.warning('考试时间到,系统将自动交卷!');
       submitExam();
     }
   }, 1000);
+  
+  // 每10秒保存一次已使用时间
+  saveTimeInterval = setInterval(() => {
+    saveUsedTime();
+  }, 10000);
+};
+
+// 保存已使用时间
+const saveUsedTime = async () => {
+  if (!examRecordId.value || examRecordId.value <= 0) {
+    return;
+  }
+  
+  try {
+    console.log('💾 保存已使用时间:', {
+      type: 0,
+      recordId: examRecordId.value,
+      useTime: usedSeconds.value
+    });
+    
+    await saveRecordUseTime({
+      type: 0, // 0-考试，8-靶场
+      recordId: examRecordId.value,
+      useTime: usedSeconds.value // 已使用的秒数
+    });
+    
+    console.log('✅ 保存已使用时间成功');
+  } catch (error) {
+    // 静默处理错误
+    console.error('❌ 保存已使用时间失败:', error);
+  }
+};
+
+// 获取已使用时间
+const getUsedTime = async () => {
+  console.log('🔍 getUsedTime 被调用, examRecordId:', examRecordId.value);
+  
+  if (!examRecordId.value || examRecordId.value <= 0) {
+    console.log('⚠️ examRecordId 无效，返回 0');
+    return 0;
+  }
+  
+  try {
+    console.log('📤 发送 getRecordUseTime 请求:', { type: 0, recordId: examRecordId.value });
+    const res = await getRecordUseTime({
+      type: 0, // 0-考试，8-靶场
+      recordId: examRecordId.value
+    });
+    
+    console.log('📥 getRecordUseTime 响应:', res);
+    
+    if (res.code === 200 && res.data !== undefined && res.data !== null) {
+      // 如果返回的是数字，直接返回
+      if (typeof res.data === 'number') {
+        console.log('✅ 返回已使用时间(秒):', res.data);
+        return res.data;
+      }
+      // 如果返回的是对象，尝试获取时间字段
+      if (typeof res.data === 'object') {
+        const useTime = res.data.useTime || res.data.time || 0;
+        console.log('✅ 从对象中提取已使用时间(秒):', useTime);
+        return useTime;
+      }
+    }
+  } catch (error) {
+    console.error('❌ 获取已使用时间失败:', error);
+  }
+  
+  return 0;
 };
 
 // --- 阻止复制的事件处理函数 ---
@@ -128,7 +200,11 @@ const preventCopy = (e) => {
 
 onBeforeUnmount(() => {
   if (timerInterval) clearInterval(timerInterval);
+  if (saveTimeInterval) clearInterval(saveTimeInterval);
   if (saveTimeout) clearTimeout(saveTimeout);
+  
+  // 组件销毁前保存一次时间
+  saveUsedTime();
 
   if (examDetails.value && examDetails.value.disableCopy === 1) {
     const examContainer = document.querySelector('.take-exam-container');
@@ -199,6 +275,9 @@ const submitExam = async () => {
   isExamSubmitted.value = true;
 
   try {
+    // 交卷前先保存一次时间
+    await saveUsedTime();
+    
     const res = await submitStudentExamPaper(examRecordId.value);
     if (res.code === 200) {
       ElMessage.success('交卷成功!');
@@ -402,7 +481,48 @@ onMounted(async () => {
       }, 500);
 
       currentQuestionIndex.value = 0;
-      startTimer(examDetails.value.duration);
+      
+      // 获取已使用时间并启动计时器
+      console.log('📋 检查是否需要恢复时间:', {
+        recordId,
+        isRestart,
+        examRecordId: examRecordId.value,
+        condition: recordId && !isRestart && examRecordId.value && examRecordId.value > 0
+      });
+      
+      if (recordId && !isRestart && examRecordId.value && examRecordId.value > 0) {
+        console.log('✅ 满足条件，开始获取已使用时间');
+        // 继续答题：获取已使用时间
+        const usedTime = await getUsedTime();
+        usedSeconds.value = usedTime;
+        console.log('⏱️ 已使用时间(秒):', usedTime);
+        
+        // 根据已使用时间调整剩余时间
+        if (examDetails.value.duration > 0) {
+          const totalSeconds = examDetails.value.duration * 60;
+          const remainingTime = totalSeconds - usedTime;
+          
+          if (remainingTime > 0) {
+            // 使用调整后的时长启动计时器（分钟）
+            startTimer(remainingTime / 60);
+            
+            if (usedTime > 0) {
+              ElMessage.info(`已恢复考试进度，已用时 ${Math.floor(usedTime / 60)} 分钟`);
+            }
+          } else {
+            // 时间已用完，自动交卷
+            ElMessage.warning('考试时间已用完,系统将自动交卷!');
+            submitExam();
+            return;
+          }
+        } else {
+          startTimer(examDetails.value.duration);
+        }
+      } else {
+        // 首次答题或重新答题
+        usedSeconds.value = 0;
+        startTimer(examDetails.value.duration);
+      }
 
       if (examDetails.value.disableCopy === 1) {
         const examContainer = document.querySelector('.take-exam-container');

@@ -1,68 +1,58 @@
 <template>
   <div class="page-wrapper" v-loading="loading">
-    <div v-if="recordDetail" class="main-content">
+    <div v-if="resultDetails" class="main-content">
       <el-page-header @back="goBack">
         <template #content>
           <span class="page-header-title">
-            靶场结果 - {{ recordDetail.name }}
+            靶场结果 - {{ resultDetails.name }}
           </span>
         </template>
       </el-page-header>
 
-      <div class="result-content">
-        <div class="result-info">
-          <el-descriptions title="靶场成绩" :column="2" border>
-            <el-descriptions-item label="靶场名称">{{ recordDetail.name }}</el-descriptions-item>
-            <el-descriptions-item label="参加人员">{{ recordDetail.userName }}</el-descriptions-item>
-            <el-descriptions-item label="最终得分">
-              <span style="color: #409eff; font-weight: bold; font-size: 16px;">{{ recordDetail.score }}分</span>
-            </el-descriptions-item>
-            <el-descriptions-item label="结果">
-              <el-tag :type="recordDetail.qualified === 1 ? 'success' : 'danger'">
-                {{ recordDetail.qualified === 1 ? '合格' : '不合格' }}
+      <div class="marking-content">
+        <div class="left-panel">
+          <el-descriptions title="靶场信息" :column="1" border>
+            <el-descriptions-item label="最终得分">{{ resultDetails.score }}</el-descriptions-item>
+            <el-descriptions-item label="靶场总分">{{ resultDetails.shootingRange?.score || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="合格分">{{ resultDetails.shootingRange?.qualified || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="考核结果">
+              <el-tag :type="resultDetails.qualified === 1 ? 'success' : 'danger'">
+                {{ resultDetails.qualified === 1 ? '合格' : '不合格' }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="排名">
-              第 {{ recordDetail.rank }} / {{ recordDetail.totalCount }}
-            </el-descriptions-item>
-            <el-descriptions-item label="提交时间">{{ recordDetail.createTime }}</el-descriptions-item>
           </el-descriptions>
-        </div>
-
-        <div class="question-section" v-if="recordDetail.shootingRangeSubmitRecordList && recordDetail.shootingRangeSubmitRecordList.length > 0">
-          <h3>答题详情</h3>
           <div class="question-nav">
             <div class="nav-grid">
               <div 
                 class="nav-item" 
-                v-for="(item, index) in recordDetail.shootingRangeSubmitRecordList" 
+                v-for="(item, index) in resultDetails.shootingRangeSubmitRecordList" 
                 :key="item.id"
                 :class="getNavItemClass(item)"
-                @click="scrollToRecord(item.id)"
+                @click="scrollToQuestion(item.question.id)"
               >
                 {{ index + 1 }}
               </div>
             </div>
             <div class="nav-legend">
+              <div><span class="legend-box active"></span>当前</div>
               <div><span class="legend-box correct"></span>正确</div>
               <div><span class="legend-box incorrect"></span>错误</div>
               <div><span class="legend-box unanswered"></span>未答</div>
             </div>
           </div>
+        </div>
 
-          <div class="questions-wrapper" ref="rightPanelRef">
-            <div
-              v-for="(record, index) in recordDetail.shootingRangeSubmitRecordList"
-              :key="record.id"
-              :data-record-id="record.id"
-              class="question-wrapper"
-            >
-              <TakeRangeQuestionCard
-                :record="record"
-                :index="index"
-                :readonly="true"
-              />
-            </div>
+        <div class="right-panel" ref="rightPanelRef">
+          <div
+            v-for="(record, index) in resultDetails.shootingRangeSubmitRecordList"
+            :key="record.id"
+            :data-question-id="record.question.id"
+            class="question-wrapper"
+          >
+            <PracticeResultQuestionDisplay 
+              :record="record" 
+              :index="index"
+            />
           </div>
         </div>
       </div>
@@ -75,27 +65,35 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getShootingRangeResult } from '@/api/shooting-range.js';
-import TakeRangeQuestionCard from '@/components/range/TakeRangeQuestionCard.vue';
+import { getShootingRangeRecordDetail } from '@/api/shooting-range.js';
+import PracticeResultQuestionDisplay from '@/components/practice/PracticeResultQuestionDisplay.vue';
 
 const route = useRoute();
 const router = useRouter();
 const loading = ref(true);
-const recordId = ref(null);
-const recordDetail = ref(null);
+const resultId = ref(null);
+const resultDetails = ref(null);
 
 const rightPanelRef = ref(null);
-const activeRecordId = ref(null);
+const activeQuestionId = ref(null);
 let observer = null;
 
 const goBack = () => router.back();
 
-const fetchRecordDetail = async () => {
+const fetchRangeResult = async () => {
   loading.value = true;
   try {
-    const res = await getShootingRangeResult(recordId.value);
-    if (res.code === 200 && res.data) {
-      recordDetail.value = res.data;
+    const res = await getShootingRangeRecordDetail(resultId.value);
+    if (res.code === 200) {
+      // 将 shootingRangeQuestion 映射为 question，以兼容组件
+      if (res.data && res.data.shootingRangeSubmitRecordList) {
+        res.data.shootingRangeSubmitRecordList.forEach(item => {
+          if (item.shootingRangeQuestion) {
+            item.question = item.shootingRangeQuestion;
+          }
+        });
+      }
+      resultDetails.value = res.data;
     } else {
       ElMessage.error(res.msg || "获取靶场结果失败");
     }
@@ -107,191 +105,136 @@ const fetchRecordDetail = async () => {
 };
 
 const getNavItemClass = (item) => {
-  if (item.id === activeRecordId.value) {
+  if (item.question.id === activeQuestionId.value) {
     return 'active';
   }
-  if (item.isCorrect === 1) {
-    return 'correct';
-  } else if (item.isCorrect === 0) {
+  if (item.userAnswer !== null && item.userAnswer !== '') {
+    if (item.isCorrect === 1) {
+      return 'correct';
+    }
     return 'incorrect';
+  }
+  return 'unanswered';
+};
+
+const scrollToQuestion = (questionId) => {
+  const targetElement = document.querySelector(`.question-wrapper[data-question-id='${questionId}']`);
+  if (targetElement) {
+    activeQuestionId.value = questionId;
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+};
+
+const initIntersectionObserver = () => {
+    setTimeout(() => {
+        if (!rightPanelRef.value) return;
+        const options = {
+            root: rightPanelRef.value,
+            rootMargin: '-50% 0px -50% 0px',
+            threshold: 0
+        };
+        observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    activeQuestionId.value = parseInt(entry.target.dataset.questionId);
+                }
+            });
+        }, options);
+        const questionElements = rightPanelRef.value.querySelectorAll('.question-wrapper');
+        questionElements.forEach(el => observer.observe(el));
+    }, 500);
+};
+
+onMounted(async () => {
+  resultId.value = route.params.id;
+  if(resultId.value) {
+    await fetchRangeResult();
+    if (resultDetails.value) {
+        initIntersectionObserver();
+    }
   } else {
-    return 'unanswered';
-  }
-};
-
-const scrollToRecord = (recordId) => {
-  if (!rightPanelRef.value) return;
-  const element = rightPanelRef.value.querySelector(`[data-record-id="${recordId}"]`);
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-};
-
-onMounted(() => {
-  recordId.value = route.params.id;
-  fetchRecordDetail();
-
-  // 使用 Intersection Observer 来跟踪当前可见的题目
-  if (rightPanelRef.value) {
-    observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          activeRecordId.value = entry.target.dataset.recordId;
-        }
-      });
-    }, { threshold: 0.5 });
-
-    const questions = rightPanelRef.value.querySelectorAll('.question-wrapper');
-    questions.forEach((q) => observer.observe(q));
+    ElMessage.error("无效的靶场记录ID");
+    loading.value = false;
   }
 });
 
 onBeforeUnmount(() => {
-  if (observer) {
-    observer.disconnect();
-  }
+    if (observer) {
+        observer.disconnect();
+    }
 });
 </script>
 
 <style scoped>
+/* 1. 根容器设置为100%高度的flex布局 */
 .page-wrapper {
-  background-color: #f5f7fa;
-  min-height: 100vh;
-  padding-bottom: 50px;
-}
-
-.main-content {
-  max-width: 1200px;
-  margin: 0 auto;
+  height: 100%; /* 继承父级的高度 */
+  background-color: #f0f2f5;
   padding: 20px;
-}
-
-.page-header-title {
-  font-size: 20px;
-  font-weight: bold;
-  color: #333;
-}
-
-.result-content {
-  background-color: white;
-  padding: 20px;
-  border-radius: 4px;
-  margin-top: 20px;
-}
-
-.result-info {
-  margin-bottom: 40px;
-}
-
-.question-section {
-  margin-top: 30px;
-}
-
-.question-section h3 {
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 20px;
-  color: #333;
-}
-
-.question-nav {
-  margin-bottom: 30px;
-  padding: 15px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-}
-
-.nav-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-.nav-item {
-  width: 40px;
-  height: 40px;
+  box-sizing: border-box; /* 让 padding 不会撑大容器 */
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+}
+
+/* 2. 主内容区设置为flex自适应填充 */
+.main-content {
+  background-color: #fff;
+  padding: 24px;
   border-radius: 4px;
-  background-color: #f0f0f0;
-  color: #666;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 12px;
-  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1; /* 占据所有剩余空间 */
+  min-height: 0; /* flex布局防溢出技巧 */
 }
 
-.nav-item:hover {
-  background-color: #e0e0e0;
-}
+.page-header-title { font-size: 18px; }
 
-.nav-item.active {
-  background-color: #409eff;
-  color: white;
-}
-
-.nav-item.correct {
-  background-color: #67c23a;
-  color: white;
-}
-
-.nav-item.incorrect {
-  background-color: #f56c6c;
-  color: white;
-}
-
-.nav-item.unanswered {
-  background-color: #e4e4e4;
-  color: #999;
-}
-
-.nav-legend {
+/* 3. 两栏容器也设置为flex自适应填充 */
+.marking-content {
   display: flex;
   gap: 20px;
-  flex-wrap: wrap;
-}
-
-.nav-legend > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #666;
-}
-
-.legend-box {
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-}
-
-.legend-box.correct {
-  background-color: #67c23a;
-}
-
-.legend-box.incorrect {
-  background-color: #f56c6c;
-}
-
-.legend-box.unanswered {
-  background-color: #e4e4e4;
-}
-
-.questions-wrapper {
   margin-top: 20px;
+  flex-grow: 1; /* 占据所有剩余空间 */
+  min-height: 0; /* flex布局防溢出技巧 */
 }
 
-.question-wrapper {
-  margin-bottom: 30px;
-  padding-bottom: 30px;
-  border-bottom: 1px solid #eee;
+.left-panel { flex: 0 0 250px; overflow-y: auto; }
+
+/* 4. 移除右侧面板不稳定的 max-height，让flex自动计算高度 */
+.right-panel {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f9fafb;
+  padding: 15px;
+  border-radius: 4px;
 }
 
-.question-wrapper:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
+/* --- 以下样式保持不变 --- */
+.question-nav { margin-top: 20px; }
+.nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.nav-item {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  text-align: center;
+  padding: 8px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #fff;
 }
+.nav-item.correct { background-color: #f0f9eb; color: #67c23a; border-color: #e1f3d8; }
+.nav-item.incorrect { background-color: #fef0f0; color: #f56c6c; border-color: #fde2e2; }
+.nav-item.unanswered { background-color: #f4f4f5; color: #909399; border-color: #e9e9eb; }
+.nav-item.active {
+  border-color: #409eff;
+  background-color: #409eff;
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.5);
+}
+.nav-legend { display: flex; flex-wrap: wrap; justify-content: space-around; margin-top: 15px; font-size: 12px; color: #909399; }
+.legend-box { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: middle; }
+.legend-box.correct { background-color: #f0f9eb; border: 1px solid #e1f3d8;}
+.legend-box.incorrect { background-color: #fef0f0; border: 1px solid #fde2e2;}
+.legend-box.unanswered { background-color: #f4f4f5; border: 1px solid #e9e9eb;}
+.legend-box.active { background-color: #409eff; }
 </style>

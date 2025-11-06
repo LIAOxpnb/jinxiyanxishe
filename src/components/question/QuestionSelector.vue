@@ -95,7 +95,7 @@
 import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
 import FilterBar from '@/components/common/FilterBar.vue';
-import { getQuestionList } from '@/api/teaching-center/QuestionBank';
+import { getQuestionList, getQuestionGroupList } from '@/api/teaching-center/QuestionBank';
 import { setExamQuestions } from '@/api/teaching-center/Exams';
 import { getDictByType as getDictData } from '@/api/system-management/dictionary';
 
@@ -131,6 +131,7 @@ const typeOptions = ref([
   { label: '论述题', value: '论述' }
 ]);
 const categoryOptions = ref([]);
+const groupOptions = ref([]);
 const difficultyOptions = ref([
   { label: '高', value: 0 },
   { label: '中', value: 1 },
@@ -143,6 +144,7 @@ const questionFilterFields = ref([
   { type: 'input', model: 'creator', placeholder: '创建人' },
   { type: 'select', model: 'questionType', placeholder: '题型', options: typeOptions },
   { type: 'select', model: 'questionCategory', placeholder: '分类', options: categoryOptions },
+  { type: 'select', model: 'groupId', placeholder: '试题分组', options: groupOptions },
   { type: 'select', model: 'difficulty', placeholder: '难度', options: difficultyOptions },
 ]);
 
@@ -183,6 +185,15 @@ const fetchDictOptions = async (dictType, optionsRef) => {
       optionsRef.value = res.data.map(item => ({ label: item.dictLabel, value: item.dictValue }));
     }
   } catch (error) { console.error(`获取${dictType}失败`, error); }
+};
+
+const fetchGroupOptions = async () => {
+  try {
+    const res = await getQuestionGroupList();
+    if (res.code === 200 && res.data) {
+      groupOptions.value = res.data.map(item => ({ label: item.name, value: item.id }));
+    }
+  } catch (error) { console.error('获取试题分组失败', error); }
 };
 
 const fetchQuestions = async () => {
@@ -339,8 +350,11 @@ const handleConfirm = async () => {
 };
 
 onMounted(async () => {
-  // 先加载分类字典，确保 fetchQuestions 可以正确映射
-  await fetchDictOptions('question_category', categoryOptions);
+  // 先加载分类字典和分组，确保 fetchQuestions 可以正确映射
+  await Promise.all([
+    fetchDictOptions('question_category', categoryOptions),
+    fetchGroupOptions()
+  ]);
   fetchQuestions();
 });
 </script>

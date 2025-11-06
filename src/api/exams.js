@@ -70,3 +70,32 @@ export function submitStudentExamRecord(data) {
     data: data
   });
 }
+
+/**
+ * @description [学生端] 保存已答题时长
+ * @param {object} data - 时长数据
+ * @param {number} data.type - 类型：0-考试，1-靶场 (必填)
+ * @param {number} data.recordId - 答题记录ID (必填)
+ * @param {number} data.useTime - 已使用的时间（秒） (必填)
+ */
+export function saveRecordUseTime(data) {
+  return request({
+    url: '/student/exam/saveRecordUseTime',
+    method: 'post',
+    data: data
+  });
+}
+
+/**
+ * @description [学生端] 获取已答题时长
+ * @param {object} data - 查询参数
+ * @param {number} data.type - 类型：0-考试，1-靶场 (必填)
+ * @param {number} data.recordId - 答题记录ID (必填)
+ */
+export function getRecordUseTime(data) {
+  return request({
+    url: '/student/exam/getRecordUseTime',
+    method: 'post',
+    data: data
+  });
+}

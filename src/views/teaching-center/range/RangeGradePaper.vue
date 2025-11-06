@@ -173,6 +173,8 @@ const fetchPaperDetails = async () => {
               questionCategoryName: item.shootingRangeQuestion.questionCategory || '默认分类',
               difficulty: 1 // 靶场题目默认难度，如果接口有该字段可以映射
             };
+            // 设置totalScore字段为题目的满分(从shootingRangeQuestion.score获取)
+            item.totalScore = item.shootingRangeQuestion.score || 0;
           }
         });
       }
@@ -270,13 +272,20 @@ onMounted(() => {
 .page-wrapper {
   padding: 20px;
   background-color: #f0f2f5;
-  min-height: calc(100vh - 50px);
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .main-content {
   background-color: #fff;
   padding: 24px;
   border-radius: 4px;
+  height: calc(100vh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
 .custom-header {
@@ -308,24 +317,30 @@ onMounted(() => {
 .marking-content {
   display: flex;
   gap: 20px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .left-panel {
   flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .right-panel {
   flex: 1;
   overflow-y: auto;
-  max-height: 75vh;
   background-color: #f9fafb;
   padding: 15px;
-  padding-bottom: 20px;
+  padding-bottom: 60px;
   border-radius: 4px;
 }
 
 .question-nav {
   margin-top: 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .el-button-group {
@@ -339,6 +354,9 @@ onMounted(() => {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin-top: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  padding-right: 5px;
 }
 
 .nav-item {
@@ -356,8 +374,6 @@ onMounted(() => {
 .nav-item:hover {
   border-color: #409eff;
   color: #409eff;
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
 }
 
 .nav-item.correct {
@@ -373,10 +389,10 @@ onMounted(() => {
 }
 
 .nav-item.current {
-  border-color: #409eff;
-  background-color: #409eff;
+  border-color: #f56c6c;
+  background-color: #f56c6c;
   color: #fff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.5);
+  box-shadow: 0 2px 4px rgba(245, 108, 108, 0.3);
 }
 
 .nav-item-type {

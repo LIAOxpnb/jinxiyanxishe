@@ -32,7 +32,7 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                  <!-- <el-dropdown-item command="edit">编辑</el-dropdown-item> -->
                   <el-dropdown-item command="copy">复制</el-dropdown-item>
                   <el-dropdown-item command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
                 </el-dropdown-menu>
@@ -99,6 +99,43 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 复制练习对话框 -->
+    <el-dialog
+      v-model="copyDialogVisible"
+      title="复制练习"
+      width="500px"
+      @close="resetCopyForm"
+    >
+      <el-form
+        ref="copyFormRef"
+        :model="copyForm"
+        :rules="copyFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="原练习名" prop="originalName">
+          <el-input 
+            v-model="copyForm.originalName" 
+            placeholder="原练习名称"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="新练习名" prop="name">
+          <el-input 
+            v-model="copyForm.name" 
+            placeholder="请输入新练习名称"
+            maxlength="30"
+            show-word-limit 
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="copyDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCopyPractice">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -155,6 +192,18 @@ const rules = reactive({
   courseId: [{ required: true, message: '请选择课程、章节和小节', trigger: 'change' }],
 });
 const dialogTitle = computed(() => isEdit.value ? '编辑练习' : '新增练习');
+
+// --- 复制练习对话框相关 ---
+const copyDialogVisible = ref(false);
+const copyFormRef = ref(null);
+const copyForm = reactive({
+  id: '',
+  originalName: '',
+  name: '',
+});
+const copyFormRules = reactive({
+  name: [{ required: true, message: '请输入新练习名称', trigger: 'blur' }],
+});
 
 // --- API 调用与事件处理 ---
 const fetchPracticeList = async () => {
@@ -247,6 +296,15 @@ const resetForm = () => {
     currentCourseDetail.value = null;
 };
 
+const resetCopyForm = () => {
+  if (copyFormRef.value) {
+    copyFormRef.value.resetFields();
+  }
+  copyForm.id = '';
+  copyForm.originalName = '';
+  copyForm.name = '';
+};
+
 const handleCreate = () => {
   resetForm();
   isEdit.value = false;
@@ -284,6 +342,36 @@ const handleSubmit = async () => {
       }
     }
   });
+};
+
+const submitCopyPractice = async () => {
+  if (!copyFormRef.value) return;
+  await copyFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        const res = await copyPractice({
+          id: copyForm.id,
+          name: copyForm.name
+        });
+        if (res.code === 200) {
+          ElMessage.success('复制成功！');
+          copyDialogVisible.value = false;
+          fetchPracticeList();
+        } else {
+          ElMessage.error(res.msg || '复制失败');
+        }
+      } catch (error) {
+        ElMessage.error('复制失败');
+      }
+    }
+  });
+};
+
+const handleCopy = (row) => {
+  copyForm.id = row.id;
+  copyForm.originalName = row.name;
+  copyForm.name = `${row.name}_副本`;
+  copyDialogVisible.value = true;
 };
 
 const handleSelectionChange = (selection) => {
@@ -331,12 +419,7 @@ const handleDropdownAction = (command, row) => {
       handleEdit(row);
       break;
     case 'copy':
-      ElMessageBox.prompt('请输入新练习的名称', '复制练习', { inputValue: `${row.name}_复制` })
-        .then(async ({ value }) => {
-          await copyPractice({ id: row.id, name: value });
-          ElMessage.success('复制成功！');
-          fetchPracticeList();
-        }).catch(() => {});
+      handleCopy(row);
       break;
     case 'delete':
       ElMessageBox.confirm(`确定要删除练习 "${row.name}" 吗？`, '提示', { type: 'warning' })

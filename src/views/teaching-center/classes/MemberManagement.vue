@@ -287,7 +287,7 @@
             <span class="action-label">是否需要修改密码</span>
             <el-button type="text"
               :class="currentUserDetail.needChangePassword === 1 ? 'text-warning' : 'text-success'">
-              {{ currentUserDetail.needChangePassword === 1 ? '否' : '是' }}
+              {{ currentUserDetail.needChangePassword === 1 ? '是' : '否' }}
             </el-button>
           </div>
           <div class="action-item">
@@ -359,7 +359,7 @@
         </el-row>
 
         <!-- 批量添加区域 -->
-        <div style="margin-bottom: 20px; padding: 16px; background-color: #fafafa; border-radius: 4px;">
+        <!-- <div style="margin-bottom: 20px; padding: 16px; background-color: #fafafa; border-radius: 4px;">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <el-icon style="margin-right: 8px; color: #409EFF;"><Plus /></el-icon>
             <span style="font-weight: 500;">添加用户 ({{ batchUserCount }}/50)</span>
@@ -374,7 +374,7 @@
               style="width: 100%"
             />
           </el-form-item>
-        </div>
+        </div> -->
 
         <!-- 密码设置区域 -->
         <div style="margin-bottom: 20px;">
@@ -898,7 +898,11 @@ const resetCreateForm = () => {
   createFormData.policeNumber = '';
   createFormData.idCard = '';
   createFormData.orgId = null;
+  createFormData.status = 0;
+  createFormData.customPassword = '';
   batchUserInput.value = '';
+  passwordType.value = 'phone';
+  needChangePasswordOption.value = 1;
   createFormRef.value?.resetFields();
 };
 
@@ -915,6 +919,18 @@ const handleCreateSubmit = async () => {
     if (!createFormData.orgId) {
       ElMessage.error('请选择归属组织');
       return;
+    }
+    
+    // 验证自定义密码
+    if (passwordType.value === 'custom') {
+      if (!createFormData.customPassword) {
+        ElMessage.error('请输入自定义密码');
+        return;
+      }
+      if (createFormData.customPassword.length < 6 || createFormData.customPassword.length > 32) {
+        ElMessage.error('密码长度应在6-32位之间');
+        return;
+      }
     }
     
     createSubmitLoading.value = true;
@@ -961,20 +977,23 @@ const handleCreateSubmit = async () => {
       return;
     }
     
-    // 确定密码 - 使用身份证号后6位
+    // 确定密码
     let password = '';
-    if (users[0].idCard && users[0].idCard.length >= 6) {
-      password = users[0].idCard.slice(-6);
-    } else if (users[0].username) {
-      // 如果没有身份证号，使用手机号后6位
-      password = users[0].username.slice(-6);
+    if (passwordType.value === 'custom') {
+      // 使用自定义密码
+      password = createFormData.customPassword;
     } else {
-      password = '123456'; // 默认密码
+      // 使用手机号后6位
+      if (users[0].username && users[0].username.length >= 6) {
+        password = users[0].username.slice(-6);
+      } else {
+        password = '123456'; // 默认密码
+      }
     }
     
     const userData = {
       password: password,
-      needChangePassword: 1, // 需要修改密码
+      needChangePassword: needChangePasswordOption.value, // 使用用户选择的修改密码选项
       clazzId: parseInt(classId), // 添加班级ID
       users: users
     };

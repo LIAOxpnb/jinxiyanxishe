@@ -83,13 +83,23 @@
           <el-radio :label="true">设置解析</el-radio>
         </el-radio-group>
         <div v-if="showAnalysis" style="margin-top: 10px;">
-          <el-input 
-            v-model="questionForm.analysis" 
-            type="textarea" 
-            :rows="6" 
-            style="width: 450px;"
-            placeholder="请输入答案解析" 
-          />
+          <div style="border: 1px solid #ccc; width: 450px;">
+            <Toolbar
+              ref="analysisToolbarRef"
+              style="border-bottom: 1px solid #ccc"
+              :editor="analysisEditor"
+              :defaultConfig="{}"
+              mode="default"
+            />
+            <Editor
+              ref="analysisEditorRef"
+              v-model="questionForm.analysis"
+              style="height: 200px; overflow-y: hidden;"
+              :defaultConfig="analysisEditorConfig"
+              mode="default"
+              @onCreated="handleAnalysisCreated"
+            />
+          </div>
         </div>
       </el-form-item>
     </el-form>
@@ -103,11 +113,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, nextTick } from 'vue';
+import { ref, reactive, watch, nextTick, shallowRef, onBeforeUnmount } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Delete } from '@element-plus/icons-vue';
 import { updateQuestion, getQuestionDetail } from '@/api/teaching-center/QuestionBank';
 import { getDictByType } from '@/api/system-management/dictionary';
+import '@wangeditor/editor/dist/css/style.css';
+import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
+import { uploadFiles } from '@/api/common/UploadFiles.js';
+import { previewFile } from '@/api/common/PreviewFile.js';
 
 const props = defineProps({
   visible: {
@@ -131,6 +145,11 @@ const showAnalysis = ref(false);
 const categoryOptions = ref([]);
 const dialogVisible = ref(false);
 
+// 富文本编辑器相关
+const analysisEditorRef = shallowRef();
+const analysisToolbarRef = ref();
+const analysisEditor = shallowRef();
+
 const questionForm = reactive({
   id: null,
   questionType: '单选',
@@ -148,6 +167,51 @@ const rules = reactive({
   title: [{ required: true, message: '请输入题目', trigger: 'blur' }],
   questionCategory: [{ required: true, message: '请选择分类', trigger: 'change' }],
 });
+
+// 富文本编辑器配置
+const analysisEditorConfig = {
+  placeholder: '请输入解析内容...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          if (file.size > 5 * 1024 * 1024) {
+            ElMessage.error('图片大小不能超过5MB');
+            return;
+          }
+          
+          uploadFiles([file]).then(async (uploadRes) => {
+            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
+              const relativePath = uploadRes.data;
+              
+              // 获取预览URL
+              const previewUrl = await previewFile(relativePath);
+              
+              // 插入图片到编辑器
+              insertFn(previewUrl, file.name, previewUrl);
+              ElMessage.success('图片上传成功');
+            } else {
+              ElMessage.error(uploadRes.msg || '图片上传失败');
+            }
+          }).catch((error) => {
+            console.error('上传或预览过程中出错:', error);
+            ElMessage.error(error.message || '图片上传失败');
+          });
+        };
+        input.click();
+      }
+    }
+  }
+};
 
 // 获取分类选项
 const fetchCategoryOptions = async () => {
@@ -189,6 +253,10 @@ const loadQuestionDetail = async () => {
           { value: '0', text: '错误' }
         ];
         questionForm.answer = data.answer;
+      } else if (data.questionType === '填空') {
+        // 填空题直接设置答案
+        questionForm.answer = data.answer;
+        questionForm.options = [];
       } else {
         let parsedOptions = [];
         try {
@@ -280,6 +348,18 @@ const handleCancel = () => {
   dialogVisible.value = false;
   emit('update:visible', false);
 };
+
+// 处理富文本编辑器创建
+const handleAnalysisCreated = (editor) => {
+  analysisEditor.value = editor;
+};
+
+// 组件销毁前清理编辑器
+onBeforeUnmount(() => {
+  const editor = analysisEditor.value;
+  if (editor == null) return;
+  editor.destroy();
+});
 
 // 监听弹窗显示状态
 watch(() => props.visible, async (newVisible) => {

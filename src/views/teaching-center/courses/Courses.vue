@@ -100,7 +100,43 @@
     </div>
     <CreateCourseDialog v-model:visible="createDialogVisible" @success="handleCreateSuccess" />
 
-
+    <!-- 复制课程对话框 -->
+    <el-dialog
+      v-model="copyDialogVisible"
+      title="复制课程"
+      width="500px"
+      @close="resetCopyForm"
+    >
+      <el-form
+        ref="copyFormRef"
+        :model="copyForm"
+        :rules="copyFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="原课程名" prop="originalName">
+          <el-input 
+            v-model="copyForm.originalName" 
+            placeholder="原课程名称"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="新课程名" prop="name">
+          <el-input 
+            v-model="copyForm.name" 
+            placeholder="请输入新课程名称"
+            maxlength="30"
+            show-word-limit 
+          />
+          <div class="form-item-hint">【备注】课程名称重复性校验</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="copyDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCopyCourse">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
 
   </div>
 </template>
@@ -114,7 +150,7 @@ import FilterBar from '@/components/common/FilterBar.vue'; // 确保路径正确
 import  CreateCourseDialog  from '../courses/CreateCourseDialog.vue'; // 确保路径正确f
 
 // 【注意】请确保已创建对应的API文件和函数
-import { getCourseList, createCourse, updateCourseStatus,deleteCourse } from '../../../api/teaching-center/CourseManagement.js';
+import { getCourseList, createCourse, updateCourseStatus, deleteCourse, copyCourse } from '../../../api/teaching-center/CourseManagement.js';
 import { getDictByType } from '@/api/system-management/dictionary.js';
 
 const router = useRouter();
@@ -193,6 +229,18 @@ const courseFilterFields = ref([
 // --- 新增课程对话框 ---
 const createDialogVisible = ref(false);
 
+// --- 复制课程对话框相关 ---
+const copyDialogVisible = ref(false);
+const copyFormRef = ref(null);
+const copyForm = reactive({
+  id: '',
+  originalName: '',
+  name: '',
+});
+const copyFormRules = reactive({
+  name: [{ required: true, message: '请输入新课程名称', trigger: 'blur' }],
+});
+
 
 // --- API 调用 ---
 const fetchCourses = async () => {
@@ -257,6 +305,16 @@ const handleCreateCourse = () => {
 const resetCreateForm = () => {
   createFormRef.value?.resetFields();
 };
+
+const resetCopyForm = () => {
+  if (copyFormRef.value) {
+    copyFormRef.value.resetFields();
+  }
+  copyForm.id = '';
+  copyForm.originalName = '';
+  copyForm.name = '';
+};
+
 const handleCreateSuccess = () => {
   // 重新加载第一页数据，以显示新创建的课程
   pagination.page = 1;
@@ -273,6 +331,29 @@ const submitCreateCourse = async () => {
         fetchCourses();
       } else {
         ElMessage.error(res.msg || '创建失败');
+      }
+    }
+  });
+};
+
+const submitCopyCourse = async () => {
+  if (!copyFormRef.value) return;
+  await copyFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        const res = await copyCourse({
+          id: copyForm.id,
+          name: copyForm.name
+        });
+        if (res.code === 200) {
+          ElMessage.success('复制成功！');
+          copyDialogVisible.value = false;
+          fetchCourses();
+        } else {
+          ElMessage.error(res.msg || '复制失败');
+        }
+      } catch (error) {
+        ElMessage.error('复制失败');
       }
     }
   });
@@ -341,6 +422,13 @@ const handleBatchDelete = () => {
   });
 };
 
+const handleCopy = (row) => {
+  copyForm.id = row.id;
+  copyForm.originalName = row.name;
+  copyForm.name = `${row.name}_副本`;
+  copyDialogVisible.value = true;
+};
+
 const handleMoreActions = (command, row) => {
   switch (command) {
     case 'publish':
@@ -348,7 +436,7 @@ const handleMoreActions = (command, row) => {
       togglePublishStatus(row, command === 'publish' ? 1 : 0);
       break;
     case 'copy':
-      ElMessage.info(`复制课程功能待实现: ${row.name}`);
+      handleCopy(row);
       break;
     case 'delete':
       handleDelete(row);
@@ -413,5 +501,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   margin-left: 8px; /* 给更多操作按钮一些左边距 */
+}
+.form-item-hint {
+  color: #f56c6c;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
 }
 </style>

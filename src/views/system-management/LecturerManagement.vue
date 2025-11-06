@@ -28,8 +28,8 @@
         <el-table-column prop="questionCount" label="试题数" min-width="80" align="center" />
         <el-table-column prop="examCount" label="考试数" min-width="80" align="center" />
         <el-table-column prop="practiceCount" label="练习数" min-width="80" align="center" />
-        <el-table-column prop="rangeCount" label="靶场数" min-width="80" align="center" />
-        <el-table-column prop="classCount" label="班级数" min-width="80" align="center" />
+        <el-table-column prop="shootingRangeCount" label="靶场数" min-width="80" align="center" />
+        <el-table-column prop="clazzCount" label="班级数" min-width="80" align="center" />
         <el-table-column prop="createTime" label="创建时间" min-width="160" align="center" />
         <el-table-column label="操作" width="140" fixed="right" align="center">
           <template #default="{ row }">

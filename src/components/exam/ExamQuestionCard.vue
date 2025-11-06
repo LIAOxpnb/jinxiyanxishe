@@ -192,6 +192,17 @@ const onScoreChange = (newScore) => {
   font-size: 14px;
   line-height: 1.5;
   margin-bottom: 12px;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.title :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
 }
 
 .multiple-choice-options {

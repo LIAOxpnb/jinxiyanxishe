@@ -33,7 +33,7 @@
       </div>
 
       <el-table :data="tableData" v-loading="loading" style="width: 100%" class="exam-table">
-        <el-table-column prop="name" label="标题" min-width="250">
+        <el-table-column prop="name" label="标题" min-width="180">
           <template #default="scope">
             <el-link type="primary" :underline="false" @click="handleTitleClick(scope.row)">{{ scope.row.name }}</el-link>
           </template>
@@ -45,9 +45,9 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="startTime" label="考试时间" width="180">
+        <el-table-column prop="startTime" label="考试时间" width="350" show-overflow-tooltip>
             <template #default="scope">
-                {{ scope.row.examDate === 0 ? '不限时' : scope.row.startTime }}
+                <span style="white-space: nowrap;">{{ scope.row.examDate === 0 ? '不限时' : scope.row.startTime + ' - ' + scope.row.endTime }}</span>
             </template>
         </el-table-column>
         <el-table-column prop="duration" label="考试时长" width="120">
@@ -275,16 +275,55 @@ const handleTitleClick = (row) => {
     router.push({ name: 'Student-ExamStart', params: { id: row.id } });
     
   } 
-  // 场景2：已结束的考试(2)，点击标题直接查看结果
+  // 场景2：已结束的考试(2)，提示已结束
   else if (row.examStatus === 2) {
-    router.push({ name: 'Student-ExamResult', params: { id: row.id } });
+    ElMessage.warning('当前考试已结束，无法参加考试');
+    return;
+  }
+  // 场景3：其他状态
+  else {
+    ElMessage.warning('考试状态异常，无法参加');
+    return;
   }
 };
 
-// [核心修改] “查看考卷”按钮统一跳转到结果页
+// [核心修改] "查看考卷"按钮统一跳转到结果页
 const viewResult = (row) => {
-  // 无论状态是“进行中”还是“已结束”，都跳转到结果页
-  router.push({ name: 'Student-ExamResult', params: { id: row.id } });
+  // 检查是否已经交卷（attemptedTimes为0表示尚未交卷）
+  if ((row.attemptedTimes || 0) === 0) {
+    ElMessage.warning('尚未交卷，无法查看');
+    return;
+  }
+  
+  // 检查考试记录状态
+  if (row.examRecord) {
+    // status: 0-未完成, 1-待修改, 2-阅卷中, 3-修改异常, 4-已评分
+    if (row.examRecord.status === 1 || row.examRecord.status === 2) {
+      ElMessage.warning('尚未阅卷，无法查看');
+      return;
+    }
+    
+    // 只有status=4（已评分）时才允许查看
+    if (row.examRecord.status === 4) {
+      router.push({ name: 'Student-ExamResult', params: { id: row.id } });
+      return;
+    }
+    
+    // 其他状态（0-未完成, 3-修改异常）
+    if (row.examRecord.status === 0) {
+      ElMessage.warning('考试未完成，无法查看');
+      return;
+    }
+    
+    if (row.examRecord.status === 3) {
+      ElMessage.warning('阅卷异常，请联系管理员');
+      return;
+    }
+  } else {
+    // 没有考试记录
+    ElMessage.warning('暂无考试记录，无法查看');
+    return;
+  }
 };
 
 onMounted(() => {

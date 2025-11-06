@@ -8,7 +8,7 @@
         <span>{{ index + 1 }}.</span>
         <el-tag>{{ record.question.questionType }}</el-tag>
       </div>
-      <div class="question-title" v-html="record.question.title"></div>
+      <div class="question-title" v-html="processedTitle"></div>
 
       <div class="answer-area">
         <el-radio-group v-if="record.question.questionType === '单选'" :model-value="record.userAnswer" disabled>
@@ -30,11 +30,11 @@
         </div>
 
       <div class="feedback-section">
-        <p><strong>你的答案：</strong> <span :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">{{ record.userAnswer || '未作答' }}</span></p>
-        <p><strong>正确答案：</strong> <span class="correct-text">{{ record.question.answer }}</span></p>
-        <div v-if="record.question.analysis">
+        <p><strong>你的答案：</strong> <span :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">{{ formatUserAnswer(record.userAnswer) || '未作答' }}</span></p>
+        <p><strong>正确答案：</strong> <span class="correct-text">{{ formatCorrectAnswer(record.question.answer) }}</span></p>
+        <div v-if="processedAnalysis">
           <p><strong>题目解析：</strong></p>
-          <div v-html="record.question.analysis"></div>
+          <div v-html="processedAnalysis"></div>
         </div>
       </div>
     </div>
@@ -42,12 +42,60 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const props = defineProps({
   record: { type: Object, required: true },
   index: { type: Number, required: true }
 });
+
+// 转换HTML中的图片URL为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
+// 处理后的题目标题
+const processedTitle = ref('');
+// 处理后的解析
+const processedAnalysis = ref('');
+
+// 监听 record 变化，处理图片
+watch(() => props.record, async (newRecord) => {
+  if (newRecord && newRecord.question) {
+    processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+  }
+}, { immediate: true });
 
 const parsedOptions = computed(() => {
   const details = props.record.question?.details;
@@ -89,6 +137,43 @@ const isIncorrectUserAnswer = (option) => {
     : [props.record.userAnswer];
   return userAnswers.includes(option) && !isCorrectAnswer(option);
 };
+
+// 格式化填空题答案
+const formatFillBlankAnswer = (answer) => {
+  if (!answer) return '';
+  // 使用逗号加空格作为分隔符
+  return answer.replace(/#@#/g, ', ');
+};
+
+// 格式化用户答案显示
+const formatUserAnswer = (answer) => {
+  if (!answer) return '';
+  if (props.record.question.questionType === '判断') {
+    return answer === '0' ? '正确' : answer === '1' ? '错误' : answer;
+  }
+  if (props.record.question.questionType === '填空') {
+    return formatFillBlankAnswer(answer);
+  }
+  if (props.record.question.questionType === '多选') {
+    return answer.replace(/#@#/g, '、');
+  }
+  return answer;
+};
+
+// 格式化正确答案显示
+const formatCorrectAnswer = (answer) => {
+  if (!answer) return '';
+  if (props.record.question.questionType === '判断') {
+    return answer === '0' ? '正确' : answer === '1' ? '错误' : answer;
+  }
+  if (props.record.question.questionType === '填空') {
+    return formatFillBlankAnswer(answer);
+  }
+  if (props.record.question.questionType === '多选') {
+    return answer.replace(/#@#/g, '、');
+  }
+  return answer;
+};
 </script>
 
 <style scoped>
@@ -98,7 +183,23 @@ const isIncorrectUserAnswer = (option) => {
 .stamp.correct { background-color: #67c23a; }
 .stamp.incorrect { background-color: #f56c6c; }
 .question-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 16px; }
-.question-title { font-size: 15px; line-height: 1.7; color: #303133; margin-bottom: 20px; }
+.question-title { 
+  font-size: 15px; 
+  line-height: 1.7; 
+  color: #303133; 
+  margin-bottom: 20px;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.question-title :deep(img),
+.feedback-section :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
 .answer-area { margin-bottom: 15px; }
 .el-radio-group, .el-checkbox-group { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; }
 .el-radio, .el-checkbox { cursor: default; }

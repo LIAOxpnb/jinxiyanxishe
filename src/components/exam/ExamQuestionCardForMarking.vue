@@ -8,18 +8,22 @@
       <el-tag type="success" size="small">{{ record.totalScore || 0 }} 分</el-tag>
     </div>
 
-    <div class="question-title" v-html="record.question.title"></div>
+    <div class="question-title" v-html="processedTitle"></div>
 
-    <div class="analysis-wrapper" v-if="record.question.analysis">
+    <div class="analysis-wrapper" v-if="processedAnalysis">
       <p class="analysis-title">解析：</p>
-      <div class="analysis-content" v-html="record.question.analysis"></div>
+      <div class="analysis-content" v-html="processedAnalysis"></div>
     </div>
     <div class="attachment-wrapper" v-if="record.question.filePath">
       <el-link :icon="Link" type="primary">{{ record.question.fileName || '附件' }}</el-link>
     </div>
 
-    <div class="answer-summary" :class="record.isCorrect === 2 ? 'correct' : 'incorrect'">
-      <el-icon class="status-icon">
+    <div class="answer-summary" :class="{
+      'correct': record.question.questionType !== '论述' && record.isCorrect === 2,
+      'incorrect': record.question.questionType !== '论述' && record.isCorrect !== 2,
+      'essay': record.question.questionType === '论述'
+    }">
+      <el-icon class="status-icon" v-if="record.question.questionType !== '论述'">
         <component :is="record.isCorrect === 2 ? SuccessFilled : CircleCloseFilled" />
       </el-icon>
 
@@ -62,9 +66,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElTag, ElIcon, ElLink, ElDivider, ElInputNumber, ElTooltip } from 'element-plus';
 import { SuccessFilled, CircleCloseFilled, Link } from '@element-plus/icons-vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const props = defineProps({
   record: {
@@ -79,6 +84,53 @@ const props = defineProps({
 
 const difficultyMap = { 0: '困难', 1: '中等', 2: '简单' };
 const difficultyText = computed(() => difficultyMap[props.record.question.difficulty] || '未知');
+
+// 转换HTML中的图片URL为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
+// 处理后的题目标题
+const processedTitle = ref('');
+// 处理后的解析
+const processedAnalysis = ref('');
+
+// 监听 record 变化，处理图片
+watch(() => props.record, async (newRecord) => {
+  if (newRecord && newRecord.question) {
+    processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+  }
+}, { immediate: true });
 
 // 格式化答案显示
 const formatAnswer = (answer, questionType) => {
@@ -122,6 +174,18 @@ const formatAnswer = (answer, questionType) => {
   font-size: 14px;
   line-height: 1.6;
   color: #303133;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.question-title :deep(img),
+.analysis-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
 }
 .analysis-wrapper {
   margin-top: 12px;
@@ -155,6 +219,10 @@ const formatAnswer = (answer, questionType) => {
 .answer-summary.incorrect {
   background-color: #fef0f0;
   color: #f56c6c;
+}
+.answer-summary.essay {
+  background-color: #f4f4f5;
+  color: #303133;
 }
 .status-icon {
   font-size: 18px;

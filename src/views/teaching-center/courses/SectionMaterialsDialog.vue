@@ -6,7 +6,27 @@
     @update:model-value="closeDialog"
     :close-on-click-modal="false"
   >
-    <div style="text-align: center; padding: 20px;">
+    <!-- 已有资料展示 -->
+    <div v-if="hasExistingMaterial && existingMaterialData" class="existing-material">
+      <el-table :data="[existingMaterialData]" style="width: 100%">
+        <el-table-column prop="fileName" label="资料名称" />
+        <el-table-column label="操作" width="150" align="center">
+          <template #default="scope">
+            <el-button link type="primary" @click="downloadMaterial(scope.row)">
+              <el-icon><Download /></el-icon>
+              下载
+            </el-button>
+            <el-button link type="danger" @click="deleteMaterial(scope.row)">
+              <el-icon><Delete /></el-icon>
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 上传新资料 -->
+    <div v-else style="text-align: center; padding: 20px;">
       <el-upload
         ref="uploadRef"
         drag
@@ -32,8 +52,9 @@
     
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="closeDialog">取消</el-button>
+        <el-button @click="closeDialog">{{ hasExistingMaterial ? '关闭' : '取消' }}</el-button>
         <el-button 
+          v-if="!hasExistingMaterial"
           type="primary" 
           @click="submitForm" 
           :loading="isUploading"
@@ -48,10 +69,12 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { genFileId } from 'element-plus';
+import { Download, Delete } from '@element-plus/icons-vue';
 import { uploadFiles } from '../../../api/common/UploadFiles';
-import { getSectionMaterials, saveSectionMaterials } from '../../../api/teaching-center/CourseManagement';
+import { previewFile } from '../../../api/common/PreviewFile';
+import { getSectionMaterials, saveSectionMaterials, deleteSectionMaterial } from '../../../api/teaching-center/CourseManagement';
 
 const props = defineProps({
   visible: Boolean,
@@ -64,6 +87,7 @@ const fileList = ref([]);
 const isUploading = ref(false);
 const uploadProgress = ref(0);
 const hasExistingMaterial = ref(false);
+const existingMaterialData = ref(null);
 
 watch(() => props.visible, (newVal) => {
   if (newVal) {
@@ -74,6 +98,7 @@ watch(() => props.visible, (newVal) => {
 const fetchExistingMaterials = async () => {
   fileList.value = [];
   hasExistingMaterial.value = false;
+  existingMaterialData.value = null;
   uploadRef.value?.clearFiles();
 
   try {
@@ -81,10 +106,58 @@ const fetchExistingMaterials = async () => {
     if (res.code === 200 && res.data && res.data.length > 0) {
       const material = res.data[0];
       hasExistingMaterial.value = true;
-      fileList.value = [{ name: material.fileName, url: material.filePath }];
+      existingMaterialData.value = material;
     }
   } catch (error) {
     console.error('获取已有资料失败:', error);
+  }
+};
+
+// 下载资料
+const downloadMaterial = async (material) => {
+  try {
+    ElMessage.info('正在获取下载链接...');
+    const downloadUrl = await previewFile(material.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = material.fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    ElMessage.success('开始下载');
+  } catch (error) {
+    console.error("下载资料失败:", error);
+    ElMessage.error("获取下载链接失败，请重试");
+  }
+};
+
+// 删除资料
+const deleteMaterial = async (material) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该资料吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+
+    const res = await deleteSectionMaterial(material.id);
+    if (res.code === 200) {
+      ElMessage.success('删除成功');
+      hasExistingMaterial.value = false;
+      existingMaterialData.value = null;
+      emit('update-material', { 
+        sectionId: props.sectionData.id,
+        materialName: null
+      });
+    } else {
+      ElMessage.error(res.msg || '删除失败');
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除资料失败:', error);
+      ElMessage.error('删除失败，请重试');
+    }
   }
 };
 
@@ -217,5 +290,13 @@ const submitForm = async () => {
 .progress-container {
   margin-top: 16px;
   padding: 0 20px;
+}
+
+.existing-material {
+  padding: 0 20px;
+}
+
+.existing-material :deep(.el-table) {
+  margin-bottom: 0;
 }
 </style>
