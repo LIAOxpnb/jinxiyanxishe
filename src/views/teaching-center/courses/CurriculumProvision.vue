@@ -618,22 +618,27 @@ onMounted(() => {
 .curriculum-provision-page {
   background-color: #f0f2f5;
   padding: 20px;
-  min-height: calc(100vh - 50px);
+  height: 100%; /* 使用100%而不是calc */
+  overflow-y: auto; /* 允许垂直滚动 */
+  box-sizing: border-box; /* 确保padding包含在高度内 */
 }
 .page-main-content {
   display: flex;
   gap: 20px;
 }
 .left-panel {
-  flex: 1;
+  flex: 3;
   min-width: 0;
 }
 .right-panel {
-  width: 320px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  position: sticky;
+  top: 20px;
+  align-self: flex-start;
 }
 .card-header {
   display: flex;

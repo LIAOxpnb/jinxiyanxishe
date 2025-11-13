@@ -7,7 +7,8 @@
         <el-tab-pane label="案情研判" name="questions"></el-tab-pane>
       </el-tabs>
       <div class="header-actions">
-        <span class="countdown">剩余时间: {{ formattedCountdown }}</span>
+        <span v-if="activeTab === 'questions'" class="info-item">案情研判</span>
+        <span v-if="activeTab === 'questions'" class="info-item">剩余时间 {{ formattedCountdown }}</span>
         <el-button type="primary" @click="confirmSubmit">提交报告</el-button>
       </div>
     </div>
@@ -37,22 +38,31 @@
       
       <div v-show="activeTab === 'questions'" class="question-panel">
         <div class="left-panel">
-          <el-card class="box-card">
-            <template #header>
-              <div class="clearfix">
-                <span>答题卡</span>
-                <span style="float: right;">{{ answeredCount }}/{{ questions.length }}</span>
+          <h4>研判内容</h4>
+          <div class="status-info">
+            <div class="status-item">
+              <span>已答</span>
+              <span class="value">{{ answeredCount }}</span>
+            </div>
+            <div class="status-item">
+              <span>未答</span>
+              <span class="value">{{ totalQuestionCount - answeredCount }}</span>
+            </div>
+            <template v-if="detail?.challengeMode === 1">
+              <div class="status-item">
+                <span>总分数</span>
+                <span class="value">{{ currentScore }}</span>
+              </div>
+              <div class="status-item">
+                <span>已扣除分</span>
+                <span class="value danger">{{ deductedScore }}</span>
               </div>
             </template>
-            <div class="question-nav-grid">
-              <div v-for="(q, index) in questions" :key="q.id" class="nav-item" :class="{
-                'answered': isAnswered(q.id),
-                'current': currentQuestionIndex === index
-              }" @click="goToQuestion(index)">
-                {{ index + 1 }}
-              </div>
-            </div>
-          </el-card>
+          </div>
+          <div v-if="detail?.challengeMode === 1" class="challenge-warning">
+            【备注】 当前靶场为闯关模式，<br/>
+           需要顺序答题，回答正确才能进入下一题，并且每次答错会扣分，当扣分不足以完成比武时，自动结束比武。
+          </div>
         </div>
         <div class="right-panel">
           <!-- 调试信息 -->
@@ -67,17 +77,52 @@
           </div>
           
           <template v-else>
+            <!-- 答题反馈提示 -->
+            <div v-if="showFeedback" class="answer-feedback" :class="feedbackType">
+              <el-icon v-if="feedbackType === 'correct'"><CircleCheck /></el-icon>
+              <el-icon v-else><CircleClose /></el-icon>
+              <span>{{ feedbackMessage }}</span>
+            </div>
+            
             <TakeRangeQuestionCard 
               v-if="currentQuestionIndex < questions.length"
               :key="questions[currentQuestionIndex].id" 
               :question-data="questions[currentQuestionIndex]"
               :index="currentQuestionIndex" 
-              v-model="answers[questions[currentQuestionIndex].id]" 
+              v-model="answers[questions[currentQuestionIndex].id]"
             />
-            <div class="pagination-controls">
-              <el-button @click="previousQuestion" :disabled="currentQuestionIndex === 0" size="large">上一题</el-button>
-              <span class="question-progress">第 {{ currentQuestionIndex + 1 }} / {{ questions.length }} 题</span>
-              <el-button @click="nextQuestion" :disabled="currentQuestionIndex === questions.length - 1" type="primary" size="large">下一题</el-button>
+            
+            <!-- 答题操作按钮 -->
+            <div class="question-actions">
+              <template v-if="detail?.challengeMode === 1">
+                <!-- 闯关模式：上一题 + 下一题 -->
+                <div class="pagination-controls">
+                  <el-button 
+                    @click="previousQuestion" 
+                    :disabled="currentQuestionIndex === 0" 
+                    size="large"
+                  >
+                    上一题
+                  </el-button>
+                  <span class="question-progress">第 {{ currentQuestionIndex + 1 }} / {{ questions.length }} 题</span>
+                  <el-button 
+                    type="primary" 
+                    size="large"
+                    @click="submitCurrentAnswer"
+                    :disabled="!hasAnswer(currentQuestionIndex) || currentQuestionIndex >= questions.length - 1"
+                  >
+                    下一题
+                  </el-button>
+                </div>
+              </template>
+              <template v-else>
+                <!-- 普通模式 -->
+                <div class="pagination-controls">
+                  <el-button @click="previousQuestion" :disabled="currentQuestionIndex === 0" size="large">上一题</el-button>
+                  <span class="question-progress">第 {{ currentQuestionIndex + 1 }} / {{ questions.length }} 题</span>
+                  <el-button @click="nextQuestion" :disabled="currentQuestionIndex === questions.length - 1" type="primary" size="large">下一题</el-button>
+                </div>
+              </template>
             </div>
           </template>
         </div>
@@ -90,7 +135,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Paperclip, Document } from '@element-plus/icons-vue';
+import { Paperclip, Document, CircleCheck, CircleClose } from '@element-plus/icons-vue';
 import { getShootingRangeDetail, getShootingRangeClues, getShootingRangeQuestions, submitShootingRangePaper, submitShootingRangeRecord, getShootingRangeResult } from '@/api/shooting-range.js';
 import { saveRecordUseTime, getRecordUseTime } from '@/api/exams.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
@@ -106,10 +151,21 @@ const answers = reactive({});
 const activeTab = ref('clues');
 const currentQuestionIndex = ref(0);
 
+// 闯关模式相关状态
+const currentScore = ref(100); // 当前分数
+const deductedScore = ref(0); // 已扣除分数
+const showFeedback = ref(false); // 是否显示答题反馈
+const feedbackType = ref(''); // 反馈类型: 'correct' | 'incorrect'
+const feedbackMessage = ref(''); // 反馈消息
+const answeredQuestions = ref([]); // 已答题目列表
+const answeredCountFromApi = ref(0); // 从接口获取的已答题数
+const totalQuestionCount = ref(0); // 题目总数
+
 // 暂存相关状态
 const rangeRecordId = ref(null); // 答题记录ID
 const isRangeSubmitted = ref(false); // 是否已交卷
 const isRestoringAnswers = ref(false); // 是否正在恢复答案
+const isInitializing = ref(true); // 添加初始化标志
 
 let timerInterval = null;
 let saveTimeInterval = null; // 保存时间的定时器
@@ -222,6 +278,17 @@ onBeforeUnmount(() => {
 });
 
 const answeredCount = computed(() => {
+  // 闯关模式：已答 = 已通过的题数 + 当前题目是否有答案
+  if (detail.value?.challengeMode === 1) {
+    // 统计已填写答案的题目数量（包括当前正在答的题）
+    const filledCount = Object.keys(answers).filter(questionId => {
+      const ans = answers[questionId];
+      if (Array.isArray(ans)) return ans.length > 0 && ans.some(item => item);
+      return !!ans;
+    }).length;
+    return filledCount;
+  }
+  // 普通模式使用前端判断
   return Object.values(answers).filter(ans => Array.isArray(ans) ? ans.length > 0 : !!ans).length;
 });
 const isAnswered = (questionId) => {
@@ -238,7 +305,160 @@ const previousQuestion = () => {
   if (currentQuestionIndex.value > 0) currentQuestionIndex.value--;
 };
 const nextQuestion = () => {
-  if (currentQuestionIndex.value < questions.value.length - 1) currentQuestionIndex.value++;
+  if (currentQuestionIndex.value < questions.value.length - 1) {
+    currentQuestionIndex.value++;
+    showFeedback.value = false; // 切换题目时隐藏反馈
+  }
+};
+
+// 判断题目是否已答
+const isQuestionAnswered = (index) => {
+  const questionId = questions.value[index]?.id;
+  return answeredQuestions.value.includes(questionId);
+};
+
+// 判断当前题目是否有答案
+const hasAnswer = (index) => {
+  const questionId = questions.value[index]?.id;
+  const ans = answers[questionId];
+  if (Array.isArray(ans)) return ans.length > 0 && ans.some(item => item);
+  return !!ans;
+};
+
+// 提交当前题目答案（闯关模式 - 点击下一题时调用）
+const submitCurrentAnswer = async () => {
+  const question = questions.value[currentQuestionIndex.value];
+  if (!question) return;
+  
+  const answer = answers[question.id];
+  if (!answer || (Array.isArray(answer) && answer.length === 0)) {
+    ElMessage.warning('请先作答再提交');
+    return;
+  }
+  
+  try {
+    // 调用 submitRecord 接口进行保存和判题
+    // 闯关模式下只传当前题目的答案
+    let userAnswer = answer;
+    if (Array.isArray(userAnswer)) {
+      userAnswer = userAnswer.sort().join('#@#');
+    }
+    
+    const shootingRangeSubmitRecordList = [
+      {
+        questionId: question.id,
+        userAnswer: userAnswer
+      }
+    ];
+
+    const payload = {};
+    if (rangeRecordId.value) {
+      payload.id = rangeRecordId.value;
+    }
+    payload.shootingRangeId = detail.value.id;
+    payload.shootingRangeSubmitRecordList = shootingRangeSubmitRecordList;
+
+    const res = await submitShootingRangeRecord(payload);
+    
+    // 保存返回的记录ID
+    if (res.data && typeof res.data === 'object' && res.data.id) {
+      rangeRecordId.value = res.data.id;
+    }
+    
+    // 判断答题是否正确
+    // 规则：code === 200 且 data 是数字 → 答错（数字是扣分）
+    //      code === 200 且 data 是对象 → 答对
+    const isCorrect = res.code === 200 && typeof res.data === 'object';
+    
+    if (isCorrect) {
+      // 回答正确
+      showFeedback.value = true;
+      feedbackType.value = 'correct';
+      feedbackMessage.value = '回答正确！继续加油';
+      
+      // 标记题目已答
+      if (!answeredQuestions.value.includes(question.id)) {
+        answeredQuestions.value.push(question.id);
+      }
+      
+      // 更新已答题数（闯关模式）
+      if (detail.value?.challengeMode === 1) {
+        answeredCountFromApi.value++;
+      }
+      
+      setTimeout(() => {
+        showFeedback.value = false;
+        // 自动进入下一题
+        if (currentQuestionIndex.value < questions.value.length - 1) {
+          nextQuestion();
+        } else {
+          // 最后一题答对，提示提交
+          ElMessageBox.confirm('恭喜完成所有题目！是否提交报告？', '提示', {
+            confirmButtonText: '提交报告',
+            cancelButtonText: '检查答案',
+            type: 'success'
+          }).then(() => {
+            submitReport();
+          });
+        }
+      }, 2000);
+    } else {
+      // 回答错误 - data 是扣除的分数
+      // data 就是扣除的分数
+      const deductPoints = typeof res.data === 'number' ? res.data : 0;
+      
+      // 更新总分数和扣分
+      if (deductPoints > 0) {
+        currentScore.value = Math.max(0, currentScore.value - deductPoints);
+        deductedScore.value += deductPoints;
+      }
+      
+      // 立即显示错误提示
+      showFeedback.value = true;
+      feedbackType.value = 'incorrect';
+      feedbackMessage.value = `回答错误，本次扣分 ${deductPoints} 分`;
+      
+      // 判断是否可以继续（检查分数是否低于合格线）
+      const qualified = detail.value?.qualified || 0;
+      const shouldEndChallenge = currentScore.value < qualified;
+      
+      if (shouldEndChallenge) {
+        // 分数不足，自动结束 - 3秒后
+        setTimeout(() => {
+          showFeedback.value = false;
+          ElMessageBox.alert(
+            `分数不足，比武自动结束！\n当前分数：${currentScore.value}，合格分数：${qualified}`,
+            '比武结束',
+            {
+              confirmButtonText: '查看结果',
+              type: 'warning',
+              callback: () => {
+                submitReport();
+              }
+            }
+          );
+        }, 3000);
+      } else {
+        // 还可以继续，3秒后隐藏提示并初始化答案让用户重新答题
+        setTimeout(() => {
+          showFeedback.value = false;
+          
+          // 初始化当前题目的答案
+          const questionType = question.questionType;
+          if (questionType === '多选' || questionType === '填空') {
+            answers[question.id] = [];
+          } else {
+            answers[question.id] = '';
+          }
+          
+          ElMessage.info('请重新作答');
+        }, 3000);
+      }
+    }
+  } catch (error) {
+    console.error('提交答案失败:', error);
+    ElMessage.error('提交失败，请重试');
+  }
 };
 
 // 预览线索附件
@@ -332,8 +552,13 @@ const debounceSaveRangeRecord = () => {
 
 // 监听答案变化，自动暂存
 watch(answers, (newVal, oldVal) => {
-  // 如果正在恢复答案，不触发自动暂存
-  if (!isRestoringAnswers.value) {
+  // 初始化期间或正在恢复答案时，不触发自动暂存
+  if (!isInitializing.value && !isRestoringAnswers.value) {
+    // 如果是闯关模式(challengeMode === 1)，不自动暂存，只有点击下一题时才保存
+    if (detail.value?.challengeMode === 1) {
+      return;
+    }
+    // 普通模式才自动暂存
     debounceSaveRangeRecord();
   }
 }, { deep: true });
@@ -655,11 +880,28 @@ onMounted(async () => {
 
     // 处理题目列表
     if (questionsRes.code === 200 && questionsRes.data) {
+      // 从 questionList 接口获取 shootingRangeRecord.id（如果有）
+      if (questionsRes.data.shootingRangeRecord && questionsRes.data.shootingRangeRecord.id) {
+        // 只有在非重新答题时才保存ID
+        if (!isRestart) {
+          rangeRecordId.value = questionsRes.data.shootingRangeRecord.id;
+          console.log('从questionList获取rangeRecordId:', rangeRecordId.value);
+        }
+      }
+      
+      // 初始化总分数（从 questionList 接口返回的 score 字段）
+      if (questionsRes.data.score !== undefined) {
+        currentScore.value = questionsRes.data.score;
+        console.log('初始化总分数:', currentScore.value);
+      }
+      
       if (questionsRes.data.shootingRangeQuestionList && Array.isArray(questionsRes.data.shootingRangeQuestionList)) {
         questions.value = questionsRes.data.shootingRangeQuestionList;
+        totalQuestionCount.value = questions.value.length; // 设置题目总数
         
         // 初始化答案对象并恢复已保存的答案
         let hasRestoredAnswers = false;
+        let answeredCount = 0; // 统计已答题数
         
         questions.value.forEach(q => {
           const questionId = q.id;
@@ -676,6 +918,7 @@ onMounted(async () => {
           // 如果是继续答题且有保存的答案，恢复答案
           if (recordId && !isRestart && userAnswer) {
             hasRestoredAnswers = true;
+            answeredCount++; // 有答案的题目计数
             
             if (questionType === '多选' || questionType === '填空') {
               // 多选和填空题：将字符串拆分为数组
@@ -686,6 +929,10 @@ onMounted(async () => {
             }
           }
         });
+        
+        // 设置已答题数
+        answeredCountFromApi.value = answeredCount;
+        console.log('初始化已答题数:', answeredCountFromApi.value, '总题数:', totalQuestionCount.value);
         
         // 如果恢复了答案，显示提示
         if (hasRestoredAnswers) {
@@ -705,6 +952,10 @@ onMounted(async () => {
     ElMessage.error('加载靶场数据失败');
   } finally {
     loading.value = false;
+    // 在所有初始化完成后，标记初始化结束
+    setTimeout(() => {
+      isInitializing.value = false;
+    }, 500);
   }
 });
 </script>
@@ -715,11 +966,28 @@ onMounted(async () => {
 .range-name { font-size: 18px; margin-right: 30px; }
 .main-tabs { flex-grow: 1; }
 .header-actions { display: flex; align-items: center; gap: 20px; }
+.info-item { color: #606266; font-size: 14px; }
 .countdown { color: #f56c6c; font-weight: 500; }
 .range-body { flex-grow: 1; overflow-y: auto; }
 .clue-analysis-panel, .question-panel { display: flex; gap: 20px; padding: 20px; height: 100%; box-sizing: border-box; }
 .left-panel { width: 280px; flex-shrink: 0; background-color: #fff; padding: 20px; border-radius: 4px; align-self: flex-start; }
+.left-panel h4 { margin: 0 0 16px 0; font-size: 16px; color: #303133; border-bottom: 1px solid #e6e6e6; padding-bottom: 10px; }
+.status-info { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.status-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background-color: #f5f7fa; border-radius: 4px; }
+.status-item span:first-child { color: #606266; font-size: 14px; }
+.status-item .value { font-weight: 600; color: #303133; font-size: 16px; }
+.status-item .value.danger { color: #f56c6c; }
+.challenge-warning { padding: 12px; background-color: #fef0f0; color: #f56c6c; border-radius: 4px; font-size: 13px; line-height: 1.6; }
 .right-panel { flex: 1; background-color: #fff; padding: 20px; border-radius: 4px; display: flex; flex-direction: column; overflow-y: auto; }
+.answer-feedback { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; animation: slideDown 0.3s ease; }
+.answer-feedback.correct { background-color: #f0f9ff; color: #67c23a; border: 1px solid #c2e7b0; }
+.answer-feedback.incorrect { background-color: #fef0f0; color: #f56c6c; border: 1px solid #fbc4c4; font-weight: 500; font-size: 15px; }
+.answer-feedback .el-icon { font-size: 20px; }
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.question-actions { margin-top: auto; padding-top: 20px; border-top: 1px solid #dcdfe6; text-align: center; }
 .info-bar { background-color: #ecf5ff; color: #409eff; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; }
 .clue-item { border-bottom: 1px solid #f0f2f5; padding-bottom: 16px; margin-bottom: 16px; }
 .clue-attachment { margin-top: 10px; }

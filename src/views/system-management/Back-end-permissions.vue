@@ -25,7 +25,7 @@
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column prop="name" label="角色名称" min-width="150" align="center" />
         <el-table-column prop="userCount" label="授权人数" min-width="100" align="center" />
-        <el-table-column prop="createBy" label="创建人" min-width="120" align="center" />
+        <el-table-column prop="creatorName" label="创建人" min-width="120" align="center" />
         <el-table-column prop="createTime" label="创建时间" min-width="180" align="center" />
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
@@ -256,8 +256,8 @@
 
             <!-- 组织树 -->
             <div v-else class="org-tree">
-              <el-tree :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id"
-                :default-expand-all="true" @check="handleOrgTreeCheck">
+              <el-tree :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" show-checkbox node-key="id"
+                lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
                 <template #default="{ node, data }">
                   <div class="tree-node">
                     <el-icon v-if="data.type === 'org'" class="org-icon">
@@ -326,7 +326,7 @@ import FilterBar from '@/components/common/FilterBar.vue'
 import { getRoleList, saveRole, getRoleDetail, updateRole, grantUserRole, revokeUserRole } from '@/api/system-management/Back-end-permissions'
 import { getDictByType } from '@/api/system-management/dictionary'
 import { getUserList } from '@/api/system-management/User'
-import { getOrgTree } from '@/api/system-management/Org'
+import { getOrgList } from '@/api/system-management/Org'
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -977,142 +977,144 @@ const handleUserSearch = async () => {
 // 获取组织树数据
 const fetchOrgTree = async () => {
   try {
-    const response = await getOrgTree()
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    })
     if (response.code === 200) {
-      // 处理组织树数据，添加用户节点
-      await processOrgTreeWithUsers(response.data)
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: rootOrg.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
     }
   } catch (error) {
     ElMessage.error('获取组织树失败')
   }
 }
 
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
+    });
+    
+    if (response.code === 200) {
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: orgData.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error);
+    resolve([]);
+  }
+};
+
 // 处理组织树并添加用户数据
 const processOrgTreeWithUsers = async (orgTree) => {
+  if (!orgTree || !Array.isArray(orgTree)) return [];
+  
   try {
-    // 递归处理组织树，为每个组织获取其下的用户
-    const processTreeNode = async (node) => {
+    // 简化：直接使用后端返回的用户数据
+    const processedNodes = orgTree.map(node => {
       const processedNode = {
-        id: `org_${node.id}`, // 给组织ID添加前缀，避免与用户ID冲突
+        id: `org_${node.id}`,
         name: node.orgName,
         type: 'org',
+        isLeaf: false,
         children: []
       }
 
-      // 先处理子组织
-      const childOrgs = []
-      if (node.children && node.children.length > 0) {
-        const childNodes = await Promise.all(
-          node.children.map(child => processTreeNode(child))
-        )
-        childOrgs.push(...childNodes)
+      // 添加用户节点
+      if (node.users && node.users.length > 0) {
+        const users = node.users.map(user => ({
+          id: `user_${user.id}`,
+          originalId: user.id,
+          name: user.name,
+          type: 'user',
+          isLeaf: true,
+          department: node.orgName,
+          avatar: user.avatar || '',
+          policeNumber: user.policeNumber || '',
+          phone: user.username || '',
+          checked: false
+        }))
+        processedNode.children = users
       }
-
-      // 获取当前组织下的直属用户（不包括子组织的用户）
-      const orgUsers = []
-      try {
-        console.log(`正在获取组织 ${node.orgName} (ID: ${node.id}) 的用户`)
-
-        // 尝试不同的参数组合
-        const userParams1 = {
-          pageNum: 1,
-          pageSize: 1000,
-          orgId: node.id,
-          pagination: false
-        }
-
-        // 尝试参数2 - 不设置teacher参数，获取所有用户
-        const userParams2 = {
-          pageNum: 1,
-          pageSize: 1000,
-          orgId: node.id,
-          teacher: 0, // 不限制教师
-          pagination: false
-        }
-
-        // 尝试参数3 - 包含教师和学生
-        const userParams3 = {
-          pageNum: 1,
-          pageSize: 1000,
-          orgId: node.id
-        }
-
-        console.log('尝试参数1:', userParams1)
-
-        let userResponse = await getUserList(userParams1)
-
-        console.log('参数1响应:', userResponse)
-
-        // 如果第一种方式没有用户，尝试第二种
-        if (!userResponse.data || !userResponse.data.records || userResponse.data.records.length === 0) {
-          console.log('尝试参数2:', userParams2)
-          userResponse = await getUserList(userParams2)
-          console.log('参数2响应:', userResponse)
-        }
-
-        // 如果还是没有，尝试第三种
-        if (!userResponse.data || !userResponse.data.records || userResponse.data.records.length === 0) {
-          console.log('尝试参数3:', userParams3)
-          userResponse = await getUserList(userParams3)
-          console.log('参数3响应:', userResponse)
-        }
-
-        if (userResponse.code === 200) {
-          if (userResponse.data && userResponse.data.records) {
-            console.log(`组织 ${node.orgName} 找到 ${userResponse.data.records.length} 个用户`)
-
-            const users = userResponse.data.records.map(user => ({
-              id: `user_${user.id}`, // 给用户ID添加前缀
-              originalId: user.id, // 保存原始ID供后续使用
-              name: user.name,
-              type: 'user',
-              department: user.orgName || node.orgName,
-              avatar: user.avatar || '',
-              policeNumber: user.policeNumber || '',
-              phone: user.username || '',
-              checked: false
-            }))
-            orgUsers.push(...users)
-          } else if (userResponse.data && Array.isArray(userResponse.data)) {
-            // 如果直接返回数组
-            console.log(`组织 ${node.orgName} 找到 ${userResponse.data.length} 个用户（数组格式）`)
-
-            const users = userResponse.data.map(user => ({
-              id: `user_${user.id}`,
-              originalId: user.id,
-              name: user.name,
-              type: 'user',
-              department: user.orgName || node.orgName,
-              avatar: user.avatar || '',
-              policeNumber: user.policeNumber || '',
-              phone: user.username || '',
-              checked: false
-            }))
-            orgUsers.push(...users)
-          } else {
-            console.log(`组织 ${node.orgName} 没有找到用户数据`)
-          }
-        } else {
-          console.log(`获取组织 ${node.orgName} 用户失败，返回码: ${userResponse.code}`)
-        }
-      } catch (error) {
-        console.error(`获取组织 ${node.orgName} 用户时出错:`, error)
-      }
-
-      // 先添加子组织，再添加用户
-      processedNode.children = [...childOrgs, ...orgUsers]
 
       return processedNode
-    }
+    })
 
-    const processedTree = await Promise.all(
-      orgTree.map(node => processTreeNode(node))
-    )
-
-    console.log('最终的组织树数据:', processedTree)
-    orgTreeData.value = processedTree
+    orgTreeData.value = processedNodes
+    return processedNodes
   } catch (error) {
     ElMessage.error('处理组织树数据失败')
+    return []
   }
 }
 

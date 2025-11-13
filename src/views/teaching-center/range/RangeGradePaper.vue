@@ -272,7 +272,7 @@ onMounted(() => {
 .page-wrapper {
   padding: 20px;
   background-color: #f0f2f5;
-  height: 100vh;
+  height: calc(100vh - 64px - 64px); /* 减去Header和Footer高度 */
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -281,7 +281,7 @@ onMounted(() => {
   background-color: #fff;
   padding: 24px;
   border-radius: 4px;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 64px - 64px - 40px); /* 减去Header、Footer和外层padding */
   overflow: hidden;
   display: flex;
   flex-direction: column;

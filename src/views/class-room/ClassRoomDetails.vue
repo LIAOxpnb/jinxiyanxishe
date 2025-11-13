@@ -42,7 +42,16 @@
           </div>
 
           <!-- PDF 预览 -->
-          <div class="courseware-viewer" v-else-if="currentCourseware.type === 'pdf' && currentCourseware.url">
+          <div class="courseware-viewer pdf-container" v-else-if="currentCourseware.type === 'pdf' && currentCourseware.url">
+            <el-button 
+              class="fullscreen-btn" 
+              type="primary" 
+              :icon="FullScreen"
+              circle
+              @click="toggleFullscreen"
+              :title="isFullscreen ? '退出全屏' : '全屏查看'"
+            >
+            </el-button>
             <iframe :src="currentCourseware.url" class="pdf-viewer" frameborder="0"></iframe>
           </div>
           
@@ -315,7 +324,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download, Loading, WarningFilled, Headset } from '@element-plus/icons-vue';
+import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download, Loading, WarningFilled, Headset, FullScreen } from '@element-plus/icons-vue';
 import { 
   getStudentCourseDetail, 
   getStudentCourseList,
@@ -354,6 +363,8 @@ const documentSize = ref(''); // 文档大小信息
 let heartbeatTimer = null;
 let lastHeartbeatTime = 0;
 let totalWatchTime = 0;
+let contentViewing = false; // 非音视频内容查看状态
+let autoSubmitted = false;  // 文档/图片自动提交一次
 
 // 练习列表相关状态 - 从当前小节获取
 const practiceList = ref([]);
@@ -384,6 +395,33 @@ const courseDetail = reactive({
 
 const recommendedCourses = ref([]);
 const recommendLoading = ref(false);
+
+// PDF 全屏功能
+const isFullscreen = ref(false);
+const pdfContainerRef = ref(null);
+
+// 切换全屏
+const toggleFullscreen = () => {
+  const container = document.querySelector('.pdf-container');
+  if (!container) return;
+
+  if (!document.fullscreenElement) {
+    container.requestFullscreen().then(() => {
+      isFullscreen.value = true;
+    }).catch(err => {
+      ElMessage.error(`无法进入全屏模式: ${err.message}`);
+    });
+  } else {
+    document.exitFullscreen().then(() => {
+      isFullscreen.value = false;
+    });
+  }
+};
+
+// 监听全屏状态变化
+const handleFullscreenChange = () => {
+  isFullscreen.value = !!document.fullscreenElement;
+};
 
 // 从当前小节中获取练习列表
 const updatePracticeList = (section) => {
@@ -577,6 +615,8 @@ const handleDocxRendered = () => {
   wordLoading.value = false;
   wordError.value = '';
   ElMessage.success('Word 文档加载成功');
+  // Word 渲染完成后，开始文档查看心跳
+  startContentHeartbeat();
 };
 const handleDocxError = (error) => {
   console.error('Word 文档渲染失败:', error);
@@ -590,6 +630,8 @@ const handlePptxRendered = () => {
   pptLoading.value = false;
   pptError.value = '';
   ElMessage.success('PPT 加载成功');
+  // PPT 渲染完成后，开始文档查看心跳
+  startContentHeartbeat();
 };
 
 const handlePptxError = (error) => {
@@ -600,6 +642,8 @@ const handlePptxError = (error) => {
 };
 const cleanupPlayer = () => {
   stopHeartbeat();
+  contentViewing = false;
+  autoSubmitted = false;
   if (player.value) {
     if (typeof player.value.dispose === 'function') {
       player.value.dispose();
@@ -651,9 +695,10 @@ const initVideoPlayer = () => {
       
       player.value.on('play', () => {
         lastHeartbeatTime = Date.now();
+        contentViewing = false;
         startHeartbeat();
       });
-      player.value.on('pause', () => stopHeartbeat());
+      player.value.on('pause', () => { stopHeartbeat(); });
       player.value.on('ended', async () => {
         stopHeartbeat();
         if (currentSection.value) {
@@ -671,6 +716,7 @@ const initAudioPlayer = () => {
       const audioEl = audioPlayerRef.value;
       const onPlay = () => {
         lastHeartbeatTime = Date.now();
+        contentViewing = false;
         startHeartbeat();
       };
       const onPause = () => stopHeartbeat();
@@ -717,7 +763,7 @@ const isMediaPaused = () => {
 const startHeartbeat = () => {
   if (heartbeatTimer) return;
   heartbeatTimer = setInterval(async () => {
-    if (isMediaPaused()) {
+    if (!contentViewing && isMediaPaused()) {
       stopHeartbeat();
       return;
     }
@@ -728,10 +774,18 @@ const startHeartbeat = () => {
         await sendHeartbeat({
           sectionId: currentSection.value.id,
           watchSecond: Math.min(elapsedSeconds, 30),
-          playbackRate: getCurrentPlaybackRate()
+          playbackRate: contentViewing ? 1 : getCurrentPlaybackRate()
         });
         totalWatchTime += elapsedSeconds;
         lastHeartbeatTime = now;
+        // 对文档/图片类型，达到阈值自动提交一次学习记录
+        if (contentViewing && !autoSubmitted && totalWatchTime >= 60) {
+          try {
+            await submitSectionRecord();
+            autoSubmitted = true;
+            ElMessage.success('已记录本小节学习（文档/图片）');
+          } catch (e) { console.error(e); }
+        }
       } catch (error) { console.error('心跳上报失败:', error); }
     }
   }, 15000);
@@ -742,6 +796,13 @@ const stopHeartbeat = () => {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+};
+
+// 针对文档/图片内容的心跳启动
+const startContentHeartbeat = () => {
+  contentViewing = true;
+  lastHeartbeatTime = Date.now();
+  startHeartbeat();
 };
 
 const submitSectionRecord = async () => {
@@ -962,6 +1023,10 @@ const handleSectionClick = async (section) => {
               pptLoading.value = false;
             }
           }
+          else if (coursewareType === 'pdf' || coursewareType === 'image' || coursewareType === 'document') {
+            // 对于PDF/图片/需下载查看的文档，直接开启内容心跳
+            startContentHeartbeat();
+          }
         } catch (error) { 
           console.error('课件加载失败:', error);
           ElMessage.error('课件加载失败'); 
@@ -1007,10 +1072,15 @@ onMounted(() => {
     ElMessage.error('未找到课程ID');
     loading.value = false;
   }
+  
+  // 监听全屏状态变化
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onBeforeUnmount(() => {
   cleanupPlayer();
+  // 移除全屏事件监听
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 </script>
 
@@ -1147,10 +1217,50 @@ onBeforeUnmount(() => {
   align-items: center;
   box-sizing: border-box;
 }
+/* PDF 容器 */
+.pdf-container {
+  position: relative;
+}
+
 .pdf-viewer {
   width: 100%;
   height: 100%;
   border: none;
+}
+
+/* 全屏按钮 */
+.fullscreen-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  background: linear-gradient(135deg, #5B6FD8 0%, #7CB3E8 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(91, 111, 216, 0.4);
+  transition: all 0.3s ease;
+}
+
+.fullscreen-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(91, 111, 216, 0.6);
+}
+
+/* 全屏模式下的样式 */
+.pdf-container:fullscreen {
+  background: #525659;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-container:fullscreen .pdf-viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.pdf-container:fullscreen .fullscreen-btn {
+  top: 20px;
+  right: 20px;
 }
 .image-viewer {
   max-width: 100%;

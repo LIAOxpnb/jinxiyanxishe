@@ -153,7 +153,14 @@
               <el-tree-select
                 v-model="formData.orgId"
                 :data="orgTreeData"
-                :props="{ children: 'children', label: 'orgName', value: 'id' }"
+                :props="{ 
+                  children: 'children', 
+                  label: 'orgName', 
+                  value: 'id',
+                  isLeaf: 'isLeaf'
+                }"
+                :load="loadOrgChildren"
+                lazy
                 placeholder="请选择"
                 check-strictly
                 style="width: 100%"
@@ -268,7 +275,7 @@
           {{ currentDetailUser.idCard || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="所属组织">
-          {{ getOrgName(currentDetailUser.orgId) || '-' }}
+          {{ currentDetailUser.orgName || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="用户状态">
           <el-tag :type="currentDetailUser.status === 0 ? 'success' : 'info'">
@@ -347,7 +354,14 @@
           <el-tree-select
             v-model="transferForm.targetOrgId"
             :data="orgTreeData"
-            :props="{ children: 'children', label: 'orgName', value: 'id' }"
+            :props="{ 
+              children: 'children', 
+              label: 'orgName', 
+              value: 'id',
+              isLeaf: 'isLeaf'
+            }"
+            :load="loadOrgChildren"
+            lazy
             placeholder="请选择目标组织"
             check-strictly
             style="width: 100%"
@@ -378,7 +392,7 @@ import {
   updateUserPassword,
   batchSaveUsers
 } from '@/api/system-management/User.js'
-import { getOrgTree } from '@/api/system-management/Org.js'
+import { getOrgList } from '@/api/system-management/Org.js'
 
 // 响应式数据
 const formRef = ref()
@@ -576,26 +590,58 @@ const fetchUserList = async () => {
   }
 }
 
-// 获取组织树数据
+// 获取组织树数据（用于筛选条件和对话框）
 const fetchOrgTree = async () => {
   try {
-    const response = await getOrgTree()
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: false
+    })
+    
     if (response.code === 200) {
-      orgTreeData.value = response.data || []
-      // 更新筛选条件中的组织选项
-      const orgOptions = [{ label: '全部', value: '' }]
-      const flattenOrgs = (orgs, prefix = '') => {
-        orgs.forEach(org => {
-          orgOptions.push({
-            label: prefix + org.orgName,
-            value: org.id
-          })
-          if (org.children && org.children.length > 0) {
-            flattenOrgs(org.children, prefix + org.orgName + ' / ')
-          }
-        })
+      const orgData = response.data
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: orgData.id,
+        orgName: orgData.orgName,
+        parentId: orgData.parentId,
+        children: orgData.children || [],
+        isLeaf: false
       }
-      flattenOrgs(response.data || [])
+      
+      // 为子组织添加 isLeaf 标识
+      const processChildren = (nodes) => {
+        return (nodes || []).map(node => ({
+          id: node.id,
+          orgName: node.orgName,
+          parentId: node.parentId,
+          children: [], // 初始化为空数组，懒加载时填充
+          isLeaf: false // 所有子组织都设为非叶子节点，允许懒加载检查
+        }))
+      }
+      
+      rootNode.children = processChildren(rootNode.children)
+      
+      // 组织树包含根节点
+      orgTreeData.value = [rootNode]
+      
+      // 更新筛选条件中的组织选项 - 包含根组织和子组织
+      const orgOptions = [{ label: '全部', value: '' }]
+      
+      // 添加根组织
+      orgOptions.push({
+        label: orgData.orgName,
+        value: orgData.id
+      })
+      
+      // 添加子组织
+      ;(orgData.children || []).forEach(org => {
+        orgOptions.push({
+          label: org.orgName,
+          value: org.id
+        })
+      })
       
       const orgField = filterFields.find(field => field.model === 'orgId')
       if (orgField) {
@@ -604,6 +650,48 @@ const fetchOrgTree = async () => {
     }
   } catch (error) {
     console.error('获取组织树错误:', error)
+  }
+}
+
+// 懒加载组织树子节点（用于对话框中的 el-tree-select）
+const loadOrgChildren = async (node, resolve) => {
+  if (node.level === 0) {
+    // 根节点，返回已加载的数据
+    return resolve(orgTreeData.value)
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id,
+      personnel: false
+    })
+    
+    if (response.code === 200) {
+      const orgData = response.data
+      // API 返回的 children 可能是 null 或数组
+      const children = orgData?.children
+      
+      // 如果 children 为 null 或空数组，说明没有子节点
+      if (!children || children.length === 0) {
+        return resolve([])
+      }
+      
+      // 处理子节点：children 字段为 null 表示需要懒加载，不是叶子节点
+      const processedChildren = children.map(child => ({
+        id: child.id,
+        orgName: child.orgName,
+        parentId: child.parentId,
+        children: [], // 初始化为空数组
+        isLeaf: false // children 为 null 时，默认不是叶子节点，允许懒加载
+      }))
+      
+      resolve(processedChildren)
+    } else {
+      resolve([])
+    }
+  } catch (error) {
+    console.error('加载组织子节点错误:', error)
+    resolve([])
   }
 }
 

@@ -1,0 +1,139 @@
+/* ========== 页面顶部 Banner 统一样式 ========== */
+/* 适用于：练习、考试、靶场、课程、班级等学生页面 */
+/* 使用 .student-page-wrapper 作为命名空间，避免样式污染 */
+
+.student-page-wrapper .page-header {
+  display: flex;
+  align-items: center;
+  padding: 0 5%;
+  height: 200px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
+  overflow: hidden;
+}
+
+.student-page-wrapper .header-icon {
+  background-color: #fff;
+  color: #409eff !important;
+  border-radius: 4px;
+  padding: 4px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.student-page-wrapper .page-header h1 {
+  font-size: 32px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ========== 响应式适配 ========== */
+
+/* 笔记本 (1280 - 1600) */
+@media (max-width: 1600px) {
+  .student-page-wrapper .page-header {
+    height: 180px;
+    padding: 0 4%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 28px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 1366px) {
+  .student-page-wrapper .page-header {
+    height: 160px;
+    padding: 0 3%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 24px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 24px;
+    padding: 3px;
+    margin-right: 12px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .student-page-wrapper .page-header {
+    height: 140px;
+    padding: 0 3%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 20px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 20px;
+    padding: 2px;
+    margin-right: 10px;
+  }
+}
+
+/* 台式机 2K 显示器 (2560×1440) */
+@media (min-width: 2000px) and (max-width: 2600px) {
+  .student-page-wrapper .page-header {
+    height: 240px;
+    padding: 0 6%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 40px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 40px;
+    padding: 6px;
+    margin-right: 20px;
+  }
+}
+
+/* 台式机 4K 显示器 (3840×2160) */
+@media (min-width: 2601px) and (max-width: 4000px) {
+  .student-page-wrapper .page-header {
+    height: 300px;
+    padding: 0 7%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 52px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 52px;
+    padding: 8px;
+    margin-right: 24px;
+  }
+}
+
+/* 台式机 5K 显示器 (5120×2880+) */
+@media (min-width: 4001px) {
+  .student-page-wrapper .page-header {
+    height: 360px;
+    padding: 0 8%;
+  }
+  
+  .student-page-wrapper .page-header h1 {
+    font-size: 64px;
+  }
+  
+  .student-page-wrapper .header-icon {
+    font-size: 64px;
+    padding: 10px;
+    margin-right: 28px;
+  }
+}
+

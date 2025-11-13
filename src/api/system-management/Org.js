@@ -1,28 +1,13 @@
 import request from '@/utils/request';
 
 /**
- * @description 获取组织列表
- */
-export function getOrgList() {
-  return request.post('/admin/organization/list');
-}
-
-/**
- * @description 获取组织树
+ * @description 获取组织列表（新接口-懒加载）
  * @param {object} data - 请求参数
- * @param {boolean} data.personnel - 是否包含人员
+ * @param {string} data.orgId - 组织ID，根目录传"1"
+ * @param {boolean} data.personnel - 是否包含用户
  */
-export function getOrgTree(data) {
-  return request.post('/admin/organization/tree', data);
-}
-
-/**
- * @description 获取全组织树
- * @param {object} data - 请求参数
- * @param {boolean} data.personnel - 是否包含人员
- */
-export function getAllOrgTree(data) {
-  return request.post('/admin/organization/allTree', data);
+export function getOrgList(data) {
+  return request.post('/admin/organization/list', data);
 }
 
 /**

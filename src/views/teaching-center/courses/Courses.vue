@@ -2,10 +2,7 @@
   <div class="page-wrapper">
     
     <div class="main-content">
-      <div class="page-header">
-        <h1 class="page-title">课程管理</h1>
-        <div class="header-remark">【备注】默认展示我创建的课程</div>
-      </div>
+      <h1 class="page-title">课程管理 <span class="title-remark">【备注】默认展示我创建的课程</span></h1>
 
       <FilterBar
         create-button-text="新增课程"
@@ -41,10 +38,10 @@
                 {{ scopeMap[scope.row.scope] || '未知' }}
             </template>
         </el-table-column>
-        <el-table-column prop="userCount" label="学习人数" width="100" />
-        <el-table-column prop="clazzCount" label="班级数" width="80" />
-        <el-table-column prop="creatorName" label="创建人" width="120" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
+        <el-table-column prop="userCount" label="学习人数" width="110" align="center" />
+        <el-table-column prop="clazzCount" label="班级数" width="100" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="120" align="center" />
+        <el-table-column prop="createTime" label="创建时间" width="180" />
 
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
@@ -462,29 +459,33 @@ onMounted(() => {
 
 <style scoped>
 .page-wrapper {
-  background-color: #f0f2f5;
-  padding: 20px;
-  min-height: 100vh;
+  background-color: transparent;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .main-content {
   background-color: #ffffff;
-  padding: 24px;
+  padding: 20px;
   border-radius: 4px;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
 }
 .page-title {
-  margin: 0;
+  margin: 0 0 20px 0;
   font-size: 24px;
   font-weight: 600;
+  color: #303133;
 }
-.header-remark {
-  color: #F56C6C;
+
+.title-remark {
+  color: #ff4d4f;
   font-size: 14px;
+  font-weight: 400;
+  margin-left: 12px;
 }
 .el-table {
   margin-top: 20px;

@@ -284,7 +284,13 @@
       @success="handleEditSuccess" />
 
     <!-- 人员选择弹窗 -->
-    <el-dialog v-model="userSelectionDialogVisible" title="选择人员" width="1000px" :close-on-click-modal="false">
+    <el-dialog 
+      v-model="userSelectionDialogVisible" 
+      title="选择人员" 
+      width="1000px" 
+      :close-on-click-modal="false"
+      @close="handleUserDialogClose"
+    >
       <div class="add-member-dialog">
         <!-- 左侧：用户树形选择 -->
         <div class="user-tree-section">
@@ -318,6 +324,7 @@
                     </el-avatar>
                     <span class="user-name">{{ user.name }}</span>
                     <span class="user-dept">{{ user.department }}</span>
+                    <el-tag v-if="user.isSelected" type="success" size="small" style="margin-left: 8px;">已选</el-tag>
                   </div>
                 </el-checkbox>
               </div>
@@ -325,8 +332,8 @@
 
             <!-- 组织树 -->
             <div v-else class="org-tree">
-              <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }"
-                show-checkbox node-key="id" :default-expand-all="true" @check="handleOrgTreeCheck">
+              <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }"
+                show-checkbox node-key="id" lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
                 <template #default="{ node, data }">
                   <div class="tree-node">
                     <el-icon v-if="data.type === 'org'" class="org-icon">
@@ -339,6 +346,7 @@
                     </el-avatar>
                     <span class="node-label">{{ data.name }}</span>
                     <span v-if="data.type === 'user'" class="user-dept">{{ data.department }}</span>
+                    <el-tag v-if="data.type === 'user' && data.isSelected" type="success" size="small" style="margin-left: 8px;">已选</el-tag>
                   </div>
                 </template>
               </el-tree>
@@ -383,7 +391,13 @@
     </el-dialog>
 
     <!-- 班级选择对话框 -->
-    <el-dialog v-model="classSelectionDialogVisible" title="添加班级" width="1000px" :close-on-click-modal="false">
+    <el-dialog 
+      v-model="classSelectionDialogVisible" 
+      title="添加班级" 
+      width="1000px" 
+      :close-on-click-modal="false"
+      @close="handleClassDialogClose"
+    >
       <div class="add-class-dialog">
         <!-- 左侧：班级列表 -->
         <div class="class-list-section">
@@ -621,7 +635,7 @@ import { getExamDetail, updateExam, setExamQuestions, setPassingScore, updateExa
 import { getQuestionGroupList, downloadQuestionTemplate, uploadQuestionTemplate } from '@/api/teaching-center/QuestionBank.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
-import { getAllOrgTree } from '@/api/system-management/Org.js';
+import { getOrgList } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
 import { Edit, ArrowDown, Search, User, OfficeBuilding, Close, Upload } from '@element-plus/icons-vue';
@@ -1047,39 +1061,14 @@ const openExamSettingsDialog = async () => {
         if (response.code === 200 && response.data.records) {
           const allUsers = response.data.records;
 
-          // 获取组织树信息以便正确显示部门
-          let orgTreeMap = {};
-          try {
-            const orgResponse = await getAllOrgTree();
-            if (orgResponse.code === 200) {
-              const buildOrgMap = (nodes) => {
-                for (const node of nodes) {
-                  orgTreeMap[node.id] = node.orgName;
-                  if (node.children && node.children.length > 0) {
-                    buildOrgMap(node.children);
-                  }
-                }
-              };
-              buildOrgMap(orgResponse.data);
-            }
-          } catch (error) {
-            console.error('获取组织树失败:', error);
-          }
-
           // 根据用户ID匹配用户信息
           selectedScopeUsers.value = userIds.map(userId => {
             const userInfo = allUsers.find(user => user.id === userId);
             console.log(`查找用户ID ${userId}:`, userInfo);
 
             if (userInfo) {
-              // 优先使用API返回的orgName，然后查找组织树，最后使用备选
-              let department = userInfo.orgName;
-              if (!department && userInfo.orgId && orgTreeMap[userInfo.orgId]) {
-                department = orgTreeMap[userInfo.orgId];
-              }
-              if (!department) {
-                department = userInfo.organizationName || userInfo.deptName || userInfo.department || '未知部门';
-              }
+              // 直接使用API返回的 orgName 字段
+              const department = userInfo.orgName || userInfo.organizationName || userInfo.deptName || userInfo.department || '未知部门';
 
               return {
                 id: userInfo.id,
@@ -1388,7 +1377,8 @@ const handleUserSearch = async () => {
           avatar: user.avatar || '',
           policeNumber: user.policeNumber || '',
           phone: user.username || '',
-          checked: selectedScopeUsers.value.some(u => u.id === user.id)
+          checked: selectedScopeUsers.value.some(u => u.id === user.id),
+          isSelected: selectedScopeUsers.value.some(u => u.id === user.id) // 标记已选用户
         };
       });
     }
@@ -1397,20 +1387,118 @@ const handleUserSearch = async () => {
   }
 };
 
+// 初始加载组织树根节点
 const fetchOrgTree = async () => {
   try {
-    const response = await getAllOrgTree({ personnel: true });
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
     if (response.code === 200) {
-      orgTreeData.value = transformOrgTreeData(response.data);
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => {
+        const isSelected = selectedScopeUsers.value.some(user => user.id === userNode.id);
+        return {
+          id: `user_${userNode.id}`,
+          originalId: userNode.id,
+          name: userNode.name,
+          type: 'user',
+          isLeaf: true,
+          department: rootOrg.orgName,
+          avatar: userNode.avatar || '',
+          policeNumber: userNode.policeNumber || '',
+          phone: userNode.username || '',
+          isSelected: isSelected // 标记已选用户，仅用于显示标签
+        };
+      });
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
+      
       // 在组织树加载完成后同步选中状态
       setTimeout(() => {
         syncSelectedUsersToTree();
       }, 200);
-    } else {
-      ElMessage.error(response.msg || '获取组织树失败');
     }
   } catch (error) {
     ElMessage.error('获取组织树失败');
+  }
+};
+
+// 懒加载组织树子节点
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
+    });
+    
+    if (response.code === 200) {
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => {
+        const isSelected = selectedScopeUsers.value.some(user => user.id === userNode.id);
+        return {
+          id: `user_${userNode.id}`,
+          originalId: userNode.id,
+          name: userNode.name,
+          type: 'user',
+          isLeaf: true,
+          department: orgData.orgName,
+          avatar: userNode.avatar || '',
+          policeNumber: userNode.policeNumber || '',
+          phone: userNode.username || '',
+          isSelected: isSelected // 标记已选用户，仅用于显示标签
+        };
+      });
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error);
+    resolve([]);
   }
 };
 
@@ -1424,6 +1512,7 @@ const transformOrgTreeData = (nodes) => {
       id: `org_${orgNode.id}`,
       name: orgNode.orgName,
       type: 'org',
+      isLeaf: false, // 组织节点不是叶子节点，可以展开
       children: []
     };
 
@@ -1433,17 +1522,16 @@ const transformOrgTreeData = (nodes) => {
       originalId: userNode.id,
       name: userNode.name,
       type: 'user',
+      isLeaf: true, // 用户节点是叶子节点
       department: orgNode.orgName,
       avatar: userNode.avatar || '',
       policeNumber: userNode.policeNumber || '',
       phone: userNode.username || ''
     }));
 
-    // 递归转换子组织
-    const subOrgs = transformOrgTreeData(orgNode.children || []);
-
-    // 将转换后的子组织和用户合并到 children 数组中
-    transformedOrg.children = [...subOrgs, ...users];
+    // 不再递归转换子组织（懒加载模式）
+    // 只添加用户到 children
+    transformedOrg.children = users;
 
     return transformedOrg;
   });
@@ -1504,6 +1592,11 @@ const removeSelectedUser = (user) => {
 
 const confirmSelectedUsers = () => {
   userSelectionDialogVisible.value = false;
+  // 清空搜索由 handleUserDialogClose 统一处理
+};
+
+// 人员选择对话框关闭时的处理
+const handleUserDialogClose = () => {
   userSearchKeyword.value = '';
   searchedUsers.value = [];
 };
@@ -1939,14 +2032,15 @@ const fetchClassList = async () => {
     });
 
     if (response.code === 200) {
-      // 将 clazzStatus == 2 的班级设置为禁用状态
-      classListData.value = response.data.records.map(clazz => ({
+      // 过滤掉已结束的班级（clazzStatus == 2）
+      const filteredRecords = response.data.records.filter(clazz => clazz.clazzStatus !== 2);
+      classListData.value = filteredRecords.map(clazz => ({
         id: clazz.id,
         name: clazz.name,
         // 后端返回的字段是 clazzUserCount
         userCount: clazz.clazzUserCount || clazz.userCount || 0,
         checked: selectedScopeClasses.value.some(selected => selected.id === clazz.id),
-        disabled: clazz.clazzStatus == 2, // 已结束的班级设置为禁用
+        disabled: false, // 已经过滤掉结束的班级，不需要禁用
         clazzStatus: clazz.clazzStatus
       }));
       classTotal.value = response.data.total || 0;
@@ -2015,6 +2109,12 @@ const clearSelectedClasses = () => {
 const confirmSelectedClasses = () => {
   classSelectionDialogVisible.value = false;
   ElMessage.success(`已选择 ${selectedScopeClasses.value.length} 个班级`);
+  // 清空搜索由 handleClassDialogClose 统一处理
+};
+
+// 班级选择对话框关闭时的处理
+const handleClassDialogClose = () => {
+  classSearchKeyword.value = '';
 };
 
 onMounted(async () => {

@@ -1,7 +1,8 @@
 <template>
-  <div class="shooting-range-page">
-    <div class="banner">
-      <h1><el-icon><Aim /></el-icon> 实战靶场</h1>
+  <div class="shooting-range-page student-page-wrapper">
+    <div class="page-header">
+      <el-icon :size="32" color="#fff" class="header-icon"><Aim /></el-icon>
+      <h1 style="color: #3370FF;">实战靶场</h1>
     </div>
 
     <div class="main-content">
@@ -32,8 +33,12 @@
           </el-input>
           <el-select v-model="filters.shootingRangeCategory" placeholder="分类" @change="handleSearch">
             <el-option label="全部分类" value=""></el-option>
-            <el-option label="财税" value="1"></el-option>
-            <el-option label="实战" value="2"></el-option>
+            <el-option 
+              v-for="item in categoryOptions" 
+              :key="item.dictValue" 
+              :label="item.dictLabel" 
+              :value="item.dictValue"
+            ></el-option>
           </el-select>
         </div>
       </div>
@@ -80,10 +85,12 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Aim, Search, Opportunity } from '@element-plus/icons-vue';
 import { getShootingRangeList } from '@/api/shooting-range.js';
+import { getDictByType } from '@/api/system-management/dictionary.js';
 
 const router = useRouter();
 const loading = ref(true);
 const rangeList = ref([]);
+const categoryOptions = ref([]); // 靶场分类选项
 const pagination = reactive({ page: 1, size: 10, total: 0 });
 const filters = reactive({
   name: '',
@@ -134,15 +141,30 @@ const goToDetail = (id) => {
   router.push({ name: 'ShootingRangeDetail', params: { id } });
 };
 
+// 获取靶场分类字典
+const fetchCategoryDict = async () => {
+  try {
+    const res = await getDictByType('shooting_range_category');
+    if (res.code === 200 && res.data) {
+      categoryOptions.value = res.data;
+    }
+  } catch (error) {
+    console.error('获取靶场分类字典失败:', error);
+  }
+};
+
 onMounted(() => {
+  fetchCategoryDict();
   fetchRangeList();
 });
 </script>
 
 <style scoped>
 .shooting-range-page { background-color: #f5f7fa; min-height: 100%; }
-.banner { height: 200px; display: flex; align-items: center; padding: 0 5%;background-image: url('@/assets/img/u4188.png'); }
-.banner h1 { color: white; font-size: 32px; display: flex; align-items: center; gap: 12px; }
+/* 使用全局 page-header 样式，仅定义背景图 */
+.page-header {
+  background-image: url('@/assets/img/u4188.png');
+}
 .main-content { padding: 24px; }
 .filter-bar { display: flex; justify-content: space-between; align-items: center; background-color: #fff; padding: 16px; border-radius: 4px; margin-bottom: 20px; }
 .tabs .tab-item { font-size: 16px; margin-right: 24px; color: #606266; cursor: pointer; padding-bottom: 4px; }

@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container student-page-wrapper">
     <div class="page-header">
       <el-icon :size="32" color="#fff" class="header-icon"><Document /></el-icon>
       <h1 style="color: #3370FF">正式考试</h1>
@@ -333,36 +333,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 样式部分无需修改 */
 .page-container {
-  background-color: #ffffff;
+  background-color: #f5f7fa;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
+
 .main-content {
   padding: 24px;
 }
+
+/* 使用全局 page-header 样式，仅定义背景图 */
 .page-header {
-  display: flex;
-  align-items: center;
-  padding: 24px;
-  min-height: 150px;
   background-image: url('/src/assets/img/u4045.png');
-  background-size: cover;
-  background-position: center;
-  /* border-radius: 8px 8px 0 0; */
-}
-.header-icon {
-  background-color: #fff;
-  color: #1677ff !important;
-  border-radius: 4px;
-  padding: 4px;
-  margin-right: 16px;
-}
-.page-header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
 }
 .filter-bar {
   display: flex;

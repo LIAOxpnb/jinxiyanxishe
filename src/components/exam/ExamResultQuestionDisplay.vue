@@ -7,6 +7,8 @@
       <div class="question-header">
         <span>{{ index + 1 }}.</span>
         <el-tag>{{ record.question.questionType }}</el-tag>
+        <el-tag>满分：{{ record.totalScore }}</el-tag>
+        <el-tag>得分：{{ record.score }}</el-tag>
       </div>
       <div class="question-title" v-html="processedTitle"></div>
 

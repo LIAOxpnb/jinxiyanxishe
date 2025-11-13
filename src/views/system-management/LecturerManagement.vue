@@ -111,15 +111,26 @@
         </el-form-item>
 
         <el-form-item label="照片" prop="avatar">
+          <div class="upload-tip">
+            <el-icon><InfoFilled /></el-icon>
+            <div class="tip-content">
+              <div>建议上传正方形头像，推荐尺寸 200x200px 至 400x400px</div>
+              <div>支持 JPG/PNG 格式，不超过 2MB</div>
+              <div class="tip-highlight">建议使用白色或浅色纯色背景，效果更佳</div>
+            </div>
+          </div>
           <el-upload
             class="avatar-uploader"
             :show-file-list="false"
-            :http-request="handleUploadAvatar"
+            :http-request="() => {}"
             :before-upload="beforeAvatarUpload"
+            :on-change="handleFileChange"
+            :auto-upload="false"
           >
             <img v-if="avatarPreviewUrl" :src="avatarPreviewUrl" class="avatar" />
             <div v-else class="avatar-placeholder">
               <el-icon class="avatar-uploader-icon"><Plus /></el-icon>
+              <div class="upload-text">点击上传</div>
             </div>
           </el-upload>
         </el-form-item>
@@ -224,10 +235,11 @@
               <el-tree 
                 ref="orgTreeRef" 
                 :data="orgTreeData" 
-                :props="{ children: 'children', label: 'name' }"
+                :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }"
                 show-checkbox
                 node-key="id" 
-                :default-expand-all="true"
+                lazy
+                :load="loadOrgTreeNode"
                 @check="handleOrgTreeCheck"
               >
                 <template #default="{ node, data }">
@@ -279,27 +291,92 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 图片裁剪弹窗 -->
+    <el-dialog
+      title="裁剪图片"
+      v-model="cropperDialogVisible"
+      width="800px"
+      :close-on-click-modal="false"
+      @close="handleCropperDialogClose"
+    >
+      <div class="cropper-container">
+        <vue-cropper
+          ref="cropperRef"
+          :img="cropperOption.img"
+          :output-size="cropperOption.outputSize"
+          :output-type="cropperOption.outputType"
+          :info="true"
+          :full="cropperOption.full"
+          :can-move="cropperOption.canMove"
+          :can-move-box="cropperOption.canMoveBox"
+          :fixed-box="cropperOption.fixedBox"
+          :original="cropperOption.original"
+          :auto-crop="cropperOption.autoCrop"
+          :auto-crop-width="cropperOption.autoCropWidth"
+          :auto-crop-height="cropperOption.autoCropHeight"
+          :center-box="cropperOption.centerBox"
+          :high="cropperOption.high"
+          :fixed="cropperOption.fixed"
+          :fixed-number="cropperOption.fixedNumber"
+        ></vue-cropper>
+      </div>
+      <div class="cropper-tips">
+        <el-icon><InfoFilled /></el-icon>
+        <span>裁剪框已按小卡片显示比例（23:32）固定，拖动边缘可移动位置，滚动鼠标滚轮可缩放图片</span>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="cropperDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleCropConfirm" :loading="cropperLoading">确定裁剪</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Plus, User, Close, Search, OfficeBuilding } from '@element-plus/icons-vue'
+import { MoreFilled, Plus, User, Close, Search, OfficeBuilding, InfoFilled } from '@element-plus/icons-vue'
 import FilterBar from '@/components/common/FilterBar.vue'
+import { VueCropper } from 'vue-cropper'
+import 'vue-cropper/dist/index.css'
 import { getUserList } from '@/api/system-management/User'
 import { addLecturer, updateLecturer, deleteLecturer, getLecturerDetail } from '@/api/system-management/lecturer'
 import { uploadFiles } from '@/api/common/UploadFiles'
 import { previewFile } from '@/api/common/PreviewFile'
-import { getOrgTree } from '@/api/system-management/Org'
+import { getOrgList } from '@/api/system-management/Org'
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const detailLoading = ref(false)
 const tableData = ref([])
 const selectedLecturers = ref([])
-const userOptions = ref([])
 const avatarPreviewUrl = ref('');
+
+// 图片裁剪相关
+const cropperDialogVisible = ref(false)
+const cropperLoading = ref(false)
+const cropperRef = ref(null)
+const currentUploadFile = ref(null)
+const cropperOption = reactive({
+  img: '',
+  outputSize: 1,
+  outputType: 'png',
+  full: false,
+  canMove: true,
+  canMoveBox: true,
+  fixedBox: false,
+  original: false,
+  autoCrop: true,
+  autoCropWidth: 230,   // 按照小卡片宽度设置
+  autoCropHeight: 320,  // 按照小卡片高度设置
+  centerBox: true,
+  high: true,
+  fixed: true,          // 改回 true，固定比例裁剪
+  fixedNumber: [23, 32] // 宽高比 23:32（约等于 230:320），避免留白
+})
 
 // 人员选择弹窗相关
 const userSelectionDialogVisible = ref(false)
@@ -309,7 +386,6 @@ const orgTreeData = ref([])
 const orgTreeRef = ref(null)
 const selectedUsers = ref([])
 const tempSelectedUsers = ref([])
-const existingLecturerIds = ref([])
 
 const pagination = reactive({
   pageNum: 1,
@@ -367,21 +443,6 @@ const dialogTitle = computed(() => {
 const maskIdCard = (idCard) => {
   if (!idCard || idCard.length < 6) return idCard
   return idCard.substring(0, 6) + '****' + idCard.substring(idCard.length - 4)
-}
-
-const fetchUserOptions = async () => {
-  try {
-    const res = await getUserList({
-      teacher: 0, // 0表示获取非教师用户，用于选择成为讲师
-      pagination: false
-    })
-    if (res.code === 200 && res.data) {
-      userOptions.value = res.data.records || res.data
-    }
-  } catch (error) {
-    console.error('获取用户列表失败:', error)
-    ElMessage.error('获取用户列表失败')
-  }
 }
 
 const fetchLecturers = async () => {
@@ -646,15 +707,88 @@ const handleUploadAvatar = async (options) => {
 };
 
 const beforeAvatarUpload = (file) => {
-  const isJPGOrPNG = file.type === 'image/jpeg' || file.type === 'image/png';
-  const isLt2M = file.size / 1024 / 1024 < 2;
-  if (!isJPGOrPNG) {
-    ElMessage.error('头像图片只能是 JPG/PNG 格式!');
-  }
-  if (!isLt2M) {
-    ElMessage.error('头像图片大小不能超过 2MB!');
-  }
-  return isJPGOrPNG && isLt2M;
+  return new Promise((resolve, reject) => {
+    // 1. 检查文件格式
+    const isJPGOrPNG = file.type === 'image/jpeg' || file.type === 'image/png';
+    if (!isJPGOrPNG) {
+      ElMessage.error('头像图片只能是 JPG/PNG 格式!');
+      reject(false);
+      return;
+    }
+
+    // 2. 检查文件大小
+    const isLt2M = file.size / 1024 / 1024 < 2;
+    if (!isLt2M) {
+      ElMessage.error('头像图片大小不能超过 2MB!');
+      reject(false);
+      return;
+    }
+
+    resolve(true);
+  });
+};
+
+// 处理文件选择
+const handleFileChange = (uploadFile) => {
+  if (!uploadFile || !uploadFile.raw) return;
+
+  // 先进行基本校验
+  beforeAvatarUpload(uploadFile.raw).then(() => {
+    // 校验通过，读取图片并打开裁剪弹窗
+    const reader = new FileReader();
+    reader.readAsDataURL(uploadFile.raw);
+    reader.onload = (e) => {
+      cropperOption.img = e.target.result;
+      currentUploadFile.value = uploadFile.raw;
+      cropperDialogVisible.value = true;
+    };
+  }).catch(() => {
+    // 校验失败，不做任何操作
+  });
+};
+
+// 确认裁剪
+const handleCropConfirm = () => {
+  if (!cropperRef.value) return;
+
+  cropperLoading.value = true;
+
+  cropperRef.value.getCropBlob(async (blob) => {
+    try {
+      // 将 blob 转换为 File 对象
+      const file = new File([blob], currentUploadFile.value.name, {
+        type: 'image/png',
+        lastModified: Date.now()
+      });
+
+      // 上传裁剪后的图片
+      const uploadRes = await uploadFiles([file]);
+      if (uploadRes.code !== 200 || typeof uploadRes.data !== 'string') {
+        throw new Error(uploadRes.msg || '上传接口返回格式错误');
+      }
+
+      const relativePath = uploadRes.data;
+      formData.avatar = relativePath;
+      
+      // 预览裁剪后的图片
+      const previewUrl = await previewFile(relativePath);
+      avatarPreviewUrl.value = previewUrl;
+
+      ElMessage.success('图片上传成功！');
+      cropperDialogVisible.value = false;
+    } catch (error) {
+      console.error('上传或预览过程中出错:', error);
+      ElMessage.error(error.message || '操作失败');
+    } finally {
+      cropperLoading.value = false;
+    }
+  });
+};
+
+// 关闭裁剪弹窗
+const handleCropperDialogClose = () => {
+  cropperOption.img = '';
+  currentUploadFile.value = null;
 };
 
 const handleDialogClose = () => {
@@ -693,7 +827,6 @@ const handleCurrentChange = (page) => {
 // 人员选择相关方法
 const openUserSelectionDialog = async () => {
   userSelectionDialogVisible.value = true;
-  await fetchExistingLecturers();
   await fetchOrgTree();
   // 初始化临时选择状态
   tempSelectedUsers.value = [...selectedUsers.value];
@@ -703,62 +836,104 @@ const openUserSelectionDialog = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const response = await getOrgTree({ personnel: true });
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
     if (response.code === 200) {
-      orgTreeData.value = transformOrgTreeData(response.data);
-    } else {
-      ElMessage.error(response.msg || '获取组织树失败');
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: rootOrg.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || '',
+        isLecturer: userNode.teacher === 1 // 使用 teacher 字段标识是否已是讲师
+      }));
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
     }
   } catch (error) {
     ElMessage.error('获取组织树失败');
   }
 };
 
-// 获取现有讲师列表
-const fetchExistingLecturers = async () => {
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
   try {
-    const response = await getUserList({
-      teacher: 1, // 获取已是讲师的用户
-      pagination: false
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
     });
+    
     if (response.code === 200) {
-      existingLecturerIds.value = response.data.records 
-        ? response.data.records.map(lecturer => lecturer.id)
-        : response.data.map(lecturer => lecturer.id);
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: orgData.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || '',
+        isLecturer: userNode.teacher === 1 // 使用 teacher 字段标识是否已是讲师
+      }));
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
     }
   } catch (error) {
-    console.error('获取现有讲师列表失败:', error);
+    console.error('加载组织节点失败:', error);
+    resolve([]);
   }
-};
-
-const transformOrgTreeData = (nodes) => {
-  if (!nodes || !Array.isArray(nodes)) return [];
-
-  return nodes.map(orgNode => {
-    const transformedOrg = {
-      id: `org_${orgNode.id}`,
-      name: orgNode.orgName,
-      type: 'org',
-      children: []
-    };
-
-    const users = (orgNode.users || []).map(userNode => ({
-      id: `user_${userNode.id}`,
-      originalId: userNode.id,
-      name: userNode.name,
-      type: 'user',
-      department: orgNode.orgName,
-      avatar: userNode.avatar || '',
-      policeNumber: userNode.policeNumber || '',
-      phone: userNode.username || '',
-      isLecturer: existingLecturerIds.value.includes(userNode.id)
-    }));
-
-    const subOrgs = transformOrgTreeData(orgNode.children || []);
-    transformedOrg.children = [...subOrgs, ...users];
-
-    return transformedOrg;
-  });
 };
 
 const handleUserSearch = async () => {
@@ -796,8 +971,6 @@ const handleUserSearch = async () => {
           department = findUserInTree(orgTreeData.value);
         }
 
-        const isLecturer = existingLecturerIds.value.includes(user.id);
-        
         return {
           id: user.id,
           name: user.name,
@@ -805,7 +978,7 @@ const handleUserSearch = async () => {
           avatar: user.avatar || '',
           policeNumber: user.policeNumber || '',
           phone: user.username || '',
-          isLecturer: isLecturer,
+          isLecturer: user.teacher === 1, // 直接使用 teacher 字段
           checked: tempSelectedUsers.value.some(u => u.id === user.id)
         };
       });
@@ -920,7 +1093,6 @@ const removeSelectedUser = (user) => {
 };
 
 onMounted(() => {
-  fetchUserOptions();
   fetchLecturers();
 });
 </script>
@@ -962,8 +1134,8 @@ onMounted(() => {
   position: relative;
   overflow: hidden;
   transition: all 0.3s;
-  width: 100px;
-  height: 100px;
+  width: 120px;
+  height: 120px;
 }
 .avatar-uploader:hover {
   border-color: #409eff;
@@ -971,24 +1143,61 @@ onMounted(() => {
 .avatar-uploader-icon {
   font-size: 28px;
   color: #8c939d;
-  width: 100px;
-  height: 100px;
+  width: 120px;
+  height: 80px;
   text-align: center;
-  line-height: 100px;
+  line-height: 80px;
 }
 .avatar {
-  width: 100px;
-  height: 100px;
+  width: 120px;
+  height: 120px;
   display: block;
   object-fit: cover;
 }
 .avatar-placeholder {
-  width: 100px;
-  height: 100px;
+  width: 120px;
+  height: 120px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background-color: #fafafa;
+}
+.upload-text {
+  font-size: 12px;
+  color: #8c939d;
+  margin-top: 8px;
+}
+.upload-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background-color: #f0f9ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #409eff;
+}
+.upload-tip .el-icon {
+  font-size: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.tip-content {
+  flex: 1;
+  line-height: 1.6;
+}
+.tip-content > div {
+  margin-bottom: 4px;
+}
+.tip-content > div:last-child {
+  margin-bottom: 0;
+}
+.tip-highlight {
+  color: #e6a23c;
+  font-weight: 500;
 }
 
 /* 用户选择器样式 */
@@ -1204,6 +1413,32 @@ onMounted(() => {
   padding: 40px 20px;
   text-align: center;
   color: #909399;
+  font-size: 14px;
+}
+
+/* 图片裁剪相关样式 */
+.cropper-container {
+  width: 100%;
+  height: 400px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cropper-tips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 8px 12px;
+  background-color: #f0f9ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #409eff;
+}
+
+.cropper-tips .el-icon {
   font-size: 14px;
 }
 </style>

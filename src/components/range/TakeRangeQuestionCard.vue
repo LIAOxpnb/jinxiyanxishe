@@ -7,19 +7,19 @@
     <div class="question-title" v-html="questionData.title"></div>
 
     <div class="answer-area">
-      <el-radio-group v-if="questionData.questionType === '单选'" v-model="answerModel">
+      <el-radio-group v-if="questionData.questionType === '单选'" v-model="answerModel" :disabled="disabled">
         <el-radio v-for="opt in displayOptions" :key="opt.displayOption" :label="opt.originalOption" size="large">
           {{ opt.displayOption }}. {{ opt.value }}
         </el-radio>
       </el-radio-group>
 
-      <el-checkbox-group v-else-if="questionData.questionType === '多选'" v-model="answerModel">
+      <el-checkbox-group v-else-if="questionData.questionType === '多选'" v-model="answerModel" :disabled="disabled">
         <el-checkbox v-for="opt in displayOptions" :key="opt.displayOption" :label="opt.originalOption" size="large">
           {{ opt.displayOption }}. {{ opt.value }}
         </el-checkbox>
       </el-checkbox-group>
 
-      <el-radio-group v-else-if="questionData.questionType === '判断'" v-model="answerModel">
+      <el-radio-group v-else-if="questionData.questionType === '判断'" v-model="answerModel" :disabled="disabled">
         <el-radio label="0" size="large">正确</el-radio>
         <el-radio label="1" size="large">错误</el-radio>
       </el-radio-group>
@@ -27,7 +27,7 @@
       <div v-else-if="questionData.questionType === '填空'">
         <div v-for="(n, i) in blankCount" :key="i" class="blank-fill-item">
           <span>空 {{ i + 1 }}: </span>
-          <el-input v-model="answerModel[i]" placeholder="请输入答案" />
+          <el-input v-model="answerModel[i]" placeholder="请输入答案" :disabled="disabled" />
         </div>
       </div>
       
@@ -37,6 +37,7 @@
         type="textarea"
         :rows="8"
         placeholder="请输入您的答案"
+        :disabled="disabled"
       />
     </div>
   </el-card>
@@ -48,7 +49,8 @@ import { computed } from 'vue';
 const props = defineProps({
   questionData: { type: Object, required: true },
   index: { type: Number, required: true },
-  modelValue: { type: [String, Array] }
+  modelValue: { type: [String, Array] },
+  disabled: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['update:modelValue']);

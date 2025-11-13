@@ -174,7 +174,7 @@
     </div>
     <el-empty v-else-if="!loading" description="未找到该靶场的相关信息"></el-empty>
     
-    <QuestionEditDialog v-model:visible="editDialogVisible" :question-id="editQuestionId" @success="fetchShootingRangeDetails" />
+    <QuestionEditDialog v-model:visible="editDialogVisible" :question-id="editQuestionId" @success="fetchShootingRangeBasicInfo" />
 
     <el-dialog v-model="clueEditorVisible" title="线索编辑" width="800px" :close-on-click-modal="false" @close="destroyClueEditor">
       <el-form v-if="clueEditorVisible" :model="clueForm" label-width="80px">
@@ -378,7 +378,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="userSelectionDialogVisible" title="选择人员" width="1000px" :close-on-click-modal="false">
+    <el-dialog 
+      v-model="userSelectionDialogVisible" 
+      title="选择人员" 
+      width="1000px" 
+      :close-on-click-modal="false"
+      @close="handleUserDialogClose"
+    >
         <div class="add-member-dialog">
           <div class="user-tree-section">
             <div class="search-section">
@@ -402,6 +408,7 @@
                       </el-avatar>
                       <span class="user-name">{{ user.name }}</span>
                       <span class="user-dept">{{ user.department }}</span>
+                      <el-tag v-if="user.isSelected" type="success" size="small" style="margin-left: 8px;">已选</el-tag>
                     </div>
                   </el-checkbox>
                 </div>
@@ -409,13 +416,15 @@
 
               <!-- 组织树 -->
               <div v-else class="org-tree">
-                <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id" :default-expand-all="true" @check="handleOrgTreeCheck">
+                <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" 
+                  show-checkbox node-key="id" lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
                   <template #default="{ data }">
                     <div class="tree-node">
                       <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
                       <el-avatar v-else :size="20" :src="data.avatar"><el-icon><User /></el-icon></el-avatar>
                       <span class="node-label">{{ data.name }}</span>
                       <span v-if="data.type === 'user'" class="user-dept">{{ data.department }}</span>
+                      <el-tag v-if="data.type === 'user' && data.isSelected" type="success" size="small" style="margin-left: 8px;">已选</el-tag>
                     </div>
                   </template>
                 </el-tree>
@@ -442,7 +451,13 @@
         </template>
     </el-dialog>
     
-    <el-dialog v-model="classSelectionDialogVisible" title="选择班级" width="1000px" :close-on-click-modal="false">
+    <el-dialog 
+      v-model="classSelectionDialogVisible" 
+      title="选择班级" 
+      width="1000px" 
+      :close-on-click-modal="false"
+      @close="handleClassDialogClose"
+    >
         <div class="add-class-dialog">
           <div class="class-list-section">
             <!-- 标签页切换 -->
@@ -502,7 +517,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { getShootingRangeDetail, updateShootingRange, setClueAndQuestionList, setShootingRangeQualified, updateShootingRangeStatus } from '@/api/teaching-center/ShootingRange.js';
 import { getDictData } from '@/api/system-management/dictionary';
 import { getUserList } from '@/api/system-management/User.js';
-import { getAllOrgTree } from '@/api/system-management/Org.js';
+import { getOrgList } from '@/api/system-management/Org.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { Edit, ArrowDown, Delete, Document, Top, Bottom, Search, User, OfficeBuilding, Close, CopyDocument, Check, Loading } from '@element-plus/icons-vue';
 import QuestionEditor from '@/components/question/QuestionEditor.vue';
@@ -514,6 +529,7 @@ import { previewFile } from '@/api/common/PreviewFile.js';
 import ExamQuestionCard from '@/components/exam/ExamQuestionCard.vue'; 
 import QuestionSelector from '@/components/question/QuestionSelector.vue';
 import QuestionEditDialog from '@/components/question/QuestionEditDialog.vue';
+import { removeOuterPTag } from '@/utils/richTextHelper.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -904,6 +920,25 @@ const fetchCategories = async () => {
   } catch (error) { ElMessage.error('获取分类选项失败'); }
 };
 
+// 只获取靶场基本信息，不覆盖题目和线索数据
+const fetchShootingRangeBasicInfo = async () => {
+  try {
+    const res = await getShootingRangeDetail({ id: rangeId.value });
+    if (res.code === 200 && res.data) {
+      // 只更新基本信息字段，保留原有的 clues 和 questions
+      const currentClues = clues.value;
+      const currentQuestions = questionList.value;
+      shootingRangeDetails.value = res.data;
+      // 恢复当前编辑中的数据，不被服务器数据覆盖
+      // (因为 shootingRangeDetails 可能在右侧显示，但题目和线索列表要保持用户正在编辑的状态)
+    } else {
+      ElMessage.error(res.msg || '获取靶场信息失败');
+    }
+  } catch (error) {
+    ElMessage.error('获取靶场信息失败');
+  }
+};
+
 const saveCluesAndQuestions = async () => {
   try {
     const questionTypeMap = {
@@ -1185,10 +1220,13 @@ const previewClueFile = async (clue) => {
 };
 
 const saveClue = () => {
+  // 去除富文本编辑器自动添加的外层 <p> 标签
+  const cleanTitle = removeOuterPTag(clueForm.value.title);
+  
   if (clueForm.value.isNew) {
     clues.value.push({
       uid: clueForm.value.uid,
-      title: clueForm.value.title,
+      title: cleanTitle,
       fileName: clueForm.value.fileName,
       filePath: clueForm.value.filePath,
     });
@@ -1197,7 +1235,7 @@ const saveClue = () => {
     if (index !== undefined && clues.value[index]) {
       clues.value[index] = {
         ...clues.value[index],
-        title: clueForm.value.title,
+        title: cleanTitle,
         fileName: clueForm.value.fileName,
         filePath: clueForm.value.filePath,
       };
@@ -1217,17 +1255,80 @@ const openBasicInfoDialog = () => {
   basicInfoDialogVisible.value = true;
 };
 
-const openRangeSettingsDialog = () => {
+const openRangeSettingsDialog = async () => {
   editForm.value = JSON.parse(JSON.stringify(shootingRangeDetails.value));
   selectedScopeUsers.value = [];
   selectedScopeClasses.value = [];
-  if (editForm.value.clazzUserBindList) {
-    if (editForm.value.scope === 1) {
-      selectedScopeUsers.value = editForm.value.clazzUserBindList.map(item => ({ id: item.userId, name: item.userName, department: '...' }));
-    } else if (editForm.value.scope === 2) {
-      selectedScopeClasses.value = editForm.value.clazzUserBindList.map(item => ({ id: item.clazzId, name: item.clazzName, userCount: 0 }));
+  
+  if (editForm.value.clazzUserBindList && editForm.value.scope === 1) {
+    // 获取用户ID列表
+    const userIds = editForm.value.clazzUserBindList.map(item => item.userId).filter(Boolean);
+    
+    if (userIds.length > 0) {
+      try {
+        // 调用用户列表API获取所有用户信息（包括组织名称）
+        const response = await getUserList({
+          pageNum: 1,
+          pageSize: 100,
+          param: ''
+        });
+        
+        if (response.code === 200 && response.data.records) {
+          const allUsers = response.data.records;
+          
+          // 根据用户ID匹配用户信息
+          selectedScopeUsers.value = userIds.map(userId => {
+            const userInfo = allUsers.find(user => user.id === userId);
+            
+            if (userInfo) {
+              // 使用API返回的 orgName 字段作为组织名称
+              const department = userInfo.orgName || userInfo.organizationName || userInfo.deptName || userInfo.department || '未知部门';
+              
+              return {
+                id: userInfo.id,
+                name: userInfo.name || `用户ID:${userInfo.id}`,
+                department: department,
+                avatar: userInfo.avatar || ''
+              };
+            } else {
+              // 如果在用户列表中找不到，使用原始数据
+              const originalItem = editForm.value.clazzUserBindList.find(item => item.userId === userId);
+              return {
+                id: userId,
+                name: originalItem?.userName || originalItem?.name || `用户ID:${userId}`,
+                department: originalItem?.userDept || originalItem?.department || '未知部门',
+                avatar: originalItem?.userAvatar || originalItem?.avatar || ''
+              };
+            }
+          });
+        } else {
+          // API调用失败，使用原始数据
+          selectedScopeUsers.value = editForm.value.clazzUserBindList.map(item => ({
+            id: item.userId,
+            name: item.userName || item.name || `用户ID:${item.userId}`,
+            department: item.userDept || item.department || '未知部门',
+            avatar: item.userAvatar || item.avatar || ''
+          }));
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        // 发生错误时使用原始数据
+        selectedScopeUsers.value = editForm.value.clazzUserBindList.map(item => ({
+          id: item.userId,
+          name: item.userName || item.name || `用户ID:${item.userId}`,
+          department: item.userDept || item.department || '未知部门',
+          avatar: item.userAvatar || item.avatar || ''
+        }));
+      }
     }
+  } else if (editForm.value.clazzUserBindList && editForm.value.scope === 2) {
+    selectedScopeClasses.value = editForm.value.clazzUserBindList.map(item => ({ 
+      id: item.clazzId, 
+      name: item.clazzName, 
+      userCount: 0 
+    }));
   }
+  
   rangeSettingsDialogVisible.value = true;
 };
 
@@ -1243,7 +1344,8 @@ const submitUpdate = async () => {
   try {
     await updateShootingRange(editForm.value);
     ElMessage.success('更新成功！');
-    await fetchShootingRangeDetails();
+    // 只更新基本信息，不重新获取题目和线索，避免覆盖用户正在编辑的内容
+    await fetchShootingRangeBasicInfo();
     basicInfoDialogVisible.value = false;
     rangeSettingsDialogVisible.value = false;
   } catch (error) {
@@ -1295,38 +1397,141 @@ const openClassSelectionDialog = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const res = await getAllOrgTree({ personnel: true });
-    if (res.code === 200) {
-      orgTreeData.value = transformOrgTreeData(res.data);
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
+    if (response.code === 200) {
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => {
+        const isSelected = selectedScopeUsers.value.some(user => user.id === userNode.id);
+        return {
+          id: `user_${userNode.id}`,
+          originalId: userNode.id,
+          name: userNode.name,
+          type: 'user',
+          isLeaf: true,
+          department: rootOrg.orgName,
+          avatar: userNode.avatar || '',
+          policeNumber: userNode.policeNumber || '',
+          phone: userNode.username || '',
+          isSelected: isSelected // 标记已选用户，仅用于显示标签
+        };
+      });
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
+      
       // 在组织树加载完成后同步选中状态
       setTimeout(() => {
         syncSelectedUsersToTree();
       }, 200);
-    } else {
-      ElMessage.error(res.msg || '获取组织树失败');
     }
   } catch (error) {
     ElMessage.error('获取组织树失败');
   }
 };
+
+// 懒加载组织树子节点
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
+    });
+    
+    if (response.code === 200) {
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => {
+        const isSelected = selectedScopeUsers.value.some(user => user.id === userNode.id);
+        return {
+          id: `user_${userNode.id}`,
+          originalId: userNode.id,
+          name: userNode.name,
+          type: 'user',
+          isLeaf: true,
+          department: orgData.orgName,
+          avatar: userNode.avatar || '',
+          policeNumber: userNode.policeNumber || '',
+          phone: userNode.username || '',
+          isSelected: isSelected // 标记已选用户，仅用于显示标签
+        };
+      });
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error);
+    resolve([]);
+  }
+};
+
 const transformOrgTreeData = (nodes) => {
   return (nodes || []).map(node => {
-    const transformedNode = { id: `org_${node.id}`, name: node.orgName, type: 'org', children: [] };
+    const transformedNode = { 
+      id: `org_${node.id}`, 
+      name: node.orgName, 
+      type: 'org', 
+      isLeaf: false,
+      children: [] 
+    };
     if (node.users) {
       transformedNode.children.push(...node.users.map(u => ({ 
         id: `user_${u.id}`, 
         originalId: u.id, 
         name: u.name, 
         type: 'user', 
+        isLeaf: true, 
         department: node.orgName,
         avatar: u.avatar,
         policeNumber: u.policeNumber,
         phone: u.username || u.phone
       })));
     }
-    if (node.children) {
-      transformedNode.children.push(...transformOrgTreeData(node.children));
-    }
+    // 不再递归处理子组织（懒加载模式）
     return transformedNode;
   });
 };
@@ -1372,7 +1577,8 @@ const handleUserSearch = async () => {
           avatar: user.avatar || '',
           policeNumber: user.policeNumber || '',
           phone: user.username || '',
-          checked: selectedScopeUsers.value.some(u => u.id === user.id)
+          checked: selectedScopeUsers.value.some(u => u.id === user.id),
+          isSelected: selectedScopeUsers.value.some(u => u.id === user.id) // 标记已选用户
         };
       });
     }
@@ -1388,6 +1594,7 @@ const handleUserCheck = (user) => {
   }
 };
 const handleOrgTreeCheck = (data, { checkedNodes }) => {
+  // 只保留用户节点（允许重复勾选）
   const users = checkedNodes.filter(node => node.type === 'user');
   
   selectedScopeUsers.value = users.map(user => ({
@@ -1410,7 +1617,17 @@ const clearSelectedUsers = () => {
   selectedScopeUsers.value = [];
   orgTreeRef.value?.setCheckedKeys([]);
 };
-const confirmSelectedUsers = () => { userSelectionDialogVisible.value = false; };
+
+const confirmSelectedUsers = () => { 
+  userSelectionDialogVisible.value = false; 
+  // 清空搜索由 handleUserDialogClose 统一处理
+};
+
+// 人员选择对话框关闭时的处理
+const handleUserDialogClose = () => {
+  userSearchKeyword.value = '';
+  searchedUsers.value = [];
+};
 
 const fetchClassList = async () => {
   try {
@@ -1422,16 +1639,18 @@ const fetchClassList = async () => {
       clazzStatus: ''
     });
     if (res.code === 200) {
-      // 将 clazzStatus == 2 的班级设置为禁用状态
-      classListData.value = res.data.records.map(c => ({ 
+      // 过滤掉已结束的班级（clazzStatus == 2）
+      const filteredRecords = res.data.records.filter(c => c.clazzStatus !== 2);
+      classListData.value = filteredRecords.map(c => ({ 
         id: c.id,
         name: c.name,
         // 后端返回的字段是 clazzUserCount
         userCount: c.clazzUserCount || c.userCount || 0, 
         checked: selectedScopeClasses.value.some(s => s.id === c.id),
-        disabled: c.clazzStatus == 2, // 已结束的班级设置为禁用
+        disabled: false, // 已经过滤掉结束的班级，不需要禁用
         clazzStatus: c.clazzStatus
       }));
+      // 注意：total 仍然使用原始的总数，因为分页是基于后端返回的
       classTotal.value = res.data.total || 0;
     }
   } catch (e) { ElMessage.error("获取班级列表失败"); }
@@ -1467,7 +1686,16 @@ const clearSelectedClasses = () => {
   selectedScopeClasses.value = [];
   classListData.value.forEach(c => c.checked = false);
 };
-const confirmSelectedClasses = () => { classSelectionDialogVisible.value = false; };
+
+const confirmSelectedClasses = () => { 
+  classSelectionDialogVisible.value = false; 
+  // 清空搜索由 handleClassDialogClose 统一处理
+};
+
+// 班级选择对话框关闭时的处理
+const handleClassDialogClose = () => {
+  classSearchKeyword.value = '';
+};
 
 // 切换发布状态
 const togglePublishStatus = async () => {
@@ -1535,8 +1763,8 @@ onBeforeUnmount(() => {
 .range-setup-page {
   padding: 20px;
   background-color: #f0f2f5;
-  height: 100%;
-  overflow-y: auto;
+  min-height: 100vh;
+  /* 使用 min-height 而不是 height */
 }
 
 .page-header-title {
@@ -1548,6 +1776,7 @@ onBeforeUnmount(() => {
   display: flex;
   margin-top: 20px;
   gap: 20px;
+  align-items: flex-start;
 }
 
 .left-panel {
@@ -1555,15 +1784,69 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.left-panel .el-card :deep(.el-card__header) {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.left-panel .el-card :deep(.el-card__body) {
+  padding: 0;
+  /* 移除overflow-y，让页面自然滚动 */
+}
+
 .right-panel {
-  flex: 1;
-  min-width: 320px;
+  width: fit-content;
+  max-width: 450px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 8px;
   position: sticky;
-  top: 20px;
+  top: 0;
   align-self: flex-start;
+}
+
+/* 右侧面板 el-card 样式优化 - 减少内边距 */
+.right-panel .el-card :deep(.el-card__header) {
+  padding: 10px 14px;
+  /* 减少 header 内边距 */
+  font-size: 14px;
+}
+
+.right-panel .el-card :deep(.el-card__body) {
+  padding: 10px 14px;
+  /* 减少 body 内边距 */
+}
+
+/* 右侧面板 descriptions 样式优化 - 减少行高 */
+.right-panel :deep(.el-descriptions__cell) {
+  padding: 6px 10px;
+  /* 减少单元格内边距 */
+  line-height: 1.3;
+  /* 减少行高 */
+}
+
+.right-panel :deep(.el-descriptions__label),
+.right-panel :deep(.el-descriptions__content) {
+  font-size: 13px;
+  /* 稍微缩小字体 */
+}
+
+/* 证书区域紧凑化 */
+.right-panel .certificate-section {
+  line-height: 1.4;
+}
+
+.right-panel .certificate-section > div {
+  margin-bottom: 6px;
+}
+
+.right-panel .certificate-section .el-button {
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .card-header {
@@ -1673,14 +1956,16 @@ onBeforeUnmount(() => {
 }
 
 .action-buttons {
-  margin-top: 20px;
+  margin-top: 8px;
+  /* 减少顶部间距 */
   display: flex;
 }
 
 .action-buttons .el-button {
   width: 100%;
-  height: 40px;
-  font-size: 16px;
+  height: 36px;
+  /* 减少按钮高度 */
+  font-size: 14px;
 }
 
 .add-member-dialog,

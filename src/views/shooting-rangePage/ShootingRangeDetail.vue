@@ -167,41 +167,126 @@ const challengeStatus = ref(STATUS_NOT_STARTED);
 
 // --- 核心状态计算函数 ---
 
+// 判断靶场是否可以参加（根据 shootingRangeStatus）
+// shootingRangeStatus: 0-未开始，1-进行中，2-已结束
+// startTime/endTime 是靶场整体的活动时间，不影响用户参加权限
+const canEnterRange = () => {
+  if (!detail.value) return false;
+  
+  // 只有进行中状态（1）可以参加
+  return detail.value.shootingRangeStatus === 1;
+};
+
 const getStepClass = (step) => {
   const s = challengeStatus.value;
   
+  // status: 4 时，所有步骤都完成（蓝色）
   if (s >= STATUS_FINISHED) return 'completed';
+  
+  // status: 2 时，前面几步都已完成，鉴定和结果步骤为灰色
   if (s === STATUS_SYSTEM_REVIEWED) {
-    // status: 2 时，前面几步都已完成，鉴定和结果步骤为灰色
     return ['entry', 'clue', 'question', 'submit'].includes(step.name) ? 'completed' : 'disabled';
   }
-  if (s === STATUS_SUBMITTED) return 'completed';
+  
+  // status: 1 时，前4个步骤都完成（蓝色），后面鉴定和结果为灰色
+  if (s === STATUS_SUBMITTED) {
+    return ['entry', 'clue', 'question', 'submit'].includes(step.name) ? 'completed' : 'disabled';
+  }
+  
+  // status: 0 时，只有前3步可用（蓝色激活状态），其他步骤锁定
   if (s === STATUS_IN_PROGRESS) {
-    return ['entry', 'clue', 'question', 'submit'].includes(step.name) ? 'active' : 'disabled';
+    return ['entry', 'clue', 'question'].includes(step.name) ? 'active' : 'disabled';
   }
+  
+  // status: -1 时，需要检查靶场状态
   if (s === STATUS_NOT_STARTED) {
-    return step.name === 'entry' ? 'active' : 'disabled';
+    if (step.name === 'entry') {
+      // 如果靶场不在进行中状态，entry 显示为灰色 disabled
+      return canEnterRange() ? 'active' : 'disabled';
+    }
+    return 'disabled';
   }
+  
   return 'disabled';
 };
 
 const getStepDesc = (step) => {
   const s = challengeStatus.value;
+  
+  // 对于进入靶场步骤，检查靶场状态和答题状态
+  if (step.name === 'entry') {
+    // 先检查靶场是否可以参加
+    if (!canEnterRange()) {
+      const rangeStatus = detail.value?.shootingRangeStatus;
+      
+      // 如果有时间限制，根据时间判断显示"未开始"还是"已结束"
+      if (detail.value?.participateDate === 1 && detail.value?.startTime && detail.value?.endTime) {
+        const now = new Date();
+        const startTime = new Date(detail.value.startTime);
+        const endTime = new Date(detail.value.endTime);
+        
+        if (now < startTime) {
+          return '靶场未开始';
+        } else if (now > endTime) {
+          return '靶场已结束';
+        }
+      }
+      
+      // 没有时间限制或时间数据不完整，根据状态显示
+      if (rangeStatus === 0) {
+        return '靶场未开始';
+      }
+      if (rangeStatus === 2) {
+        return '靶场已结束';
+      }
+    }
+    
+    // 靶场可以参加，根据答题状态显示
+    const isTraining = detail.value?.shootingRangeType === 0; // 0-训练，1-比武
+    
+    if (s === STATUS_NOT_STARTED) return '进行中';
+    if (s === STATUS_IN_PROGRESS) return '进行中';
+    
+    // 已提交后的状态
+    if (s === STATUS_SUBMITTED || s === STATUS_SYSTEM_REVIEWED) {
+      // 训练模式：可以重新开始
+      // 比武模式：已结束，不能重新开始
+      return isTraining ? '重新开始' : '已结束';
+    }
+    
+    if (s >= STATUS_FINISHED) {
+      // 训练模式：可以重新开始
+      // 比武模式：已结束，不能重新开始
+      return isTraining ? '重新开始' : '已结束';
+    }
+    
+    return '';
+  }
+  
+  // 线索分析步骤
+  if (step.name === 'clue') {
+    if (s === STATUS_IN_PROGRESS) return '初步研判线索';
+    if (s >= STATUS_SUBMITTED) return '初步研判线索';
+    return step.title;
+  }
+  
+  // 案情研判步骤
+  if (step.name === 'question') {
+    if (s === STATUS_IN_PROGRESS) return '根据题目分析案情';
+    if (s >= STATUS_SUBMITTED) return '根据题目分析案情';
+    return step.title;
+  }
+  
   switch(step.name) {
-    case 'entry':
-      if (s === STATUS_NOT_STARTED) return '未开始';
-      if (s === STATUS_IN_PROGRESS) return '进行中';
-      if (s >= STATUS_SUBMITTED) return '已结束';
-      return '';
     case 'submit':
-      if (s === STATUS_NOT_STARTED) return '提交报告等待鉴定';
-      if (s === STATUS_IN_PROGRESS) return '提交报告等待鉴定';
-      if (s === STATUS_SUBMITTED) return '已提交报告';
-      if (s >= STATUS_SYSTEM_REVIEWED) return '已提交报告';
+      if (s === STATUS_NOT_STARTED || s === STATUS_IN_PROGRESS) return '提交报告等待鉴定';
+      if (s === STATUS_SUBMITTED) return '提交报告等待鉴定';
+      if (s === STATUS_SYSTEM_REVIEWED) return '提交报告等待鉴定';
+      if (s >= STATUS_FINISHED) return '提交报告等待鉴定';
       return '提交报告等待鉴定';
     case 'judgement':
       if (s === STATUS_NOT_STARTED || s === STATUS_IN_PROGRESS) return '等待提交报告';
-      if (s === STATUS_SUBMITTED) return '鉴定中,请等待';
+      if (s === STATUS_SUBMITTED) return '鉴定中，请等待';
       if (s === STATUS_SYSTEM_REVIEWED) return '人工审核中';
       if (s >= STATUS_FINISHED) return '鉴定完成';
       return '等待提交报告';
@@ -219,7 +304,7 @@ const getStepDesc = (step) => {
 const isStepLocked = (step) => {
   const s = challengeStatus.value;
   
-  // status: 4 时，所有步骤都不锁定
+  // status: 4 时，所有步骤都不锁定（可以点击查看）
   if (s >= STATUS_FINISHED) {
     return false;
   }
@@ -234,33 +319,78 @@ const isStepLocked = (step) => {
     return s < STATUS_FINISHED;
   }
   
-  // 提交报告步骤：status: 2 和 status: 4 时不锁定
+  // 提交报告步骤：status >= 1 时不锁定（提交后及之后的状态都不锁定）
   if (step.name === 'submit') {
-    return s !== STATUS_SYSTEM_REVIEWED && s !== STATUS_FINISHED;
+    return s < STATUS_SUBMITTED;
   }
   
-  // 进入靶场相关步骤
-  if (step.name === 'entry') return false;
-  if (s === STATUS_NOT_STARTED) return true;
-  if (s === STATUS_IN_PROGRESS) return ['judgement', 'result'].includes(step.name);
-  if (s === STATUS_SUBMITTED || s === STATUS_SYSTEM_REVIEWED) return ['judgement', 'result'].includes(step.name);
+  // 进入靶场相关步骤（entry, clue, question）
+  if (['entry', 'clue', 'question'].includes(step.name)) {
+    const isTraining = detail.value?.shootingRangeType === 0; // 0-训练，1-比武
+    
+    // 1. 如果已经提交报告（status >= 1）
+    if (s >= STATUS_SUBMITTED) {
+      // 训练模式：完成后可以重新开始，不锁定
+      // 比武模式：提交后锁定，不能再答题
+      if (isTraining) {
+        // 训练模式下，只有靶场进行中（status=1）才能重新开始
+        return !canEnterRange();
+      } else {
+        // 比武模式提交后锁定
+        return true;
+      }
+    }
+    
+    // 2. 未提交状态（status = -1 或 0）
+    // 如果靶场不在进行中状态，则锁定（不能进入）
+    if (!canEnterRange()) return true;
+    
+    // 3. 其他情况根据答题状态判断
+    // status: -1 时，可以进入靶场（entry 不锁定）
+    // status: 0 时，可以继续答题（entry/clue/question 都不锁定）
+    return false;
+  }
   
   return false;
 };
 
 const enterButtonText = computed(() => {
   const s = challengeStatus.value;
+  const isTraining = detail.value?.shootingRangeType === 0; // 0-训练，1-比武
+  
   if (s === STATUS_NOT_STARTED) return '进入靶场';
-  if (s === STATUS_IN_PROGRESS) return '继续比武';
-  if (s === STATUS_SUBMITTED) return '查看结果'; 
-  if (s === STATUS_SYSTEM_REVIEWED) return '查看结果';
-  if (s >= STATUS_FINISHED) return '查看结果';
+  if (s === STATUS_IN_PROGRESS) return isTraining ? '继续训练' : '继续比武';
+  if (s === STATUS_SUBMITTED) {
+    // 训练模式：可以重新开始
+    // 比武模式：查看结果
+    return isTraining ? '重新开始' : '查看结果';
+  }
+  if (s === STATUS_SYSTEM_REVIEWED) {
+    return isTraining ? '重新开始' : '查看结果';
+  }
+  if (s >= STATUS_FINISHED) {
+    return isTraining ? '重新开始' : '查看结果';
+  }
   return '进入靶场';
 });
 
 const isEnterButtonDisabled = computed(() => {
   // 在"待鉴定"和"人工审核中"状态下按钮不可用
-  return challengeStatus.value === STATUS_SUBMITTED || challengeStatus.value === STATUS_SYSTEM_REVIEWED;
+  if (challengeStatus.value === STATUS_SUBMITTED || challengeStatus.value === STATUS_SYSTEM_REVIEWED) {
+    return true;
+  }
+  
+  // 如果已完成，可以查看结果，不受靶场状态限制
+  if (challengeStatus.value >= STATUS_FINISHED) {
+    return false;
+  }
+  
+  // 如果靶场不在进行中状态，按钮不可用
+  if (!canEnterRange()) {
+    return true;
+  }
+  
+  return false;
 });
 
 // 检查是否继续答题
@@ -408,38 +538,101 @@ const showResultDialog = async (rangeId) => {
 // --- 事件处理 ---
 const handleStepClick = (step) => {
   // 只检查是否锁定，不检查样式类，因为完成状态下的步骤应该可以点击
-  if (isStepLocked(step)) return;
+  if (isStepLocked(step)) {
+    // 如果是进入靶场步骤被锁定，显示状态提示
+    if (step.name === 'entry' && !canEnterRange()) {
+      // 如果有时间限制，根据时间判断显示"未开始"还是"已结束"
+      if (detail.value?.participateDate === 1 && detail.value?.startTime && detail.value?.endTime) {
+        const now = new Date();
+        const startTime = new Date(detail.value.startTime);
+        const endTime = new Date(detail.value.endTime);
+        
+        if (now < startTime) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (now > endTime) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      } else {
+        // 没有时间限制，根据状态显示
+        const rangeStatus = detail.value?.shootingRangeStatus;
+        if (rangeStatus === 0) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (rangeStatus === 2) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      }
+    }
+    return;
+  }
   
   if (['entry', 'clue', 'question'].includes(step.name)) {
-    // 当状态为完全完成（STATUS_FINISHED = 4）时，不允许点击这些步骤
-    if (challengeStatus.value === STATUS_FINISHED) {
+    // 检查靶场状态
+    if (!canEnterRange()) {
+      // 如果有时间限制，根据时间判断显示"未开始"还是"已结束"
+      if (detail.value?.participateDate === 1 && detail.value?.startTime && detail.value?.endTime) {
+        const now = new Date();
+        const startTime = new Date(detail.value.startTime);
+        const endTime = new Date(detail.value.endTime);
+        
+        if (now < startTime) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (now > endTime) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      } else {
+        // 没有时间限制，根据状态显示
+        const rangeStatus = detail.value?.shootingRangeStatus;
+        if (rangeStatus === 0) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (rangeStatus === 2) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      }
       return;
     }
     
-    // 已提交报告后（STATUS_SUBMITTED 及以上），不允许继续答题
+    const isTraining = detail.value?.shootingRangeType === 0; // 0-训练，1-比武
+    
+    // 已提交报告后的处理
     if (challengeStatus.value >= STATUS_SUBMITTED) {
-      ElMessage.warning('已提交报告，无法继续答题');
+      if (isTraining) {
+        // 训练模式：允许重新开始
+        ElMessageBox.confirm('是否重新开始训练？', '提示', {
+          confirmButtonText: '重新开始',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }).then(() => {
+          router.push({ 
+            name: 'TakeShootingRange', 
+            params: { id: route.params.id },
+            query: { restart: 'true' }
+          });
+        });
+      } else {
+        // 比武模式：不允许继续答题
+        ElMessage.warning('比武已结束，不能继续答题');
+      }
       return;
     }
     
     // 其他状态下的正常处理
-    if (challengeStatus.value >= STATUS_FINISHED) {
+    // 检查是否有暂存记录（仅在比武中状态）
+    if (challengeStatus.value === STATUS_IN_PROGRESS && detail.value.shootingRangeRecord && detail.value.shootingRangeRecord.id) {
+      checkContinueRange(detail.value.shootingRangeRecord.id);
+    } else {
       router.push({ 
         name: 'TakeShootingRange', 
         params: { id: route.params.id },
-        query: { tab: step.name === 'question' ? 'questions' : 'clues', readonly: 'true' }
+        query: { tab: step.name === 'question' ? 'questions' : 'clues' }
       });
-    } else {
-      // 检查是否有暂存记录（仅在比武中状态）
-      if (challengeStatus.value === STATUS_IN_PROGRESS && detail.value.shootingRangeRecord && detail.value.shootingRangeRecord.id) {
-        checkContinueRange(detail.value.shootingRangeRecord.id);
-      } else {
-        router.push({ 
-          name: 'TakeShootingRange', 
-          params: { id: route.params.id },
-          query: { tab: step.name === 'question' ? 'questions' : 'clues' }
-        });
-      }
     }
   } else if (step.name === 'result' && challengeStatus.value >= STATUS_FINISHED) {
     // 点击结果步骤显示结果弹窗,使用靶场ID
@@ -448,17 +641,65 @@ const handleStepClick = (step) => {
 };
 
 const handleEnterRange = () => {
-  if (isEnterButtonDisabled.value) return;
-  // 如果已结束,按钮是"查看结果",则跳转到结果页
-  if (challengeStatus.value >= STATUS_FINISHED) {
-    // 使用靶场ID
-    router.push({ name: 'ShootingRangeResult', params: { id: detail.value.id } });
+  if (isEnterButtonDisabled.value) {
+    // 如果因为靶场状态而禁用，显示提示
+    if (!canEnterRange()) {
+      // 如果有时间限制，根据时间判断显示"未开始"还是"已结束"
+      if (detail.value?.participateDate === 1 && detail.value?.startTime && detail.value?.endTime) {
+        const now = new Date();
+        const startTime = new Date(detail.value.startTime);
+        const endTime = new Date(detail.value.endTime);
+        
+        if (now < startTime) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (now > endTime) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      } else {
+        // 没有时间限制，根据状态显示
+        const rangeStatus = detail.value?.shootingRangeStatus;
+        if (rangeStatus === 0) {
+          ElMessage.warning('靶场尚未开始，不能参加');
+        } else if (rangeStatus === 2) {
+          ElMessage.warning('靶场已结束，不能参加');
+        } else {
+          ElMessage.warning('靶场不可用，不能参加');
+        }
+      }
+    }
+    return;
+  }
+  
+  const isTraining = detail.value?.shootingRangeType === 0; // 0-训练，1-比武
+  
+  // 已完成/已提交状态的处理
+  if (challengeStatus.value >= STATUS_SUBMITTED) {
+    if (isTraining) {
+      // 训练模式：点击"重新开始"按钮，允许重新开始
+      ElMessageBox.confirm('是否重新开始训练？', '提示', {
+        confirmButtonText: '重新开始',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        router.push({ 
+          name: 'TakeShootingRange', 
+          params: { id: route.params.id },
+          query: { restart: 'true' }
+        });
+      });
+    } else {
+      // 比武模式：点击"查看结果"按钮，跳转到结果页
+      router.push({ name: 'ShootingRangeResult', params: { id: detail.value.id } });
+    }
   } else {
+    // 未提交状态：正常进入或继续答题
     // 检查是否有暂存记录（仅在比武中状态）
     if (challengeStatus.value === STATUS_IN_PROGRESS && detail.value.shootingRangeRecord && detail.value.shootingRangeRecord.id) {
       checkContinueRange(detail.value.shootingRangeRecord.id);
     } else {
-      // 否则,进入或继续比武
+      // 否则,进入靶场
       router.push({ name: 'TakeShootingRange', params: { id: route.params.id } });
     }
   }

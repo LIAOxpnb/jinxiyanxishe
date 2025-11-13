@@ -7,9 +7,9 @@
       </div>
       <div class="profile-info">
         <div class="profile-name-row">
-          <h2 class="profile-name">{{ userProfile.name || '用户名' }}</h2>
+          <h2 class="profile-name">{{ userProfile.name  }}</h2>
         </div>
-        <div class="profile-org">{{ userProfile.orgName || '组织名称 / 学校名称' }}</div>
+        <div class="profile-org">{{ userProfile.orgName  }}</div>
         <div class="badge-row" v-if="userBadges.length">
           <span v-for="(b,i) in userBadges" :key="i" class="badge-chip">{{ b }}</span>
         </div>
@@ -637,7 +637,7 @@ watch(() => route.query.tab, (newTab) => {
 }
 /* 顶部个人信息横幅 */
 .profile-hero {
-  height: 160px;
+  height: 200px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -960,8 +960,8 @@ watch(() => route.query.tab, (newTab) => {
   50% { transform: scale(1.05); }
 }
 
-.certificate-title {
-  font-size: 40px;
+.certificate-preview-dialog .certificate-title {
+  font-size: 40px !important;
   font-weight: bold;
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
   -webkit-background-clip: text;
@@ -985,8 +985,8 @@ watch(() => route.query.tab, (newTab) => {
   background: linear-gradient(to right, transparent, #d4af37, transparent);
 }
 
-.certificate-recipient {
-  font-size: 16px;
+.certificate-preview-dialog .certificate-recipient {
+  font-size: 16px !important;
   color: #2c3e50;
   margin-bottom: 50px;
   text-align: center;
@@ -998,8 +998,8 @@ watch(() => route.query.tab, (newTab) => {
   border-right: 3px solid #d4af37;
 }
 
-.certificate-body {
-    font-size: 15px;
+.certificate-preview-dialog .certificate-body {
+  font-size: 15px !important;
   line-height: 1.8;
   color: #2c3e50;
   text-align: center;
@@ -1041,16 +1041,16 @@ watch(() => route.query.tab, (newTab) => {
   z-index: 1; /* 文字图层为 1，低于公章 */
 }
 
-.unit-name {
-  font-size: 17px;
+.certificate-preview-dialog .unit-name {
+  font-size: 17px !important;
   color: #2c3e50;
   font-weight: bold;
   margin-bottom: 8px;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
 
-.issue-date {
-  font-size: 13px;
+.certificate-preview-dialog .issue-date {
+  font-size: 13px !important;
   color: #2c3e50;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }

@@ -77,7 +77,13 @@
   </el-dialog>
 
   <!-- 选择人员弹窗 -->
-  <el-dialog v-model="userSelectionDialogVisible" title="选择人员" width="1000px" :close-on-click-modal="false">
+  <el-dialog 
+    v-model="userSelectionDialogVisible" 
+    title="选择人员" 
+    width="1000px" 
+    :close-on-click-modal="false"
+    @close="handleUserDialogClose"
+  >
     <div class="add-dialog">
       <div class="left-section">
         <div class="search-section">
@@ -86,7 +92,8 @@
           </el-input>
         </div>
         <div class="list-container">
-            <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id" @check="handleOrgTreeCheck" :default-expand-all="false">
+            <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" 
+              show-checkbox node-key="id" lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
               <template #default="{ data }">
                 <div class="tree-node">
                   <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
@@ -122,7 +129,13 @@
   </el-dialog>
 
   <!-- 选择班级弹窗 -->
-  <el-dialog v-model="classSelectionDialogVisible" title="选择班级" width="1000px" :close-on-click-modal="false">
+  <el-dialog 
+    v-model="classSelectionDialogVisible" 
+    title="选择班级" 
+    width="1000px" 
+    :close-on-click-modal="false"
+    @close="handleClassDialogClose"
+  >
     <div class="add-dialog">
       <div class="left-section">
         <div class="search-section">
@@ -175,7 +188,7 @@
 import { reactive, watch, ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { updateCourse } from '../../../api/teaching-center/CourseManagement';
-import { getAllOrgTree } from '@/api/system-management/Org.js';
+import { getOrgList } from '@/api/system-management/Org.js';
 import { getUserList } from '@/api/system-management/User.js';
 import { getClassList } from '@/api/teaching-center/ClassManagement.js';
 import { Search, User, OfficeBuilding, Close } from '@element-plus/icons-vue';
@@ -262,21 +275,120 @@ const openClassSelectionDialog = async () => {
 
 const fetchOrgTree = async () => {
   try {
-    const res = await getAllOrgTree({ personnel: true });
-    if (res.code === 200) {
-      orgTreeData.value = transformOrgTreeData(res.data);
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
+    if (response.code === 200) {
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: rootOrg.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
     }
   } catch (e) { ElMessage.error("获取组织树失败"); }
 };
 
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
+    });
+    
+    if (response.code === 200) {
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: orgData.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error);
+    resolve([]);
+  }
+};
+
 const transformOrgTreeData = (nodes) => {
   return (nodes || []).map(node => {
-    const transformedNode = { id: `org_${node.id}`, name: node.orgName, type: 'org', children: [] };
+    const transformedNode = { 
+      id: `org_${node.id}`, 
+      name: node.orgName, 
+      type: 'org', 
+      isLeaf: false,
+      children: [] 
+    };
     if (node.users) {
-      transformedNode.children.push(...node.users.map(u => ({ id: `user_${u.id}`, originalId: u.id, name: u.name, type: 'user', department: node.orgName })));
-    }
-    if (node.children) {
-      transformedNode.children.push(...transformOrgTreeData(node.children));
+      transformedNode.children.push(...node.users.map(u => ({ 
+        id: `user_${u.id}`, 
+        originalId: u.id, 
+        name: u.name, 
+        type: 'user', 
+        isLeaf: true,
+        department: node.orgName 
+      })));
     }
     return transformedNode;
   });
@@ -358,6 +470,17 @@ const clearSelectedClasses = () => {
 
 const confirmSelectedClasses = () => { 
     classSelectionDialogVisible.value = false; 
+};
+
+// 人员选择对话框关闭时的处理
+const handleUserDialogClose = () => {
+  userSearchKeyword.value = '';
+  searchedUsers.value = [];
+};
+
+// 班级选择对话框关闭时的处理
+const handleClassDialogClose = () => {
+  classSearchKeyword.value = '';
 };
 
 // --- 新增代码结束 ---

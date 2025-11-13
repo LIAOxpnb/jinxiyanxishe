@@ -143,3 +143,14 @@ export function getGradePaperDetail(params) {
 export function gradePaper(data) {
   return request.post('/teacher/shootingRange/gradePaper', data);
 }
+
+/**
+ * @description 复制靶场
+ * @param {Object} params - 复制参数
+ * @param {string} params.id - 靶场ID (必填)
+ * @param {string} params.name - 新靶场名称 (必填)
+ * @returns {Promise}
+ */
+export function copyShootingRange(params) {
+  return request.get('/teacher/shootingRange/copy', { params });
+}

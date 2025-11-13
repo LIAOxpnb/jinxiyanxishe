@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container student-page-wrapper">
     <div class="page-header">
       <el-icon :size="32" color="#fff" class="header-icon"><Collection /></el-icon>
       <h1 style="color: #3370FF;">随堂练习</h1>
@@ -204,34 +204,21 @@ onMounted(async () => {
 
 <style scoped>
 .page-container {
-  background-color: #ffffff;
+  background-color: #f5f7fa;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
+
 .main-content {
   padding: 24px;
 }
+
+/* 使用全局 page-header 样式，仅定义背景图 */
 .page-header {
-  display: flex;
-  align-items: center;
-  padding: 24px;
-  min-height: 150px;
   background-image: url('@/assets/img/u4247.png');
-  background-size: cover;
-  background-position: center;
 }
-.header-icon {
-  background-color: #fff;
-  color: #409eff !important;
-  border-radius: 4px;
-  padding: 4px;
-  margin-right: 16px;
-}
-.page-header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-}
+
 .remark-bar {
   background-color: #fcfcfc;
   border: 1px solid #e6e6e6;
@@ -243,9 +230,11 @@ onMounted(async () => {
   margin-top: -1px;
   margin-bottom: 20px;
 }
+
 .practice-table {
   --el-table-header-bg-color: #fafafa;
 }
+
 .table-footer {
   margin-top: 24px;
   display: flex;

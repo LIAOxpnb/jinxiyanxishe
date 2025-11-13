@@ -553,8 +553,9 @@ const onSubmit = async () => {
 .batch-add-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 64px - 64px); /* 减去Header(64px)和Footer(约64px) */
   overflow: hidden;
+  margin: 0; /* 移除外边距 */
 }
 
 .fixed-header {

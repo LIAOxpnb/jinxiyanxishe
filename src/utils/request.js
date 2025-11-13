@@ -57,6 +57,14 @@ service.interceptors.response.use(
   },
   (error) => {
     console.error('Response Error:', error); // for debug
+    
+    // 如果是401错误且未登录，不显示错误提示（避免登录页面弹窗）
+    const token = sessionStorage.getItem('token');
+    if (error.response && error.response.status === 401 && !token) {
+      console.log('未登录状态，跳过401错误提示');
+      return Promise.reject(error);
+    }
+    
     ElMessage({
       message: error.message,
       type: 'error',

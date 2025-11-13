@@ -34,7 +34,7 @@
     <el-main class="right-panel">
       <h1 class="page-title">题库</h1>
       <FilterBar create-button-text="新增试题" :fields="questionFilterFields" :create-options="createOptions"
-        @create="handleCreateQuestion" @filter="handleFilterQuestions" />
+        @create="handleCreateQuestion" @filter="handleFilterQuestions" @field-change="handleFieldChange" />
       <div v-if="selectedRows.length > 0" style="margin: 10px 0;">
         <el-button type="warning" @click="handleBatchAbandon">
           批量废弃 ({{ selectedRows.length }})
@@ -55,8 +55,8 @@
         :row-class-name="({ row }) => row.abandoned === 1 ? 'abandoned-row' : ''"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="id" label="序号" width="100" />
-        <el-table-column prop="title" label="题目">
+        <el-table-column prop="id" label="序号" width="110" align="center" show-overflow-tooltip />
+        <el-table-column prop="title" label="题目" min-width="200" show-overflow-tooltip>
           <template #default="scope">
             <div :class="{ 'abandoned-question': scope.row.abandoned === 1 }">
               <el-link 
@@ -74,16 +74,16 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="type" label="题型" width="100" />
-        <el-table-column prop="category" label="分类" width="120" />
-        <el-table-column prop="group" label="试题分组" width="120" />
-        <el-table-column prop="difficulty" label="难度" width="80">
+        <el-table-column prop="type" label="题型" min-width="80" show-overflow-tooltip />
+        <el-table-column prop="category" label="分类" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="group" label="试题分组" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="difficulty" label="难度" width="80" align="center">
           <template #default="scope">
             <span>{{ formatDifficulty(scope.row.difficulty) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="creatorName" label="创建人" width="100" />
-        <el-table-column prop="creationTime" label="创建时间" width="180" />
+        <el-table-column prop="creatorName" label="创建人" min-width="100" align="center" show-overflow-tooltip />
+        <el-table-column prop="creationTime" label="创建时间" width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="150">
           <template #default="scope">
             <el-button 
@@ -269,6 +269,7 @@ import '@wangeditor/editor/dist/css/style.css';
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
 import { uploadFiles } from '@/api/common/UploadFiles.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
+import { removeOuterPTag } from '@/utils/richTextHelper.js';
 
 import {
   getQuestionGroupList,
@@ -356,6 +357,7 @@ const questionFilterFields = ref([
 const createOptions = ref([
   { label: '手动新增', value: 'manual' },
   { label: '批量导入', value: 'batch-import' },
+  { label: 'AI新增', value: 'ai' }
 ]);
 
 // --- 编辑弹窗的状态 ---
@@ -525,6 +527,26 @@ const fetchQuestions = async () => {
 const handleGroupSelect = (index) => {
   activeGroupId.value = index;
   pagination.page = 1;
+  // 找到对应的分组，检查是否是"全部"或"未分组"
+  const selectedGroup = groupList.value.find(g => g.id == index);
+  let groupIdValue = '';
+  if (selectedGroup) {
+    if (selectedGroup.name === '全部') {
+      groupIdValue = '';
+    } else {
+      groupIdValue = selectedGroup.id;
+    }
+  }
+  
+  // 同步更新筛选条件中的 groupId
+  filters.value.groupId = groupIdValue;
+  
+  // 同步更新筛选字段的 defaultValue，让 FilterBar 组件自动更新
+  const groupIdField = questionFilterFields.value.find(f => f.model === 'groupId');
+  if (groupIdField) {
+    groupIdField.defaultValue = groupIdValue;
+  }
+  
   fetchQuestions();
 };
 
@@ -561,9 +583,38 @@ const handleEditGroup = (group) => {
   }).catch(() => { });
 };
 
+// 同步左侧菜单和筛选栏的分组选择
+const syncGroupSelection = (groupId) => {
+  if (groupId !== null && groupId !== undefined && groupId !== '') {
+    // 筛选条件中有 groupId，找到对应的分组
+    const selectedGroup = groupList.value.find(g => g.id == groupId);
+    if (selectedGroup) {
+      // 更新左侧菜单的选中状态
+      activeGroupId.value = selectedGroup.id.toString();
+    }
+  } else {
+    // 筛选条件中没有 groupId，设置为 'all'（全部）
+    activeGroupId.value = 'all';
+  }
+};
+
+const handleFieldChange = (fieldModel, value, filterData) => {
+  // 当 groupId 字段变化时，立即同步左侧菜单和筛选字段的 defaultValue
+  if (fieldModel === 'groupId') {
+    syncGroupSelection(value);
+    // 更新筛选字段的 defaultValue，保持一致性
+    const groupIdField = questionFilterFields.value.find(f => f.model === 'groupId');
+    if (groupIdField) {
+      groupIdField.defaultValue = value || '';
+    }
+  }
+};
+
 const handleFilterQuestions = (filterData) => {
   filters.value = filterData;
   pagination.page = 1;
+  // 同步更新左侧菜单的选中状态
+  syncGroupSelection(filterData.groupId);
   fetchQuestions();
 };
 
@@ -577,6 +628,13 @@ const handleCreateQuestion = (command) => {
   } else if (command === 'batch-import') {
     // 批量导入
     batchImportDialogVisible.value = true;
+  } else if (command === 'ai') {
+    // AI生成 - 跳转到AI生成页面
+    const query = {};
+    if (activeGroupId.value && activeGroupId.value !== 'all') {
+      query.groupId = activeGroupId.value;
+    }
+    router.push({ path: '/teaching-center/question/ai-generate', query });
   } else {
     ElMessage.info(`'${command}' 功能待开发`);
   }
@@ -732,7 +790,7 @@ const handleSubmit = async () => {
       questionCategory: questionForm.questionCategory,
       groupId: questionForm.groupId,
       difficulty: questionForm.difficulty,
-      analysis: showAnalysis.value ? questionForm.analysis : '',
+      analysis: showAnalysis.value ? removeOuterPTag(questionForm.analysis) : '', // 去除外层 <p> 标签
       details: detailsForBackend,
       answer: finalAnswer,
     };
@@ -1043,12 +1101,16 @@ const downloadErrorResult = () => {
     ElMessage.warning('暂无错误结果可下载');
   }
 };
+
 </script>
 
 <style scoped>
 .page-container {
-  height: 100vh;
+  height: calc(100vh - 64px);
   background-color: #ffffff;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .left-panel {
@@ -1056,10 +1118,18 @@ const downloadErrorResult = () => {
   flex-direction: column;
   border-right: 1px solid #e6e6e6;
   padding-top: 20px;
+  flex-shrink: 0;
+  width: 220px !important;
+  min-width: 220px;
+  max-width: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .group-menu {
   border-right: none;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .group-menu .el-menu-item {
@@ -1110,12 +1180,17 @@ const downloadErrorResult = () => {
 
 .right-panel {
   padding: 20px;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .page-title {
-  margin-top: 0;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   font-size: 24px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .el-table {

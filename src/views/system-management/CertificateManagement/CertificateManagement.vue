@@ -1,7 +1,7 @@
 <template>
   <div class="page-wrapper">
     <div class="main-content">
-      <h1 class="page-title">证书管理</h1>
+      <!-- <h1 class="page-title">证书管理</h1> -->
 
       <FilterBar create-button-text="新增证书" :fields="certificateFilterFields" @create="handleCreateCertificate"
         @filter="handleFilter" />
@@ -209,14 +209,33 @@
     </el-dialog>
 
     <!-- 获得人员对话框 -->
-    <el-dialog v-model="grantedUsersDialogVisible" title="获得人员" width="1048px" :close-on-click-modal="false">
+    <el-dialog v-model="grantedUsersDialogVisible" title="获得人员" width="1200px" :close-on-click-modal="false" class="granted-users-dialog">
       <div class="granted-users-content">
+        <!-- 证书信息卡片 -->
+        <div class="certificate-info-card">
+          <div class="info-label">当前证书：</div>
+          <div class="info-value">{{ currentCertificate?.name }}</div>
+        </div>
+
         <!-- 搜索栏 -->
         <div class="search-bar">
-          <el-input v-model="grantedUsersSearchParam" placeholder="姓名、身份证号、警号" style="width: 300px; margin-right: 10px;"
-            clearable />
-          <el-select v-model="grantedUsersSourceFilter" placeholder="来源" style="width: 120px; margin-right: 10px;"
-            clearable>
+          <el-input 
+            v-model="grantedUsersSearchParam" 
+            placeholder="姓名、身份证号、警号" 
+            style="width: 280px;" 
+            clearable
+            @keyup.enter="searchGrantedUsers"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <el-select 
+            v-model="grantedUsersSourceFilter" 
+            placeholder="来源筛选" 
+            style="width: 140px;" 
+            clearable
+          >
             <el-option label="班级来源" :value="0" />
             <el-option label="考试来源" :value="1" />
             <el-option label="靶场来源" :value="2" />
@@ -226,38 +245,64 @@
         </div>
 
         <!-- 用户列表表格 -->
-        <el-table :data="grantedUsersList" border style="width: 100%; margin-top: 20px;" max-height="400px"
-          v-loading="grantedUsersLoading" @selection-change="handleGrantedUsersSelectionChange">
-          <el-table-column type="selection" width="55" />
-          <el-table-column prop="name" label="用户姓名" width="100" />
-          <el-table-column prop="username" label="手机号" width="130" />
-          <el-table-column prop="policeNumber" label="警号" width="100" />
-          <el-table-column prop="idCard" label="身份证号" width="170" />
-          <el-table-column prop="orgId" label="组织" width="120" />
-          <el-table-column prop="sourceName" label="来源" width="100" />
-          <el-table-column prop="createTime" label="获得时间" width="160" />
-          <el-table-column label="操作" width="80" fixed="right">
+        <el-table 
+          :data="grantedUsersList" 
+          border 
+          style="width: 100%;" 
+          max-height="450px"
+          v-loading="grantedUsersLoading" 
+          @selection-change="handleGrantedUsersSelectionChange"
+          :header-cell-style="{ background: '#f5f7fa', color: '#606266', fontWeight: '500' }"
+        >
+          <el-table-column type="selection" width="50" align="center" />
+          <el-table-column prop="name" label="用户姓名" width="110" show-overflow-tooltip />
+          <el-table-column prop="username" label="手机号" width="130" show-overflow-tooltip />
+          <el-table-column prop="policeNumber" label="警号" width="100" align="center" />
+          <el-table-column prop="idCard" label="身份证号" width="180" show-overflow-tooltip />
+          <el-table-column prop="orgId" label="组织" width="120" show-overflow-tooltip />
+          <el-table-column prop="sourceName" label="来源" width="110" align="center">
             <template #default="scope">
-              <el-button type="danger" size="small" @click="revokeUserCertificate(scope.row)">
+              <el-tag :type="getSourceTagType(scope.row.userCertificate?.source)" size="small">
+                {{ scope.row.sourceName }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createTime" label="获得时间" width="170" />
+          <el-table-column label="操作" width="100" fixed="right" align="center">
+            <template #default="scope">
+              <el-button type="danger" link size="small" @click="revokeUserCertificate(scope.row)">
                 移除
               </el-button>
             </template>
           </el-table-column>
         </el-table>
 
-        <!-- 批量操作 -->
-        <div class="batch-actions">
-          <el-button v-if="selectedGrantedUsers.length > 0" type="danger" @click="batchRevokeUserCertificates">
-            批量移除（{{ selectedGrantedUsers.length }}）
-          </el-button>
-        </div>
+        <!-- 底部操作栏 -->
+        <div class="table-footer-actions">
+          <div class="left-actions">
+            <el-button 
+              v-if="selectedGrantedUsers.length > 0" 
+              type="danger" 
+              plain
+              @click="batchRevokeUserCertificates"
+            >
+              批量移除（{{ selectedGrantedUsers.length }}）
+            </el-button>
+            <span v-else class="hint-text">共 {{ grantedUsersPagination.total }} 条</span>
+          </div>
 
-        <!-- 分页 -->
-        <el-pagination v-model:current-page="grantedUsersPagination.page"
-          v-model:page-size="grantedUsersPagination.size" :page-sizes="[10, 20, 50, 100]"
-          :total="grantedUsersPagination.total" layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleGrantedUsersPageSizeChange" @current-change="handleGrantedUsersPageChange"
-          style="margin-top: 20px; text-align: right;" />
+          <!-- 分页 -->
+          <el-pagination 
+            v-model:current-page="grantedUsersPagination.page"
+            v-model:page-size="grantedUsersPagination.size" 
+            :page-sizes="[10, 20, 50, 100]"
+            :total="grantedUsersPagination.total" 
+            layout="prev, pager, next, jumper"
+            @size-change="handleGrantedUsersPageSizeChange" 
+            @current-change="handleGrantedUsersPageChange"
+            background
+          />
+        </div>
       </div>
 
       <template #footer>
@@ -274,7 +319,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { More, Warning, Close, Check } from '@element-plus/icons-vue';
+import { More, Warning, Close, Check, Search } from '@element-plus/icons-vue';
 import FilterBar from '@/components/common/FilterBar.vue';
 import {
   getCertificateList,
@@ -694,17 +739,17 @@ const handleBatchDelete = () => {
 };
 
 // 查看关联数据的处理函数
-const handleViewCourses = (row) => {
-  ElMessage.info(`查看证书 "${row.name}" 的关联课程`);
-};
+// const handleViewCourses = (row) => {
+//   ElMessage.info(`查看证书 "${row.name}" 的关联课程`);
+// };
 
-const handleViewExams = (row) => {
-  ElMessage.info(`查看证书 "${row.name}" 的关联考试`);
-};
+// const handleViewExams = (row) => {
+//   ElMessage.info(`查看证书 "${row.name}" 的关联考试`);
+// };
 
-const handleViewShootingRanges = (row) => {
-  ElMessage.info(`查看证书 "${row.name}" 的关联靶场`);
-};
+// const handleViewShootingRanges = (row) => {
+//   ElMessage.info(`查看证书 "${row.name}" 的关联靶场`);
+// };
 
 const handleViewGrantedUsers = async (row) => {
   currentCertificate.value = row;
@@ -764,6 +809,17 @@ const getSourceName = (source) => {
     3: '直接授予'
   };
   return sourceMap[source] || '未知来源';
+};
+
+// 获取来源标签类型
+const getSourceTagType = (source) => {
+  const typeMap = {
+    0: 'success',  // 班级来源 - 绿色
+    1: 'primary',  // 考试来源 - 蓝色
+    2: 'warning',  // 靶场来源 - 橙色
+    3: 'info'      // 直接授予 - 灰色
+  };
+  return typeMap[source] || '';
 };
 
 // 搜索获得人员
@@ -996,14 +1052,84 @@ onMounted(() => {
 }
 
 /* 获得人员对话框样式 */
+.granted-users-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid #e4e7ed;
+  padding: 20px 24px;
+}
+
+.granted-users-dialog :deep(.el-dialog__body) {
+  padding: 24px;
+}
+
 .granted-users-content {
-  padding: 10px 0;
+  padding: 0;
+}
+
+/* 证书信息卡片 */
+.certificate-info-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 16px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.info-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.info-value {
+  font-size: 16px;
+  color: #ffffff;
+  font-weight: 600;
+  flex: 1;
 }
 
 .search-bar {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.granted-users-content .el-table {
+  margin-top: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 底部操作栏 */
+.table-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e4e7ed;
+}
+
+.left-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hint-text {
+  font-size: 14px;
+  color: #909399;
+}
+
+.granted-users-content .el-pagination {
+  justify-content: flex-end;
+  margin: 0;
 }
 
 .batch-actions {
@@ -1011,15 +1137,6 @@ onMounted(() => {
   display: flex;
   justify-content: flex-start;
   gap: 10px;
-}
-
-.granted-users-content .el-table {
-  margin-top: 10px;
-}
-
-.granted-users-content .el-pagination {
-  justify-content: flex-end;
-  margin-top: 15px;
 }
 
 /* 授权标识样式 */

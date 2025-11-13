@@ -1,6 +1,6 @@
 <template>
   <div class="member-management-page">
-    <div class="page-header">
+    <div class="member-page-header">
       <el-button @click="goBack" class="back-btn">
         <el-icon>
           <ArrowLeft />
@@ -124,33 +124,41 @@
     </div>
 
     <div class="table-footer">
-      <div class="batch-actions" v-if="clazzStatus !== 2">
-        <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate" />
-        <el-dropdown @command="handleBatchOperation" trigger="click">
-          <el-button :disabled="selectedMembers.length === 0">
-            批量操作<el-icon class="el-icon--right">
-              <ArrowDown />
-            </el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="batchRemove">批量移除</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+      <div class="batch-actions">
+        <template v-if="clazzStatus !== 2">
+          <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate" />
+          <el-dropdown @command="handleBatchOperation" trigger="click">
+            <el-button :disabled="selectedMembers.length === 0">
+              批量操作<el-icon class="el-icon--right">
+                <ArrowDown />
+              </el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="batchRemove">批量移除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
       </div>
 
       <div class="pagination-wrapper">
         <div class="pagination-info">
           总共{{ total }}条
         </div>
-        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]"
-          :total="total" layout="sizes, prev, pager, next, jumper" @size-change="handleSizeChange"
-          @current-change="handleCurrentChange" />
+        <el-pagination 
+          v-model:current-page="currentPage" 
+          v-model:page-size="pageSize" 
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total" 
+          layout="sizes, prev, pager, next, jumper" 
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange" 
+        />
       </div>
     </div>
 
-    <el-dialog v-model="addMemberDialogVisible" title="添加人员" width="1000px" :close-on-click-modal="false" @close="clearAddMemberDialogState">
+    <el-dialog v-model="addMemberDialogVisible" title="添加人员" width="1500px" :close-on-click-modal="false" @close="clearAddMemberDialogState">
       <div class="add-member-dialog">
         <div class="user-tree-section">
           <div class="search-section">
@@ -192,8 +200,8 @@
             </div>
 
             <div v-else class="org-tree">
-              <el-tree :data="orgTreeData" :props="{ children: 'children', label: 'name' }" show-checkbox node-key="id"
-                :default-expand-all="true" @check="handleOrgTreeCheck">
+              <el-tree :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" show-checkbox node-key="id"
+                lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
                 <template #default="{ node, data }">
                   <div class="tree-node">
                     <el-icon v-if="data.type === 'org'" class="org-icon">
@@ -341,9 +349,11 @@
               <el-tree-select
                 v-model="createFormData.orgId"
                 :data="orgTreeDataForSelect"
-                :props="{ children: 'children', label: 'orgName', value: 'id' }"
+                :props="{ children: 'children', label: 'orgName', value: 'id', isLeaf: (data) => !data.children || data.children.length === 0 }"
                 placeholder="请选择"
                 check-strictly
+                lazy
+                :load="loadOrgTreeForSelect"
                 style="width: 100%"
               />
             </el-form-item>
@@ -476,7 +486,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, ArrowDown, Search, MoreFilled, User, OfficeBuilding, Close, Plus, Upload } from '@element-plus/icons-vue';
 import { getClassUsers, removeClassUsers, addClassUsers, downloadUserTemplate, uploadUserTemplate, getClazzSummary, getClassList } from '../../../api/teaching-center/ClassManagement.js';
 import { getUserList, getUserDetail, batchSaveUsers } from '../../../api/system-management/User.js';
-import { getAllOrgTree } from '../../../api/system-management/Org.js';
+import { getOrgList } from '../../../api/system-management/Org.js';
 import { uploadFiles } from '../../../api/common/UploadFiles.js';
 
 const router = useRouter();
@@ -746,54 +756,107 @@ const handleUserSearch = async () => {
       });
     }
   } catch (error) { ElMessage.error('搜索用户失败'); }
+  
 };
 
 const fetchOrgTree = async () => {
   try {
-    const response = await getAllOrgTree({ personnel: true });
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
     if (response.code === 200) {
-      orgTreeData.value = transformOrgTreeData(response.data);
-    } else {
-      ElMessage.error(response.msg || '获取组织树失败');
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树的根节点
+      const rootNode = {
+        id: `org_${rootOrg.id}`,
+        name: rootOrg.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      };
+      
+      // 添加根组织下的用户
+      const rootUsers = (rootOrg.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: rootOrg.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 添加子组织（这些子组织需要懒加载其用户）
+      const childOrgs = (rootOrg.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false, // 子组织可能还有下级，需要懒加载
+        children: [] // 懒加载时填充
+      }));
+      
+      // 根节点的子节点 = 根组织的用户 + 子组织
+      rootNode.children = [...rootUsers, ...childOrgs];
+      
+      // 组织树只包含根节点
+      orgTreeData.value = [rootNode];
     }
   } catch (error) {
     ElMessage.error('获取组织树失败');
   }
 };
 
-// [核心修正] 重写转换函数以匹配您提供的真实API数据结构
-const transformOrgTreeData = (nodes) => {
-  if (!nodes || !Array.isArray(nodes)) return [];
-
-  return nodes.map(orgNode => {
-    // 转换组织节点
-    const transformedOrg = {
-      id: `org_${orgNode.id}`,
-      name: orgNode.orgName,
-      type: 'org',
-      children: []
-    };
-
-    // 转换该组织下的用户
-    const users = (orgNode.users || []).map(userNode => ({
-      id: `user_${userNode.id}`,
-      originalId: userNode.id,
-      name: userNode.name,
-      type: 'user',
-      department: orgNode.orgName, // 部门名称是当前组织的名称
-      avatar: userNode.avatar || '',
-      policeNumber: userNode.policeNumber || '',
-      phone: userNode.username || ''
-    }));
-
-    // 递归转换子组织
-    const subOrgs = transformOrgTreeData(orgNode.children || []);
-
-    // 将转换后的子组织和用户合并到 children 数组中
-    transformedOrg.children = [...subOrgs, ...users];
-
-    return transformedOrg;
-  });
+const loadOrgTreeNode = async (node, resolve) => {
+  // 如果是用户节点，没有子节点
+  if (node.data.type === 'user') {
+    resolve([]);
+    return;
+  }
+  
+  try {
+    const response = await getOrgList({
+      orgId: node.data.id.replace('org_', ''),
+      personnel: true
+    });
+    
+    if (response.code === 200) {
+      const orgData = response.data;
+      
+      // 处理当前组织下的用户
+      const users = (orgData.users || []).map(userNode => ({
+        id: `user_${userNode.id}`,
+        originalId: userNode.id,
+        name: userNode.name,
+        type: 'user',
+        isLeaf: true,
+        department: orgData.orgName,
+        avatar: userNode.avatar || '',
+        policeNumber: userNode.policeNumber || '',
+        phone: userNode.username || ''
+      }));
+      
+      // 处理子组织
+      const childOrgs = (orgData.children || []).map(orgNode => ({
+        id: `org_${orgNode.id}`,
+        name: orgNode.orgName,
+        type: 'org',
+        isLeaf: false,
+        children: []
+      }));
+      
+      // 返回：用户 + 子组织
+      resolve([...users, ...childOrgs]);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error);
+    resolve([]);
+  }
 };
 
 const handleUserCheck = (user) => {
@@ -880,14 +943,35 @@ const handleEditUser = () => {
 // 获取组织树（用于新建学员的选择器）
 const fetchOrgTreeForSelect = async () => {
   try {
-    const response = await getAllOrgTree();
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: false
+    });
     if (response.code === 200) {
-      orgTreeDataForSelect.value = response.data || [];
-    } else {
-      ElMessage.error(response.msg || '获取组织树失败');
+      const rootOrg = response.data;
+      const children = rootOrg?.children || [];
+      orgTreeDataForSelect.value = children || [];
     }
   } catch (error) {
     ElMessage.error('获取组织树失败');
+  }
+};
+
+const loadOrgTreeForSelect = async (node, resolve) => {
+  try {
+    const response = await getOrgList({
+      orgId: node.value || node.id,
+      personnel: false
+    });
+    if (response.code === 200) {
+      const orgData = response.data;
+      const children = orgData?.children || [];
+      resolve(children);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    resolve([]);
   }
 };
 
@@ -1118,21 +1202,33 @@ onMounted(() => {
 </script>
 <style scoped>
 .member-management-page {
-  padding: 20px;
+  padding: 12px;
   background-color: #f5f5f5;
-  min-height: 100vh;
+  height: 100%; /* 使用100%而不是calc，因为父容器已经是正确的高度 */
+  overflow: hidden; /* 隐藏外层滚动条，只在表格内滚动 */
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
-.page-header {
-  margin-bottom: 20px;
+.member-page-header {
+  margin-bottom: 6px;
+  padding: 0;
+  height: auto;
+  background: none;
+  flex-shrink: 0;
 }
 
 .back-btn {
   background: none;
   border: none;
   color: #666;
-  font-size: 16px;
-  padding: 0;
+  font-size: 14px;
+  padding: 4px 0;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .back-btn:hover {
@@ -1141,46 +1237,56 @@ onMounted(() => {
 
 .stats-cards {
   display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
 }
 
 .stat-card {
   background: #fff;
-  padding: 20px;
-  border-radius: 8px;
+  padding: 14px 10px; /* 增加上下内边距 */
+  border-radius: 6px;
   text-align: center;
   flex: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  min-height: 70px; /* 设置最小高度 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .stat-number {
-  font-size: 32px;
+  font-size: 24px; /* 稍微增大字体 */
   font-weight: bold;
   color: #303133;
-  margin-bottom: 8px;
+  margin-bottom: 6px; /* 增加间距 */
+  line-height: 1;
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: 13px; /* 稍微增大字体 */
   color: #909399;
+  line-height: 1.2;
 }
 
 .notice {
   color: #ff4d4f;
-  font-size: 14px;
-  margin-bottom: 20px;
-  padding: 12px 16px;
+  font-size: 12px;
+  margin-bottom: 6px; /* 进一步减小间距 */
+  padding: 6px 10px; /* 进一步减小内边距 */
   background-color: #fef2f2;
   border: 1px solid #fecaca;
-  border-radius: 6px;
+  border-radius: 4px;
+  flex-shrink: 0; /* 防止被压缩 */
+  line-height: 1.4;
 }
 
 .action-bar {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 6px; /* 进一步减小间距 */
   align-items: center;
+  flex-shrink: 0; /* 防止被压缩 */
 }
 
 .search-input {
@@ -1193,30 +1299,55 @@ onMounted(() => {
 
 .member-table {
   background: #fff;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  flex: 1; /* 占据剩余空间 */
+  min-height: 0; /* 允许收缩 */
+  display: flex;
+  flex-direction: column;
+}
+
+.member-table :deep(.el-table) {
+  flex: 1;
+  overflow: hidden;
+}
+
+.member-table :deep(.el-table__inner-wrapper) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-table :deep(.el-table__body-wrapper) {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .table-footer {
-  display: flex;
+  display: flex !important; /* 强制显示 */
   justify-content: space-between;
   align-items: center;
-  margin-top: 20px;
-  padding: 16px 20px;
+  margin-top: 6px;
+  padding: 10px 12px; /* 增加一点padding */
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 增强阴影让它更明显 */
+  flex-shrink: 0;
+  min-height: 52px; /* 增加最小高度 */
+  position: relative;
+  z-index: 10; /* 提高z-index确保在最上层 */
 }
 
 .batch-actions {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 200px; /* 设置最小宽度，即使为空也占位 */
 }
 
 .pagination-wrapper {
-  display: flex;
+  display: flex !important; /* 强制显示 */
   align-items: center;
   gap: 12px;
 }
@@ -1224,10 +1355,33 @@ onMounted(() => {
 .pagination-info {
   color: #6b7280;
   font-size: 14px;
+  white-space: nowrap;
+  font-weight: 500; /* 加粗让它更明显 */
+}
+
+/* 确保分页器样式正常 */
+.pagination-wrapper :deep(.el-pagination) {
+  display: flex !important; /* 强制显示 */
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-wrapper :deep(.el-pagination__sizes),
+.pagination-wrapper :deep(.el-pagination__jump) {
+  display: inline-flex !important; /* 强制显示 */
+  align-items: center;
+}
+
+/* 确保分页器按钮可见 */
+.pagination-wrapper :deep(.el-pager),
+.pagination-wrapper :deep(.btn-prev),
+.pagination-wrapper :deep(.btn-next) {
+  display: inline-flex !important; /* 强制显示 */
 }
 
 /* 添加学员弹窗样式 */
 .add-member-dialog {
+  
   display: flex;
   height: 500px;
   gap: 20px;

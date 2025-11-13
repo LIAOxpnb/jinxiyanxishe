@@ -94,7 +94,7 @@
           <template #header>
             <div class="card-header">
               <span>基本信息</span>
-              <el-button type="primary" link :icon="Edit">编辑</el-button>
+              <!-- <el-button type="primary" link :icon="Edit">编辑</el-button> -->
             </div>
           </template>
           <el-descriptions :column="1" border>
@@ -168,12 +168,12 @@
               <span>{{ exam.passScore }}</span>
               <span>{{ exam.creatorName }}</span>
               <span>{{ exam.createTime }}</span>
-              <el-link type="primary" @click="editExam(exam)">查看</el-link>
+              <span><el-link type="primary" @click="editExam(exam)">查看</el-link></span>
             </div>
           </div>
 
           <div class="exam-list-pagination">
-            <el-checkbox v-model="examSelectAllPages">全选</el-checkbox>
+            <el-checkbox v-model="examSelectAllPages" @change="handleExamSelectAllPages">全选</el-checkbox>
             <span class="total-count">总共{{ examPagination.total }}条</span>
             <el-pagination
               v-model:current-page="examPagination.page"
@@ -235,7 +235,7 @@
             />
           </el-select>
           <el-button @click="onCourseFilter">筛选</el-button>
-          <el-button @click="loadCourseList" style="margin-left: auto;">
+          <el-button @click="resetCourseFilter" style="margin-left: auto;">
             <el-icon><Refresh /></el-icon>
           </el-button>
         </div>
@@ -266,7 +266,7 @@
           </div>
 
           <div class="course-list-pagination">
-            <el-checkbox v-model="courseSelectAllPages">全选</el-checkbox>
+            <el-checkbox v-model="courseSelectAllPages" @change="handleCourseSelectAllPages">全选</el-checkbox>
             <span class="total-count">总共{{ coursePagination.total }}条</span>
             <el-pagination
               v-model:current-page="coursePagination.page"
@@ -328,7 +328,7 @@
             />
           </el-select>
           <el-button @click="onShootingFilter">筛选</el-button>
-          <el-button @click="loadShootingList" style="margin-left: auto;">
+          <el-button @click="resetShootingFilter" style="margin-left: auto;">
             <el-icon><Refresh /></el-icon>
           </el-button>
         </div>
@@ -363,7 +363,7 @@
           </div>
 
           <div class="shooting-list-pagination">
-            <el-checkbox v-model="shootingSelectAllPages">全选</el-checkbox>
+            <el-checkbox v-model="shootingSelectAllPages" @change="handleShootingSelectAllPages">全选</el-checkbox>
             <span class="total-count">总共{{ shootingPagination.total }}条</span>
             <el-pagination
               v-model:current-page="shootingPagination.page"
@@ -453,6 +453,7 @@ const classDetails = ref({
 // 字典数据
 const courseCategoryOptions = ref([])
 const shootingRangeCategoryOptions = ref([])
+const examCategoryOptions = ref([])
 
 // 筛选条件
 const courseFilters = reactive({
@@ -474,6 +475,15 @@ const loadDictionaries = async () => {
     const courseRes = await getDictData('course_category')
     if (courseRes.code === 200 && courseRes.data) {
       courseCategoryOptions.value = courseRes.data.map(item => ({
+        label: item.dictLabel,
+        value: item.dictValue
+      }))
+    }
+    
+    // 获取考试分类字典
+    const examRes = await getDictData('exam_category')
+    if (examRes.code === 200 && examRes.data) {
+      examCategoryOptions.value = examRes.data.map(item => ({
         label: item.dictLabel,
         value: item.dictValue
       }))
@@ -512,12 +522,11 @@ const shootingPagination = reactive({
 })
 
 // 弹窗顶部筛选字段配置
-const examFilterFields = [
+const examFilterFields = computed(() => [
   { type: 'input', model: 'name', placeholder: '课程/考试名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
-  // 如果有分类数据可动态赋值
-  { type: 'select', model: 'examCategory', placeholder: '分类', options: [] }
-]
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
+  { type: 'select', model: 'examCategory', placeholder: '分类', options: examCategoryOptions.value }
+])
 
 // 计算属性
 const displayList = computed(() => {
@@ -639,7 +648,7 @@ const loadExamList = async (filters = {}) => {
       clazzId: classId,
       examCategory: filters.examCategory || '',
       name: filters.name || '',
-      creator: filters.creator || ''
+      creatorName: filters.creatorName || ''
     })
     
     console.log('可加入考试列表:', response)
@@ -696,9 +705,9 @@ const loadCourseList = async (filters = {}) => {
       size: coursePagination.size,
       courseCategory: filters.course_category || '',
       name: filters.name || '',
-      creator: filters.creator || '',
+      creatorName: filters.creatorName || '',
       status: 1,  // 只查询已发布的课程
-      isMe: true,  // 查询我的课程
+      isMe: false,  // 查询我的课程
       currentClazzId: classId  // 当前班级ID
     })
     
@@ -739,9 +748,18 @@ const onCourseFilter = () => {
   coursePagination.page = 1
   loadCourseList({
     name: courseFilters.name,
-    creator: courseFilters.creatorName,
+    creatorName: courseFilters.creatorName,
     course_category: courseFilters.category
   })
+}
+
+// 重置课程筛选条件并刷新
+const resetCourseFilter = () => {
+  courseFilters.name = ''
+  courseFilters.creatorName = ''
+  courseFilters.category = ''
+  coursePagination.page = 1
+  loadCourseList()
 }
 
 // 获取可加入的靶场列表
@@ -753,8 +771,9 @@ const loadShootingList = async (filters = {}) => {
       shootingRangeCategory: filters.shootingRangeCategory || '',
       shootingRangeType: filters.shootingRangeType !== undefined ? filters.shootingRangeType : '',
       name: filters.name || '',
+      creatorName: filters.creatorName || '',
       status: 1,  // 只查询已发布的靶场
-      isMe: true,  // 查询我的靶场
+      isMe: false,  // 查询我的靶场
       currentClazzId: classId  // 当前班级ID
     })
     
@@ -801,6 +820,15 @@ const onShootingFilter = () => {
     creatorName: shootingFilters.creatorName,
     shootingRangeCategory: shootingFilters.category
   })
+}
+
+// 重置靶场筛选条件并刷新
+const resetShootingFilter = () => {
+  shootingFilters.name = ''
+  shootingFilters.creatorName = ''
+  shootingFilters.category = ''
+  shootingPagination.page = 1
+  loadShootingList()
 }
 
 // 获取项目样式类名
@@ -855,6 +883,12 @@ const handleExamSelectAll = (value) => {
 const updateExamSelectAll = () => {
   const selectedCount = examList.value.filter(exam => exam.selected).length
   examSelectAll.value = selectedCount === examList.value.length
+}
+
+// 处理考试全选页
+const handleExamSelectAllPages = (value) => {
+  examSelectAll.value = value
+  handleExamSelectAll(value)
 }
 
 // 排序功能
@@ -1027,6 +1061,12 @@ const updateCourseSelectAll = () => {
   courseSelectAll.value = selectedCount === courseList.value.length
 }
 
+// 处理课程全选页
+const handleCourseSelectAllPages = (value) => {
+  courseSelectAll.value = value
+  handleCourseSelectAll(value)
+}
+
 const handleCoursePageChange = (page) => {
   coursePagination.page = page
   loadCourseList()
@@ -1044,6 +1084,10 @@ const closeAddCourseDialog = () => {
     course.selected = false
   })
   courseSelectAll.value = false
+  // 清空筛选条件
+  courseFilters.name = ''
+  courseFilters.creatorName = ''
+  courseFilters.category = ''
 }
 
 const confirmAddCourse = async () => {
@@ -1087,6 +1131,12 @@ const updateShootingSelectAll = () => {
   shootingSelectAll.value = selectedCount === shootingList.value.length
 }
 
+// 处理靶场全选页
+const handleShootingSelectAllPages = (value) => {
+  shootingSelectAll.value = value
+  handleShootingSelectAll(value)
+}
+
 const handleShootingPageChange = (page) => {
   shootingPagination.page = page
   loadShootingList()
@@ -1104,6 +1154,10 @@ const closeAddShootingDialog = () => {
     shooting.selected = false
   })
   shootingSelectAll.value = false
+  // 清空筛选条件
+  shootingFilters.name = ''
+  shootingFilters.creatorName = ''
+  shootingFilters.category = ''
 }
 
 const confirmAddShooting = async () => {
@@ -1182,21 +1236,47 @@ const loadClazzName = async () => {
 .class-settings {
   padding: 20px;
   background: #f5f5f5;
-  min-height: 100vh;
+  min-height: calc(100vh - 64px - 64px); /* 减去Header和Footer高度 */
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+/* 覆盖全局的 page-header 样式，使用更紧凑美观的设计 */
+.class-settings .page-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px 0 !important;
+  background: transparent !important;
+  border-radius: 0;
+  box-shadow: none;
+  height: auto !important; /* 覆盖全局的 200px 高度 */
+  min-height: unset !important;
+  background-size: unset !important;
+  position: relative;
+  overflow: visible !important;
+  border-bottom: 2px solid #e8e8e8;
 }
+
 .back-btn {
-  padding: 4px 8px;
+  padding: 8px !important;
+  font-size: 20px;
+  color: #333 !important;
+  transition: all 0.3s ease;
+  background: transparent;
+  border-radius: 8px;
 }
+
+.back-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateX(-4px);
+}
+
 .page-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333 !important;
+  margin: 0;
+  letter-spacing: 0.5px;
 }
 
 .main-layout {
@@ -1220,19 +1300,31 @@ const loadClazzName = async () => {
   margin-bottom: 20px;
 }
 
+.content-selector .el-select {
+  width: 100%;
+}
+
 .content-list {
   background: white;
-  border-radius: 8px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+.content-list:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
 .list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #e0e0e0;
+  padding: 16px 0;
+  border-bottom: 2px solid #e8e8e8;
   margin-bottom: 16px;
+  font-weight: 600;
+  color: #333;
 }
 
 .header-left {
@@ -1241,12 +1333,14 @@ const loadClazzName = async () => {
 
 .header-right {
   display: flex;
-  gap: 60px;
+  gap: 100px;
+  padding-right: 20px;
 }
 
 .header-right span {
   color: #666;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .list-items {
@@ -1257,8 +1351,16 @@ const loadClazzName = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 12px;
+  border-bottom: 1px solid #f5f5f5;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.list-item:hover {
+  background-color: #fafafa;
+  transform: translateX(4px);
 }
 
 .item-left {
@@ -1268,54 +1370,73 @@ const loadClazzName = async () => {
 .item-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .item-type-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 16px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: white;
+  min-width: 60px;
+  text-align: center;
 }
 
 .tag-course {
-  background-color: #1890ff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .tag-exam {
-  background-color: #f5222d;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
 }
 
 .tag-shooting {
-  background-color: #fa8c16;
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  color: #d35400;
+  box-shadow: 0 2px 8px rgba(252, 182, 159, 0.3);
 }
 
 .item-name {
-  font-size: 14px;
+  font-size: 15px;
+  color: #333;
+  font-weight: 500;
 }
 
 .item-right {
   display: flex;
   align-items: center;
-  gap: 40px;
+  gap: 60px;
 }
 
 .sort-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
+}
+
+.sort-buttons .el-button {
+  min-width: 36px;
+  padding: 8px 10px;
+  border-radius: 6px;
 }
 
 .action-buttons {
   display: flex;
-  gap: 12px;
+  gap: 16px;
+  min-width: 80px;
+  justify-content: flex-end;
 }
 
 .empty-state {
   text-align: center;
-  padding: 60px 0;
+  padding: 80px 0;
   color: #999;
+  font-size: 15px;
 }
 
 .bottom-actions {
@@ -1513,16 +1634,35 @@ const loadClazzName = async () => {
 }
 
 /* 右侧面板样式 */
+.right-panel .el-card {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+.right-panel .el-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-weight: 600;
+  font-size: 16px;
 }
 
 .help-icon {
   color: #909399;
   cursor: help;
   margin-left: 4px;
+  font-size: 16px;
+  transition: color 0.3s ease;
+}
+
+.help-icon:hover {
+  color: #667eea;
 }
 
 .certificate-card {
@@ -1539,16 +1679,26 @@ const loadClazzName = async () => {
   color: #909399;
   font-size: 14px;
   text-align: center;
-  padding: 12px 0;
+  padding: 24px 0;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 2px dashed #e0e0e0;
 }
 
 /* 调整描述列表样式 */
 .el-descriptions :deep(.el-descriptions-item__cell) {
-  padding: 12px;
+  padding: 14px;
 }
 
 .el-descriptions :deep(.el-descriptions-item__label) {
   width: 100px;
+  font-weight: 600;
+  background-color: #fafafa !important;
+  color: #666;
+}
+
+.el-descriptions :deep(.el-descriptions-item__content) {
+  color: #333;
   font-weight: 500;
 }
 </style>

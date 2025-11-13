@@ -122,6 +122,7 @@ import '@wangeditor/editor/dist/css/style.css';
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
 import { uploadFiles } from '@/api/common/UploadFiles.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
+import { removeOuterPTag } from '@/utils/richTextHelper.js';
 
 const props = defineProps({
   visible: {
@@ -328,7 +329,7 @@ const handleSubmit = async () => {
       questionCategory: questionForm.questionCategory,
       groupId: questionForm.groupId,
       difficulty: questionForm.difficulty,
-      analysis: showAnalysis.value ? questionForm.analysis : '',
+      analysis: showAnalysis.value ? removeOuterPTag(questionForm.analysis) : '', // 去除外层 <p> 标签
       details: detailsForBackend,
       answer: finalAnswer,
     };

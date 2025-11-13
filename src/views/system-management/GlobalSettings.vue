@@ -8,6 +8,28 @@
           label-width="120px"
           class="settings-form"
         >
+          <el-form-item label="平台名称" class="setting-item">
+            <el-input v-model="formData.sysName" placeholder="请输入平台名称" maxlength="50" />
+          </el-form-item>
+
+          <el-form-item label="平台图标" class="setting-item">
+            <div class="icon-upload-wrapper">
+              <el-upload
+                class="icon-uploader"
+                :show-file-list="false"
+                :http-request="handleUploadIcon"
+                :before-upload="beforeUpload"
+                accept="image/jpeg,image/png"
+              >
+                <img v-if="iconPreviewUrl" :src="iconPreviewUrl" class="icon-image" />
+                <div v-else class="icon-uploader-placeholder">
+                  <span>点击上传</span>
+                </div>
+              </el-upload>
+              <div class="form-item-hint">建议上传正方形 PNG/JPG，小于2MB</div>
+            </div>
+          </el-form-item>
+
           <el-form-item label="页面水印" class="setting-item">
             <div class="setting-control">
               <el-radio-group v-model="formData.watermark" class="watermark-radio">
@@ -38,6 +60,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getGlobalSettings, updateGlobalSettings } from '../../api/system-management/Global-Settings.js'
+import { uploadFiles } from '../../api/common/UploadFiles'
+import { previewFile } from '../../api/common/PreviewFile'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -45,13 +69,19 @@ const formRef = ref(null)
 
 // 表单数据
 const formData = reactive({
-  watermark: 1 // 默认开启
+  watermark: 1, // 默认开启
+  sysName: '',
+  icon: ''
 })
 
 // 原始数据，用于重置
 const originalData = reactive({
-  watermark: 1
+  watermark: 1,
+  sysName: '',
+  icon: ''
 })
+
+const iconPreviewUrl = ref('')
 
 // 获取全局配置
 const fetchSettings = async () => {
@@ -62,6 +92,22 @@ const fetchSettings = async () => {
       const watermark = res.data.watermark !== undefined ? res.data.watermark : 1
       formData.watermark = watermark
       originalData.watermark = watermark
+
+      // 平台名称/图标（兼容后端未返回时）
+      formData.sysName = res.data.sysName || ''
+      originalData.sysName = formData.sysName
+      formData.icon = res.data.icon || ''
+      originalData.icon = formData.icon
+
+      if (formData.icon) {
+        try {
+          iconPreviewUrl.value = await previewFile(formData.icon)
+        } catch (e) {
+          iconPreviewUrl.value = ''
+        }
+      } else {
+        iconPreviewUrl.value = ''
+      }
     }
   } catch (error) {
     console.error('获取全局配置失败:', error)
@@ -76,7 +122,9 @@ const handleSave = async () => {
   saving.value = true
   try {
     const submitData = {
-      watermark: formData.watermark
+      watermark: formData.watermark,
+      sysName: formData.sysName,
+      icon: formData.icon
     }
     
     const res = await updateGlobalSettings(submitData)
@@ -84,10 +132,12 @@ const handleSave = async () => {
       ElMessage.success('保存成功')
       // 更新原始数据
       originalData.watermark = formData.watermark
+      originalData.sysName = formData.sysName
+      originalData.icon = formData.icon
       
       // 提示用户刷新页面使水印配置生效
       ElMessage({
-        message: '水印配置已更新，建议刷新页面使其在所有页面生效',
+        message: '配置已更新，建议刷新页面使其在所有页面生效',
         type: 'info',
         duration: 3000
       })
@@ -105,12 +155,43 @@ const handleSave = async () => {
 // 重置/取消
 const handleReset = () => {
   formData.watermark = originalData.watermark
+  formData.sysName = originalData.sysName
+  formData.icon = originalData.icon
+  if (formData.icon) {
+    previewFile(formData.icon).then(url => iconPreviewUrl.value = url).catch(() => iconPreviewUrl.value = '')
+  } else {
+    iconPreviewUrl.value = ''
+  }
   ElMessage.info('已重置')
 }
 
 onMounted(() => {
   fetchSettings()
 })
+
+// 上传平台图标
+const handleUploadIcon = async (options) => {
+  const { file } = options
+  try {
+    const res = await uploadFiles([file])
+    const path = Array.isArray(res.data) ? res.data[0] : res.data
+    if (typeof path !== 'string') throw new Error('上传接口返回格式错误')
+    formData.icon = path
+    iconPreviewUrl.value = await previewFile(path)
+    ElMessage.success('图标上传成功')
+  } catch (e) {
+    console.error(e)
+    ElMessage.error(e.message || '图标上传失败')
+  }
+}
+
+const beforeUpload = (file) => {
+  const isJPGOrPNG = file.type === 'image/jpeg' || file.type === 'image/png'
+  const isLt2M = file.size / 1024 / 1024 < 2
+  if (!isJPGOrPNG) ElMessage.error('图标仅支持 JPG/PNG 格式')
+  if (!isLt2M) ElMessage.error('图片大小不能超过 2MB')
+  return isJPGOrPNG && isLt2M
+}
 </script>
 
 <style scoped>
@@ -182,6 +263,37 @@ onMounted(() => {
 .save-btn {
   padding: 8px 20px;
   font-size: 14px;
+}
+
+.icon-upload-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.icon-uploader {
+  width: 100px;
+  height: 100px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: #fafafa;
+  overflow: hidden;
+}
+.icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.icon-uploader-placeholder {
+  color: #8c939d;
+  font-size: 12px;
+}
+.form-item-hint {
+  color: #909399;
+  font-size: 12px;
 }
 
 /* 响应式设计 */

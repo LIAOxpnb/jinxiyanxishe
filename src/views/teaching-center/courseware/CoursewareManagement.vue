@@ -41,6 +41,7 @@
   :fields="coursewareFilterFields"
   @create="handleCreateCourseware"
   @filter="handleFilterCoursewares"
+  @field-change="handleFieldChange"
 />
         <el-table v-loading="tableLoading" :data="tableData" style="width: 100%"
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
@@ -53,13 +54,13 @@
             </el-link>
           </template>
         </el-table-column>
-        <el-table-column prop="fileType" label="文件类型" width="100" />
-        <el-table-column prop="duration" label="时长" width="100" />
-        <el-table-column prop="category" label="分类" width="120" />
+        <el-table-column prop="fileType" label="文件类型" width="110" />
+        <el-table-column prop="duration" label="时长" width="100" class-name="nowrap" label-class-name="nowrap" show-overflow-tooltip />
+        <el-table-column prop="category" label="分类" width="100" class-name="nowrap" label-class-name="nowrap" show-overflow-tooltip />
         <el-table-column prop="group" label="课件组" width="120" />
-        <el-table-column prop="creatorName" label="创建人" width="120" />
-        <el-table-column prop="createTime" label="创建时间" width="180" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column prop="creatorName" label="创建人" width="110" />
+        <el-table-column prop="createTime" label="创建时间" width="160" />
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEditCourseware(scope.row)">编辑</el-button>
             <el-dropdown @command="(command) => handleDropdownCommand(command, scope.row)">
@@ -274,6 +275,26 @@ const fetchCoursewares = async () => {
 const handleGroupSelect = (index) => {
   activeGroupId.value = index;
   pagination.page = 1;
+  // 找到对应的分组，检查是否是"全部"或"未分组"
+  const selectedGroup = groupList.value.find(g => g.id == index);
+  let groupIdValue = '';
+  if (selectedGroup) {
+    if (selectedGroup.name === '全部') {
+      groupIdValue = '';
+    } else {
+      groupIdValue = selectedGroup.id;
+    }
+  }
+  
+  // 同步更新筛选条件中的 groupId
+  filters.value.groupId = groupIdValue;
+  
+  // 同步更新筛选字段的 defaultValue，让 FilterBar 组件自动更新
+  const groupIdField = coursewareFilterFields.value.find(f => f.model === 'groupId');
+  if (groupIdField) {
+    groupIdField.defaultValue = groupIdValue;
+  }
+  
   fetchCoursewares();
 };
 
@@ -311,9 +332,38 @@ const handleGroupDropdownCommand = (command, group) => {
   else if (command === 'delete') handleDeleteGroup(group);
 };
 
+// 同步左侧菜单和筛选栏的分组选择
+const syncGroupSelection = (groupId) => {
+  if (groupId !== null && groupId !== undefined && groupId !== '') {
+    // 筛选条件中有 groupId，找到对应的分组
+    const selectedGroup = groupList.value.find(g => g.id == groupId);
+    if (selectedGroup) {
+      // 更新左侧菜单的选中状态
+      activeGroupId.value = selectedGroup.id.toString();
+    }
+  } else {
+    // 筛选条件中没有 groupId，设置为 'all'（全部）
+    activeGroupId.value = 'all';
+  }
+};
+
+const handleFieldChange = (fieldModel, value, filterData) => {
+  // 当 groupId 字段变化时，立即同步左侧菜单和筛选字段的 defaultValue
+  if (fieldModel === 'groupId') {
+    syncGroupSelection(value);
+    // 更新筛选字段的 defaultValue，保持一致性
+    const groupIdField = coursewareFilterFields.value.find(f => f.model === 'groupId');
+    if (groupIdField) {
+      groupIdField.defaultValue = value || '';
+    }
+  }
+};
+
 const handleFilterCoursewares = (filterData) => {
   filters.value = filterData;
   pagination.page = 1;
+  // 同步更新左侧菜单的选中状态
+  syncGroupSelection(filterData.groupId);
   fetchCoursewares();
 };
 
@@ -424,8 +474,11 @@ onMounted(async () => {
 <style scoped>
 /* 样式与 QuestionBank.vue 完全相同 */
 .page-container {
-  height: 100vh;
+  height: calc(100vh - 64px);
   background-color: #ffffff;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .left-panel {
@@ -433,10 +486,18 @@ onMounted(async () => {
   flex-direction: column;
   border-right: 1px solid #e6e6e6;
   padding-top: 20px;
+  flex-shrink: 0;
+  width: 220px !important;
+  min-width: 220px;
+  max-width: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .group-menu {
   border-right: none;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .group-menu .el-menu-item {
@@ -487,12 +548,17 @@ onMounted(async () => {
 
 .right-panel {
   padding: 20px;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .page-title {
-  margin-top: 0;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   font-size: 24px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .el-table {
@@ -513,5 +579,8 @@ onMounted(async () => {
 
 .more-btn:hover {
   color: #409eff !important;
+}
+.nowrap {
+  white-space: nowrap;
 }
 </style>

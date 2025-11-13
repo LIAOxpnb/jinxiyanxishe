@@ -55,7 +55,7 @@ import { ref, watch, onMounted, nextTick } from 'vue';
 import { Search, UserFilled, Close } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getUserList } from '@/api/teaching-center/Exams.js';
-import { getOrgTree } from '@/api/Org.js'; // 导入组织树接口
+import { getOrgList } from '@/api/system-management/Org.js';
 
 const props = defineProps({
   visible: Boolean,
@@ -102,16 +102,22 @@ const mapAndProcessTree = (nodes) => {
 
 const fetchOrgTree = async () => {
   try {
-    const res = await getOrgTree();
-    if (res.code === 200 && res.data) {
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: true
+    });
+    if (response.code === 200) {
+      const rootOrg = response.data;
+      const children = rootOrg?.children || [];
       // 后端直接返回了树形结构，我们只需要映射一下字段名
-      return mapAndProcessTree(res.data);
+      return mapAndProcessTree(children);
     }
+    return [];
   } catch (error) {
     ElMessage.error("获取组织树失败");
     console.error(error);
+    return [];
   }
-  return []; // 出错时返回空数组
 };
 
 const getOrgName = (orgId) => {

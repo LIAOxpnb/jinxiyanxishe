@@ -31,7 +31,7 @@
               <div class="task-icon range"><el-icon><Aim /></el-icon></div>
               <div class="task-info">
                 <h4>{{ range.name }}</h4>
-                <p>比武时间：{{ range.startTime && range.endTime ? `${range.startTime} 至 ${range.endTime}` : '不限时间' }}，比武时长{{ range.duration === -1 ? '不限时间' : `${range.duration}分钟` }}</p>
+                <p>比武时间：{{ range.participateDate === 1 && range.startTime && range.endTime ? `${range.startTime} 至 ${range.endTime}` : '不限时间' }}，比武时长{{ range.duration === -1 ? '不限时间' : `${range.duration}分钟` }}</p>
               </div>
               <div class="task-actions">
                 <span class="task-status">
@@ -68,7 +68,7 @@
                <div class="task-icon exam"><el-icon><DocumentChecked /></el-icon></div>
                <div class="task-info">
                   <h4>{{ exam.name }}</h4>
-                  <p>考试时间：{{ exam.startTime && exam.endTime ? `${exam.startTime} 至 ${exam.endTime}` : '不限时间' }}，考试时长{{ exam.duration === -1 ? '不限时间' : `${exam.duration}分钟` }}</p>
+                  <p>考试时间：{{ exam.examDate === 1 && exam.startTime && exam.endTime ? `${exam.startTime} 至 ${exam.endTime}` : '不限时间' }}，考试时长{{ exam.duration === -1 ? '不限时间' : `${exam.duration}分钟` }}</p>
                </div>
                <div class="task-actions">
                   <span class="task-status">

@@ -99,6 +99,7 @@ import { uploadFiles } from '../../../api/common/UploadFiles';
 import { previewFile } from '../../../api/common/PreviewFile';
 import { getDictByType } from '../../../api/system-management/dictionary.js';
 import { getUserList } from '../../../api/system-management/User.js';
+import { removeOuterPTag } from '../../../utils/richTextHelper.js';
 
 const props = defineProps({
   visible: Boolean,
@@ -279,6 +280,7 @@ const submitForm = async () => {
     if (valid) {
       const payload = {
         ...formModel,
+        intro: removeOuterPTag(formModel.intro), // 去除外层 <p> 标签
         scope: props.courseData.scope,
         status: props.courseData.status,
       };

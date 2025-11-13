@@ -2,8 +2,8 @@
   <div class="login-page">
     <div class="login-container">
       <div class="header">
-        <img src="../assets/img/u71.png" alt="logo" class="logo" />
-        <span class="title">金析研习社</span>
+        <img :src="logoUrl || defaultLogo" alt="logo" class="logo" />
+        <span class="title">{{ sysName || '金析研习社' }}</span>
       </div>
 
   <form @submit.prevent="handleLogin" class="login-form">
@@ -108,12 +108,13 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElDialog, ElButton } from 'element-plus'; // 引入 ElDialog 和 ElButton
 
 import { login } from '@/api/common/user.js';
 import { getUserInfo, updateMyPassword } from '@/api/common/user.js';
+import { getGlobalConfig } from '@/utils/globalConfig';
 
 const router = useRouter();
 const route = useRoute();
@@ -129,6 +130,24 @@ const isPasswordVisible = ref(false);
 const passwordFieldType = computed(() => (isPasswordVisible.value ? 'text' : 'password'));
 const togglePasswordVisibility = () => {
   isPasswordVisible.value = !isPasswordVisible.value;
+};
+
+// 平台名称/图标（动态）
+const sysName = ref('');
+const logoUrl = ref('');
+const defaultLogo = new URL('../assets/img/u71.png', import.meta.url).href;
+
+const loadPlatformConfig = async () => {
+  try {
+    const config = await getGlobalConfig();
+    if (config) {
+      sysName.value = config.sysName || '';
+      logoUrl.value = config.iconUrl || '';
+    }
+  } catch (e) {
+    // 未登录状态下静默处理，不显示错误
+    console.log('获取平台配置失败（未登录）');
+  }
 };
 
 // 登录凭证统一使用 sessionStorage 存储（浏览器关闭后失效）
@@ -314,6 +333,10 @@ const handleResetPassword = async () => {
     resetPasswordLoading.value = false;
   }
 };
+
+onMounted(() => {
+  loadPlatformConfig();
+});
 </script>
 
 <style scoped src="../assets/style/Login.style.css"></style>

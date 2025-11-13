@@ -28,7 +28,7 @@
       <div class="info-bar">
         <span class="info-text">【备注】未完成所有评分的，不展示已得分</span>
         <span class="warning-text">【备注】发布后重次修改</span>
-        <el-button type="primary" class="publish-btn" @click="handlePublish">发布结果</el-button>
+        <!-- <el-button type="primary" class="publish-btn" @click="handlePublish">发布结果</el-button> -->
       </div>
 
       <!-- 数据表格 -->

@@ -11,43 +11,43 @@
       <el-table v-loading="loading" :data="tableData" style="width: 100%"
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="靶场名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="status" label="发布" width="90">
+        <el-table-column prop="name" label="靶场名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="status" label="发布" width="90" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" disable-transitions>
+            <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small" disable-transitions>
               {{ scope.row.status === 1 ? '已发布' : '未发布' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="shootingRangeType" label="类型" width="90">
+        <el-table-column prop="shootingRangeType" label="类型" width="80" align="center">
           <template #default="scope">
             {{ scope.row.shootingRangeType === 0 ? '训练' : '比武' }}
           </template>
         </el-table-column>
-        <el-table-column label="比武时间" width="210">
+        <el-table-column label="比武时间" width="160" show-overflow-tooltip>
           <template #default="scope">
             <div v-if="scope.row.participateDate === 0">不限制</div>
-            <div v-else>
-              <div>开始 {{ scope.row.startTime }}</div>
-              <div>结束 {{ scope.row.endTime }}</div>
+            <div v-else style="font-size: 12px; line-height: 1.4;">
+              <div>{{ scope.row.startTime }}</div>
+              <div>{{ scope.row.endTime }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="比武时长" width="100">
+        <el-table-column prop="duration" label="时长" width="80" align="center">
           <template #default="scope">
-            {{ scope.row.duration === -1 ? '不限制' : `${scope.row.duration}分钟` }}
+            {{ scope.row.duration === -1 ? '不限' : `${scope.row.duration}分` }}
           </template>
         </el-table-column>
-        <el-table-column label="分类" min-width="100">
+        <el-table-column label="分类" width="100" show-overflow-tooltip>
           <template #default="scope">
             {{ getCategoryName(scope.row.shootingRangeCategory) }}
           </template>
         </el-table-column>
-        <el-table-column prop="submitCount" label="交卷人数" width="100" />
-        <el-table-column prop="clazzCount" label="班级" width="80" />
-        <el-table-column prop="creatorName" label="创建人" width="120" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column prop="submitCount" label="交卷" width="70" align="center" />
+        <el-table-column prop="clazzCount" label="班级" width="70" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="100" align="center" show-overflow-tooltip />
+        <el-table-column prop="createTime" label="创建时间" width="155" show-overflow-tooltip />
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEdit(scope.row)">靶场设置</el-button>
             <el-button link type="primary" size="small" @click="handleMarking(scope.row)">阅卷</el-button>
@@ -117,6 +117,44 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 复制靶场对话框 -->
+    <el-dialog
+      v-model="copyDialogVisible"
+      title="复制靶场"
+      width="500px"
+      @close="resetCopyForm"
+    >
+      <el-form
+        ref="copyFormRef"
+        :model="copyForm"
+        :rules="copyFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="原靶场名" prop="originalName">
+          <el-input 
+            v-model="copyForm.originalName" 
+            placeholder="原靶场名称"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="新靶场名" prop="name">
+          <el-input 
+            v-model="copyForm.name" 
+            placeholder="请输入新靶场名称"
+            maxlength="30"
+            show-word-limit 
+          />
+          <div class="form-item-hint">【备注】靶场名称重复性校验</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="copyDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCopyShootingRange">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -126,7 +164,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, More } from '@element-plus/icons-vue';
 import FilterBar from '@/components/common/FilterBar.vue';
-import { getShootingRangeList, createShootingRange, deleteShootingRange, updateShootingRangeStatus } from '@/api/teaching-center/ShootingRange.js';
+import { getShootingRangeList, createShootingRange, deleteShootingRange, updateShootingRangeStatus, copyShootingRange } from '@/api/teaching-center/ShootingRange.js';
 import { getDictData } from '@/api/system-management/dictionary';
 
 const router = useRouter();
@@ -137,6 +175,7 @@ const selectedRanges = ref([]);
 
 const filterParams = reactive({
   name: '',
+  creatorName: '',
   shootingRangeCategory: '',
   status: '',
   shootingRangeType: '',
@@ -155,11 +194,12 @@ const typeOptions = ref([
 ]);
 
 const shootingRangeFilterFields = ref([
-  { type: 'input', model: 'name', placeholder: '名称、创建人' },
+  { type: 'input', model: 'name', placeholder: '靶场名称' },
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'shootingRangeType', placeholder: '类型', options: typeOptions, clearable: true },
   { type: 'select', model: 'shootingRangeCategory', placeholder: '分类', options: categoryOptions, clearable: true },
   { type: 'select', model: 'status', placeholder: '发布状态', options: [{ label: '已发布', value: 1 }, { label: '未发布', value: 0 }], clearable: true },
-  { type: 'select', model: 'isMe', placeholder: '我的靶场', options: [{ label: '我的靶场', value: true }, { label: '全部靶场', value: false }] },
+  { type: 'select', model: 'isMe', placeholder: '我的靶场', options: [{ label: '我的靶场', value: true }, { label: '全部靶场', value: false }], defaultValue: true },
 ]);
 
 const createDialogVisible = ref(false);
@@ -177,11 +217,32 @@ const createFormRules = reactive({
   shootingRangeType: [{ required: true, message: '请选择靶场类型', trigger: 'change' }],
 });
 
+// --- 复制靶场对话框相关 ---
+const copyDialogVisible = ref(false);
+const copyFormRef = ref(null);
+const copyForm = reactive({
+  id: '',
+  originalName: '',
+  name: '',
+});
+const copyFormRules = reactive({
+  name: [{ required: true, message: '请输入新靶场名称', trigger: 'blur' }],
+});
+
 const resetCreateForm = () => {
   if (createFormRef.value) {
     createFormRef.value.resetFields();
   }
   Object.assign(createForm, { name: '', introduction: '', shootingRangeCategory: '', shootingRangeType: 0 });
+};
+
+const resetCopyForm = () => {
+  if (copyFormRef.value) {
+    copyFormRef.value.resetFields();
+  }
+  copyForm.id = '';
+  copyForm.originalName = '';
+  copyForm.name = '';
 };
 
 const fetchShootingRanges = async () => {
@@ -331,6 +392,36 @@ const handleBatchDelete = () => {
   });
 };
 
+const handleCopy = (row) => {
+  copyForm.id = row.id;
+  copyForm.originalName = row.name;
+  copyForm.name = `${row.name}_副本`;
+  copyDialogVisible.value = true;
+};
+
+const submitCopyShootingRange = async () => {
+  if (!copyFormRef.value) return;
+  await copyFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        const res = await copyShootingRange({
+          id: copyForm.id,
+          name: copyForm.name
+        });
+        if (res.code === 200) {
+          ElMessage.success('复制成功！');
+          copyDialogVisible.value = false;
+          fetchShootingRanges();
+        } else {
+          ElMessage.error(res.msg || '复制失败');
+        }
+      } catch (error) {
+        ElMessage.error('复制失败');
+      }
+    }
+  });
+};
+
 const handleMoreActions = async (command, row) => {
   switch (command) {
     case 'publish':
@@ -344,7 +435,7 @@ const handleMoreActions = async (command, row) => {
       ElMessage.info(`引用班级功能: ${row.id}`);
       break;
     case 'copy':
-      ElMessage.info(`复制考试功能: ${row.id}`);
+      handleCopy(row);
       break;
     case 'delete':
       handleDelete(row);
@@ -381,22 +472,28 @@ onMounted(() => {
 
 <style scoped>
 .page-wrapper {
-  background-color: #f0f2f5;
-  padding: 20px;
-  min-height: 100vh;
+  background-color: transparent;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content {
   background-color: #ffffff;
-  padding: 24px;
+  padding: 20px;
   border-radius: 4px;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .page-title {
-  margin-top: 0;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   font-size: 24px;
   font-weight: 600;
+  color: #303133;
 }
 
 .header-remark {

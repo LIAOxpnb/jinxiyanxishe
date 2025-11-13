@@ -20,8 +20,8 @@
         <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="练习名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="courseInfo" label="关联课程" min-width="250" show-overflow-tooltip />
-        <el-table-column prop="questionCount" label="试题数量" width="100" />
-        <el-table-column prop="creatorName" label="创建人" width="120" />
+        <el-table-column prop="questionCount" label="试题数量" width="110" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="120" align="center" />
         <el-table-column prop="createTime" label="创建时间" width="180" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
@@ -161,7 +161,7 @@ const loading = ref(true);
 const tableData = ref([]);
 const total = ref(0);
 const pagination = reactive({ page: 1, size: 10 });
-const filters = ref({});
+const filters = ref({ isMe: true }); // 初始化时默认包含 isMe: true
 const selectedItems = ref([]);
 const courseOptions = ref([]);
 
@@ -172,9 +172,9 @@ const currentCourseDetail = ref(null);
 
 const practiceFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '练习名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' },
+  { type: 'input', model: 'creatorName', placeholder: '创建人' },
   { type: 'select', model: 'courseId', placeholder: '课程', options: courseOptions, props: { value: 'id', label: 'name' } },
-  { type: 'select', model: 'isMe', placeholder: '我的练习', options: [{label: '我的练习', value: true}, {label: '全部练习', value: false}] },
+  { type: 'select', model: 'isMe', placeholder: '我的练习', options: [{label: '我的练习', value: true}, {label: '全部练习', value: false}], defaultValue: true },
 ]);
 
 const dialogVisible = ref(false);
@@ -450,9 +450,10 @@ onMounted(() => {
   border-radius: 8px;
 }
 .page-title {
-  margin-top: 0;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   font-size: 24px;
+  font-weight: 600;
+  color: #303133;
 }
 .el-table {
   margin-top: 20px;

@@ -3,8 +3,8 @@
     <!-- 左上角logo和文字 -->
     <div class="top-header">
       <div class="logo-container">
-        <img src="/src/assets/img/u71.png" alt="logo" class="logo-img">
-        <span class="logo-text">金析研习社</span>
+        <!-- <img src="/src/assets/img/u71.png" alt="logo" class="logo-img">
+        <span class="logo-text">金析研习社</span> -->
       </div>
     </div>
     

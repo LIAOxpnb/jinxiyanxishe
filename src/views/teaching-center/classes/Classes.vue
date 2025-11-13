@@ -1,10 +1,7 @@
 <template>
   <div class="classes-page">
     <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>班级管理</h1>
-      <div class="notice">【备注】默认展示我的班级</div>
-    </div>
+    <h1 class="page-title">班级管理 <span class="title-remark">【备注】默认展示我的班级</span></h1>
 
     <!-- 筛选栏 -->
     <FilterBar
@@ -418,20 +415,18 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.page-header {
-  flex-shrink: 0;
-  margin-bottom: 20px;
-}
-
-.page-header h1 {
-  margin: 0 0 8px 0;
+.page-title {
+  margin: 0 0 20px 0;
   font-size: 24px;
   font-weight: 600;
+  color: #303133;
 }
 
-.notice {
+.title-remark {
   color: #ff4d4f;
   font-size: 14px;
+  font-weight: 400;
+  margin-left: 12px;
 }
 
 .classes-container {

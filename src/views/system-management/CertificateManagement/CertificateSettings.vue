@@ -78,7 +78,7 @@
               <el-input
                 v-model="form.name"
                 placeholder="请输入"
-                maxlength="50"
+                maxlength="10"
                 show-word-limit
                 @input="updatePreview"
               />
@@ -678,7 +678,8 @@ onMounted(async () => {
 }
 
 .certificate-title {
-  font-size: 40px;
+  font-size: 40px !important;
+  /* 覆盖全局响应式字体设置 */
   font-weight: bold;
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
   -webkit-background-clip: text;
@@ -845,6 +846,12 @@ onMounted(async () => {
 
 .certificate-form-content .el-form-item {
   margin-bottom: 16px;
+}
+
+/* 覆盖全局响应式字体大小，保持固定大小 */
+.certificate-form-content :deep(.el-input__inner),
+.certificate-form-content :deep(.el-textarea__inner) {
+  font-size: 14px !important;
 }
 
 .image-upload-container {

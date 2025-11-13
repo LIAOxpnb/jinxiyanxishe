@@ -8,7 +8,7 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="single">单个新增</el-dropdown-item>
-            <el-dropdown-item command="batch">批量导入</el-dropdown-item>
+            <!-- <el-dropdown-item command="batch">批量导入</el-dropdown-item> -->
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -22,8 +22,9 @@
       v-loading="loading"
       row-key="id"
       border
-      default-expand-all
       :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+      lazy
+      :load="loadChildrenNodes"
     >
       <el-table-column prop="orgName" label="组织名称" min-width="200" />
       <el-table-column prop="id" label="部门ID" width="180" />
@@ -73,12 +74,15 @@
         <el-form-item label="上级组织" prop="parentId">
           <el-tree-select
             v-model="formData.parentId"
-            :data="orgTreeData"
+            :data="orgTreeDataForSelect"
             :props="treeProps"
             placeholder="请选择上级组织"
             check-strictly
             clearable
             :disabled="isParentRootDisabled"
+            lazy
+            :load="loadSelectTreeNodes"
+            node-key="id"
           />
            <div class="form-hint">【备注】上级部门为根部门时，置灰不可修改;</div>
         </el-form-item>
@@ -100,7 +104,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Edit, Delete, ArrowDown } from '@element-plus/icons-vue'
 import {
-  getOrgTree,
+  getOrgList,
   createOrg,
   updateOrg,
   deleteOrg
@@ -108,6 +112,7 @@ import {
 
 const formRef = ref()
 const orgTreeData = ref([])
+const orgTreeDataForSelect = ref([]) // 用于弹窗选择的完整树形数据
 const loading = ref(false)
 const dialogVisible = ref(false)
 const submitLoading = ref(false)
@@ -139,24 +144,124 @@ const formRules = {
 }
 
 const isParentRootDisabled = computed(() => {
-    return isEdit.value && !formData.parentId;
+  // 当编辑根组织时（parentId 为 "0"），禁用上级组织选择
+  return isEdit.value && (formData.parentId === '0' || !formData.parentId);
 });
 
+// 加载根目录组织列表
 const fetchOrgTree = async () => {
   loading.value = true
   try {
-    const response = await getOrgTree()
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: false
+    })
     if (response.code === 200) {
-      const data = response.data || [];
-      orgTreeData.value = data;
-      pagination.total = data.length; 
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为表格的根节点
+      orgTreeData.value = [{
+        id: rootOrg.id,
+        orgName: rootOrg.orgName,
+        parentId: rootOrg.parentId,
+        createTime: rootOrg.createTime,
+        userCount: 0, // 可以根据需要计算或从 API 获取
+        hasChildren: rootOrg.children && rootOrg.children.length > 0
+      }];
+      
+      pagination.total = 1; // 根节点计数为1
     } else {
       ElMessage.error(response.msg || '获取组织数据失败')
     }
   } catch (error) {
+    console.error('获取组织数据失败:', error)
     ElMessage.error('获取组织数据失败')
   } finally {
     loading.value = false;
+  }
+}
+
+// 懒加载子节点
+const loadChildrenNodes = async (row, treeNode, resolve) => {
+  try {
+    const response = await getOrgList({
+      orgId: row.id,
+      personnel: false
+    })
+    if (response.code === 200) {
+      const orgData = response.data;
+      const children = orgData?.children || [];
+      // 为子节点添加 hasChildren 标记
+      const childrenWithFlag = children.map(item => ({
+        ...item,
+        hasChildren: item.children ? item.children.length > 0 : true
+      }));
+      resolve(childrenWithFlag);
+    } else {
+      ElMessage.error(response.msg || '获取子组织失败')
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('获取子组织失败:', error)
+    ElMessage.error('获取子组织失败')
+    resolve([]);
+  }
+}
+
+// 树形选择器的懒加载（用于弹窗）
+const loadSelectTreeNodes = async (node, resolve) => {
+  // 如果是根节点（level === 0），加载根组织；否则加载对应组织的子节点
+  const orgId = node.level === 0 ? '1' : node.data.id;
+  
+  try {
+    const response = await getOrgList({
+      orgId: orgId,
+      personnel: false
+    })
+    if (response.code === 200) {
+      const orgData = response.data;
+      const children = orgData?.children || [];
+      
+      // 如果没有子节点，返回空数组
+      if (children.length === 0) {
+        return resolve([]);
+      }
+      
+      // 为子节点添加 isLeaf 标记
+      const childrenWithFlag = children.map(item => ({
+        ...item,
+        isLeaf: item.children === null || (Array.isArray(item.children) && item.children.length === 0)
+      }));
+      resolve(childrenWithFlag);
+    } else {
+      resolve([]);
+    }
+  } catch (error) {
+    console.error('加载组织节点失败:', error)
+    resolve([]);
+  }
+}
+
+// 初始化弹窗选择器的根节点数据
+const initOrgTreeForSelect = async () => {
+  try {
+    const response = await getOrgList({
+      orgId: '1',
+      personnel: false
+    })
+    if (response.code === 200) {
+      const rootOrg = response.data;
+      
+      // 将根组织本身作为树选择器的根节点
+      orgTreeDataForSelect.value = [{
+        id: rootOrg.id,
+        orgName: rootOrg.orgName,
+        parentId: rootOrg.parentId,
+        isLeaf: false // 根组织必定有子节点
+      }];
+    }
+  } catch (error) {
+    console.error('初始化组织树失败:', error)
   }
 }
 
@@ -168,27 +273,36 @@ const handleCreateCommand = (command) => {
     }
 };
 
-const handleAdd = () => {
+const handleAdd = async () => {
   isEdit.value = false
   resetForm()
   formData.parentId = null;
+  if (orgTreeDataForSelect.value.length === 0) {
+    await initOrgTreeForSelect(); // 首次打开时初始化
+  }
   dialogVisible.value = true
 }
 
-const handleAddChild = (data) => {
+const handleAddChild = async (data) => {
   isEdit.value = false
   resetForm()
   formData.parentId = data.id
+  if (orgTreeDataForSelect.value.length === 0) {
+    await initOrgTreeForSelect(); // 首次打开时初始化
+  }
   dialogVisible.value = true
 }
 
-const handleEdit = (data) => {
+const handleEdit = async (data) => {
   isEdit.value = true
   Object.assign(formData, {
       id: data.id,
       orgName: data.orgName,
       parentId: data.parentId,
   });
+  if (orgTreeDataForSelect.value.length === 0) {
+    await initOrgTreeForSelect(); // 首次打开时初始化
+  }
   dialogVisible.value = true
 }
 
@@ -271,7 +385,7 @@ const handleDialogClose = () => {
 }
 
 onMounted(() => {
-  fetchOrgTree()
+  fetchOrgTree() // 只加载根目录的子节点用于表格显示
 })
 </script>
 

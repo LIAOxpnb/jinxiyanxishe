@@ -20,37 +20,38 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="考试名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="status" label="发布" width="90">
+        <el-table-column prop="name" label="考试名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="status" label="发布" width="90" align="center">
           <template #default="scope">
             <el-tag
               :type="scope.row.status === 1 ? 'success' : 'danger'"
+              size="small"
               disable-transitions
             >{{ scope.row.status === 1 ? '已发布' : '未发布' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="考试时间" width="210">
+        <el-table-column label="考试时间" width="160" show-overflow-tooltip>
            <template #default="scope">
             <div v-if="scope.row.examDate === 0">不限时</div>
-            <div v-else>
-              <div>开始 {{ scope.row.startTime }}</div>
-              <div>结束 {{ scope.row.endTime }}</div>
+            <div v-else style="font-size: 12px; line-height: 1.4;">
+              <div>{{ scope.row.startTime }}</div>
+              <div>{{ scope.row.endTime }}</div>
             </div>
            </template>
         </el-table-column>
-        <el-table-column prop="duration" label="考试时长" width="100">
+        <el-table-column prop="duration" label="时长" width="80" align="center">
            <template #default="scope">
-            {{ scope.row.duration === -1 ? '不限制' : `${scope.row.duration}分钟` }}
+            {{ scope.row.duration === -1 ? '不限' : `${scope.row.duration}分` }}
            </template>
         </el-table-column>
-        <el-table-column prop="examCategoryName" label="分类" min-width="100" />
-        <el-table-column prop="questionCount" label="试题数" width="80" />
-        <el-table-column prop="totalScore" label="总分数" width="80" />
-        <el-table-column prop="submitCount" label="交卷数" width="80" />
-        <el-table-column prop="qualifiedCount" label="合格数" width="80" />
-        <el-table-column prop="creatorName" label="创建人" width="120" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column prop="examCategoryName" label="分类" width="100" show-overflow-tooltip />
+        <el-table-column prop="questionCount" label="题数" width="70" align="center" />
+        <el-table-column prop="totalScore" label="总分" width="70" align="center" />
+        <el-table-column prop="submitCount" label="交卷" width="70" align="center" />
+        <el-table-column prop="qualifiedCount" label="合格" width="70" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="100" align="center" show-overflow-tooltip />
+        <el-table-column prop="createTime" label="创建时间" width="155" show-overflow-tooltip />
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEdit(scope.row)">考试设置</el-button>
             
@@ -203,7 +204,7 @@ const selectedExams = ref([]);
 // 筛选参数，与接口字段完全对应
 const filterParams = reactive({
   name: '',
-  creator: '', // 对应UI上的“创建人”，但后端接口暂不支持
+  creatorName: '', // 对应UI上的“创建人”，但后端接口暂不支持
   examCategory: '',
   status: '',
   isMe: true, // 对应UI上的“范围”，默认为 true
@@ -219,7 +220,7 @@ const categoryOptions = ref([]);
 // 筛选栏配置，以完全匹配原型图
 const examFilterFields = ref([
   { type: 'input', model: 'name', placeholder: '考试名称' },
-  { type: 'input', model: 'creator', placeholder: '创建人' }, // 视觉上存在，但功能待后端支持
+  { type: 'input', model: 'creatorName', placeholder: '创建人' }, // 视觉上存在，但功能待后端支持
   { 
     type: 'select', 
     model: 'examCategory', 
@@ -244,7 +245,8 @@ const examFilterFields = ref([
     options: [
         { label: '我的考试', value: true },
         { label: '全部考试', value: false },
-    ]
+    ],
+    defaultValue: true  // 默认选中"我的考试"
   },
 ]);
 
@@ -530,20 +532,33 @@ onMounted(() => {
 
 <style scoped>
 .page-wrapper {
-  background-color: #f0f2f5;
-  padding: 20px;
-  min-height: 100vh;
+  background-color: transparent;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .main-content {
   background-color: #ffffff;
-  padding: 24px;
+  padding: 20px;
   border-radius: 4px;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
 }
 .page-title {
-  margin-top: 0;
-  margin-bottom: 20px;
+  margin: 0 0 20px 0;
   font-size: 24px;
   font-weight: 600;
+  color: #303133;
+}
+
+.title-remark {
+  color: #ff4d4f;
+  font-size: 14px;
+  font-weight: 400;
+  margin-left: 12px;
 }
 .header-remark {
   color: #F56C6C;

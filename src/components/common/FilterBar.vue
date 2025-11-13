@@ -33,6 +33,7 @@
         :placeholder="field.placeholder"
         class="filter-item"
         clearable
+        @change="(value) => onFieldChange(field.model, value)"
       >
         <el-option
           v-for="option in field.options"
@@ -72,18 +73,26 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['create', 'filter', 'reset']);
+const emit = defineEmits(['create', 'filter', 'reset', 'field-change']);
 
 const filterData = reactive({});
 
 watch(() => props.fields, (newFields) => {
-  for (const key in filterData) {
-    delete filterData[key];
-  }
   if (newFields) {
     newFields.forEach(field => {
-      filterData[field.model] = field.defaultValue || '';
+      // 如果字段已存在且新值不同，则更新；如果不存在，则初始化
+      if (filterData[field.model] === undefined) {
+        filterData[field.model] = field.defaultValue || '';
+      } else if (field.defaultValue !== undefined && filterData[field.model] !== field.defaultValue) {
+        filterData[field.model] = field.defaultValue;
+      }
     });
+    // 清理不再存在的字段
+    for (const key in filterData) {
+      if (!newFields.find(f => f.model === key)) {
+        delete filterData[key];
+      }
+    }
   }
 }, { immediate: true, deep: true });
 
@@ -105,6 +114,10 @@ const onReset = () => {
   });
   onFilter();
   emit('reset');
+};
+
+const onFieldChange = (fieldModel, value) => {
+  emit('field-change', fieldModel, value, filterData);
 };
 </script>
 

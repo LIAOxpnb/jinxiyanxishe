@@ -1,0 +1,527 @@
+/* 全局主题样式 - 统一紫色主题配色 */
+
+/* 页面容器统一背景 - 仅应用于系统管理和教学中心的布局容器 */
+.main-container,
+.layout-container {
+  background: linear-gradient(180deg, #f8f9fe 0%, #f5f7fa 100%) !important;
+  min-height: 100vh;
+}
+
+/* 系统管理和教学中心页面的主内容区域 - 卡片式设计 */
+.organization-management,
+.user-management,
+.lecturer-management,
+.dictionary-management,
+.message-management,
+.operation-logs,
+.global-settings,
+.certificate-management,
+.classes-page,
+.courses-page,
+.courseware-page,
+.question-bank-page,
+.practice-management-page,
+.exams-management-page,
+.range-management-page {
+  padding: 24px !important;
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 16px rgba(91, 111, 216, 0.08) !important;
+  margin: 16px !important;
+}
+
+/* 页面头部统一样式 - 已移除，各页面自行控制 */
+
+/* 表格统一样式 */
+.el-table {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 12px rgba(91, 111, 216, 0.08) !important;
+}
+
+/* 卡片统一样式 */
+.el-card {
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(91, 111, 216, 0.08) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease !important;
+}
+
+.el-card:hover {
+  box-shadow: 0 4px 20px rgba(91, 111, 216, 0.15) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* 分页器激活状态 - 蓝紫到浅蓝渐变 */
+.el-pagination.is-background .el-pager li:not(.is-disabled).is-active {
+  background: linear-gradient(135deg, #5B6FD8 0%, #7CB3E8 100%) !important;
+  border-color: transparent !important;
+}
+
+.el-pagination.is-background .el-pager li:hover:not(.is-active) {
+  color: #5B6FD8 !important;
+}
+
+/* 主要按钮 - 蓝紫到浅蓝渐变 */
+.el-button--primary {
+  background: linear-gradient(135deg, #5B6FD8 0%, #7CB3E8 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, #7CB3E8 0%, #5B6FD8 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(91, 111, 216, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.el-button--primary:active {
+  transform: translateY(0);
+}
+
+/* 链接按钮样式优化 */
+.el-button.is-link {
+  font-weight: 500 !important;
+}
+
+.el-button.is-link.el-button--primary {
+  color: #5B6FD8 !important;
+  background: transparent !important;
+}
+
+.el-button.is-link.el-button--primary:hover {
+  color: #7CB3E8 !important;
+  background: rgba(91, 111, 216, 0.1) !important;
+  transform: none;
+}
+
+.el-button.is-link.el-button--danger {
+  color: #f56c6c !important;
+  background: transparent !important;
+}
+
+.el-button.is-link.el-button--danger:hover {
+  color: #f78989 !important;
+  background: rgba(245, 108, 108, 0.1) !important;
+}
+
+/* 链接颜色统一 */
+.el-link.el-link--primary {
+  color: #5B6FD8 !important;
+}
+
+.el-link.el-link--primary:hover {
+  color: #7CB3E8 !important;
+}
+
+/* 标签页激活状态 */
+.el-tabs__item.is-active {
+  color: #5B6FD8 !important;
+}
+
+.el-tabs__active-bar {
+  background-color: #5B6FD8 !important;
+}
+
+/* 复选框和单选框激活颜色 */
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: #5B6FD8 !important;
+  border-color: #5B6FD8 !important;
+}
+
+/* Switch 开关激活颜色 */
+.el-switch.is-checked .el-switch__core {
+  background-color: #5B6FD8 !important;
+}
+
+/* 输入框聚焦颜色 */
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px #5B6FD8 inset !important;
+}
+
+/* 加载动画颜色 */
+.el-loading-spinner .circular {
+  stroke: #5B6FD8 !important;
+}
+
+/* 进度条颜色 */
+.el-progress-bar__inner {
+  background: linear-gradient(90deg, #5B6FD8 0%, #7CB3E8 100%) !important;
+}
+
+/* 标签颜色 */
+.el-tag--primary {
+  background-color: #E8EDFA !important;
+  border-color: #C5D4F5 !important;
+  color: #5B6FD8 !important;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #5B6FD8 0%, #7CB3E8 100%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #7CB3E8 0%, #5B6FD8 100%);
+}
+
+/* ========== 全局响应式布局优化 ========== */
+/* 针对笔记本不同分辨率和系统缩放的统一适配 */
+
+/* 容器最大宽度响应式 */
+/* 注意：不包含 .page-container，因为学生页面（练习、考试、靶场、课堂）需要全屏显示 */
+.container,
+.main-container,
+.content-wrapper {
+  max-width: min(1400px, 95vw) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: clamp(16px, 2vw, 40px) !important;
+  padding-right: clamp(16px, 2vw, 40px) !important;
+}
+
+/* 卡片间距响应式 */
+.card-item,
+.info-card {
+  margin: clamp(8px, 1vw, 16px) !important;
+  padding: clamp(16px, 2vw, 24px) !important;
+}
+
+/* Element Plus 卡片组件 - 单独控制，避免影响弹窗 */
+.el-card {
+  /* 不强制设置 margin 和 padding，让各页面自行控制 */
+}
+
+/* 表单间距响应式 */
+.el-form-item {
+  margin-bottom: clamp(16px, 1.5vw, 22px) !important;
+}
+
+/* 按钮组间距响应式 */
+.el-button-group,
+.button-group,
+.action-buttons {
+  gap: clamp(8px, 0.8vw, 12px) !important;
+}
+
+/* 表格容器响应式 */
+.el-table {
+  font-size: clamp(12px, 0.875vw, 14px) !important;
+}
+
+.el-table th,
+.el-table td {
+  padding: clamp(8px, 1vw, 12px) !important;
+}
+
+/* 对话框响应式 - 移除全局宽度控制，让各组件自行设置 */
+/* 只保留最大宽度限制，防止超宽屏上过宽 */
+.el-dialog {
+  max-width: 95vw !important;
+}
+
+/* 弹窗内容优化 - 确保内容正常显示 */
+.el-dialog__body {
+  padding: 20px !important;
+}
+
+/* 弹窗内的表格 - 重置全局样式影响 */
+.el-dialog .el-table {
+  margin: 0 !important;
+}
+
+.el-dialog .el-table th,
+.el-dialog .el-table td {
+  padding: 12px 8px !important;
+}
+
+/* Banner/Hero 区域响应式 */
+.banner,
+.hero-section,
+.page-banner {
+  padding: clamp(20px, 3vw, 60px) clamp(16px, 2vw, 40px) !important;
+}
+
+.banner-content,
+.hero-content {
+  max-width: min(1200px, 90vw) !important;
+  margin: 0 auto !important;
+}
+
+/* 网格布局响应式 */
+.grid-container {
+  gap: clamp(12px, 1.5vw, 24px) !important;
+}
+
+/* Edge 浏览器 125% 缩放特别优化 (1920 × 125% = 1536px) */
+@media (max-width: 1550px) {
+  .container,
+  .main-container {
+    max-width: min(1200px, 92vw) !important;
+    padding-left: clamp(12px, 1.5vw, 32px) !important;
+    padding-right: clamp(12px, 1.5vw, 32px) !important;
+  }
+  
+  .card-item,
+  .info-card {
+    padding: clamp(12px, 1.5vw, 20px) !important;
+  }
+  
+  .banner,
+  .hero-section {
+    padding: clamp(16px, 2.5vw, 50px) clamp(12px, 1.5vw, 32px) !important;
+  }
+}
+
+/* 中等笔记本 (1366 - 1440) */
+@media (max-width: 1440px) {
+  .container,
+  .main-container {
+    max-width: min(1100px, 90vw) !important;
+  }
+  
+  /* 对话框 - 移除全局宽度控制 */
+}
+
+/* 小笔记本 (1280 - 1366) */
+@media (max-width: 1366px) {
+  .container,
+  .main-container {
+    max-width: min(1000px, 88vw) !important;
+  }
+  
+  .el-table {
+    font-size: clamp(11px, 0.8vw, 13px) !important;
+  }
+}
+
+/* 极小笔记本 (1024 - 1280) */
+@media (max-width: 1280px) {
+  .container,
+  .main-container {
+    max-width: 95vw !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  .card-item,
+  .info-card {
+    margin: 8px !important;
+    padding: 12px !important;
+  }
+  
+  .banner,
+  .hero-section {
+    padding: 16px 12px !important;
+  }
+}
+
+/* ========== 台式机显示器适配 ========== */
+/* 针对大屏幕台式机显示器的优化 */
+
+/* 标准 Full HD 台式机 (1920×1080) - 已由基础样式覆盖 */
+/* 基础 clamp() 已经能很好地适配 1920px 宽度 */
+
+/* 2K/QHD 台式机显示器 (2560×1440) */
+@media (min-width: 2000px) and (max-width: 2600px) {
+  .container,
+  .main-container {
+    max-width: min(1600px, 90vw) !important;
+    padding-left: clamp(40px, 3vw, 60px) !important;
+    padding-right: clamp(40px, 3vw, 60px) !important;
+  }
+  
+  /* 标题字体适当放大 */
+  h1, .main-title, .certificate-title {
+    font-size: clamp(48px, 3.2vw, 60px) !important;
+  }
+  
+  h2, .section-title {
+    font-size: clamp(36px, 2.4vw, 48px) !important;
+  }
+  
+  h3, .module-title {
+    font-size: clamp(26px, 1.6vw, 32px) !important;
+  }
+  
+  /* 统计数字放大 */
+  .stat-number, .big-number {
+    font-size: clamp(32px, 2vw, 42px) !important;
+  }
+  
+  /* 表格字体 */
+  .el-table {
+    font-size: clamp(14px, 0.9vw, 16px) !important;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: clamp(12px, 1.2vw, 16px) !important;
+  }
+  
+  /* 对话框 - 移除全局宽度控制 */
+  
+  /* Banner 区域 */
+  .banner, .hero-section, .page-banner {
+    padding: clamp(60px, 4vw, 80px) clamp(40px, 3vw, 60px) !important;
+  }
+  
+  /* 卡片间距 */
+  .card-item, .info-card {
+    margin: clamp(16px, 1.2vw, 20px) !important;
+    padding: clamp(24px, 2vw, 32px) !important;
+  }
+  
+  /* 表单间距 */
+  .el-form-item {
+    margin-bottom: clamp(20px, 1.5vw, 26px) !important;
+  }
+}
+
+/* 4K/UHD 台式机显示器 (3840×2160) */
+@media (min-width: 2601px) and (max-width: 4000px) {
+  .container,
+  .main-container {
+    max-width: min(2400px, 85vw) !important;
+    padding-left: clamp(60px, 3.5vw, 100px) !important;
+    padding-right: clamp(60px, 3.5vw, 100px) !important;
+  }
+  
+  /* 标题字体大幅放大 */
+  h1, .main-title, .certificate-title {
+    font-size: clamp(60px, 3vw, 80px) !important;
+  }
+  
+  h2, .section-title {
+    font-size: clamp(48px, 2.4vw, 64px) !important;
+  }
+  
+  h3, .module-title {
+    font-size: clamp(32px, 1.6vw, 42px) !important;
+  }
+  
+  h4 {
+    font-size: clamp(24px, 1.2vw, 32px) !important;
+  }
+  
+  /* 正文字体 */
+  body {
+    font-size: clamp(16px, 0.9vw, 18px) !important;
+  }
+  
+  /* 统计数字 */
+  .stat-number, .big-number {
+    font-size: clamp(48px, 2.2vw, 64px) !important;
+  }
+  
+  /* 大图标 */
+  .play-icon, .large-icon {
+    font-size: clamp(80px, 4vw, 120px) !important;
+  }
+  
+  /* 表格 */
+  .el-table {
+    font-size: clamp(16px, 0.85vw, 18px) !important;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: clamp(16px, 1.2vw, 20px) !important;
+  }
+  
+  /* 对话框 - 移除全局宽度控制 */
+  
+  /* Banner 区域 */
+  .banner, .hero-section, .page-banner {
+    padding: clamp(80px, 4.5vw, 120px) clamp(60px, 3.5vw, 100px) !important;
+  }
+  
+  /* 卡片 */
+  .card-item, .info-card {
+    margin: clamp(20px, 1.5vw, 28px) !important;
+    padding: clamp(32px, 2.5vw, 48px) !important;
+  }
+  
+  /* 表单 */
+  .el-form-item {
+    margin-bottom: clamp(24px, 1.8vw, 32px) !important;
+  }
+  
+  /* 按钮 */
+  .el-button {
+    padding: clamp(12px, 1vw, 16px) clamp(20px, 1.5vw, 28px) !important;
+    font-size: clamp(16px, 0.9vw, 18px) !important;
+  }
+  
+  /* 输入框 */
+  .el-input__inner {
+    font-size: clamp(16px, 0.9vw, 18px) !important;
+    height: clamp(40px, 2.5vw, 48px) !important;
+  }
+}
+
+/* 超宽屏显示器 (21:9, 3440×1440) */
+@media (min-width: 3000px) and (max-aspect-ratio: 21/9) {
+  .container,
+  .main-container {
+    max-width: min(2000px, 80vw) !important;
+  }
+  
+  /* 利用超宽屏的横向空间 */
+  .grid-container {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)) !important;
+    gap: clamp(24px, 2vw, 40px) !important;
+  }
+}
+
+/* 5K 及以上超高清显示器 (5120×2880+) */
+@media (min-width: 4001px) {
+  .container,
+  .main-container {
+    max-width: min(3200px, 80vw) !important;
+    padding-left: clamp(80px, 4vw, 120px) !important;
+    padding-right: clamp(80px, 4vw, 120px) !important;
+  }
+  
+  /* 超大标题 */
+  h1, .main-title, .certificate-title {
+    font-size: clamp(80px, 3.5vw, 100px) !important;
+  }
+  
+  h2, .section-title {
+    font-size: clamp(64px, 2.8vw, 80px) !important;
+  }
+  
+  /* 正文 */
+  body {
+    font-size: clamp(18px, 1vw, 20px) !important;
+  }
+  
+  /* 表格 */
+  .el-table {
+    font-size: clamp(18px, 0.9vw, 20px) !important;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: clamp(20px, 1.5vw, 24px) !important;
+  }
+  
+  /* 对话框 - 移除全局宽度控制 */
+}
+
+

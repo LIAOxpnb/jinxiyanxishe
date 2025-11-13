@@ -1,15 +1,8 @@
 <template>
-  <div class="classroom-page">
-    <div 
-      class="banner" 
-      :style="{ backgroundImage: `linear-gradient(to right, #4facfe 0%, #00f2fe 100%), url(${jinxiketang})` }"
-    >
-      <div class="banner-content">
-        <h1 class="banner-title">
-          <el-icon><Compass /></el-icon>
-          <span>金析课堂</span>
-        </h1>
-      </div>
+  <div class="classroom-page student-page-wrapper">
+    <div class="page-header">
+      <el-icon :size="32" color="#fff" class="header-icon"><Compass /></el-icon>
+      <h1 style="color: #3370FF;">金析课堂</h1>
     </div>
 
     <div class="main-content">
@@ -223,28 +216,9 @@ onMounted(() => {
 .classroom-page {
   background-color: #f5f7fa;
 }
-.banner {
-  height: 200px;
-  background-blend-mode: overlay;
-  background-size: cover;
-  background-position: center;
-  display: flex;
-  align-items: center;
-  padding: 0 5%;
-}
-.banner-title {
-  color: #3370FF;
-  font-size: 32px;
-  font-weight: 600;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-  display: flex;
-  align-items: center;
-}
-
-.banner-title .el-icon {
-  margin-right: 10px;
-  font-size: 36px;
-  color:  blue;
+/* 使用全局 page-header 样式，仅定义背景图 */
+.page-header {
+  background-image: url('@/assets/img/jinxiketang.png');
 }
 .main-content {
   padding: 0 0;

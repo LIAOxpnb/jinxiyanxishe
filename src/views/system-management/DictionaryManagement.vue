@@ -1,8 +1,8 @@
 <template>
   <div class="dictionary-management">
-    <div class="page-header">
+    <!-- <div class="page-header">
       <h1>字典管理</h1>
-    </div>
+    </div> -->
     
     <div class="action-bar">
       <div class="left-actions">
@@ -348,7 +348,6 @@ const convertToPinyin = (text) => {
   padding: 20px;
   background-color: #f8f9fa;
   min-height: 100vh;
-  font-family: 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
 }
 
 /* 页面标题 */

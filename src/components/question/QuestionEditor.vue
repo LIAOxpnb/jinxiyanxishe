@@ -148,6 +148,7 @@ import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
 import { ElMessage } from 'element-plus';
 import { uploadFiles } from '@/api/common/UploadFiles.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
+import { removeOuterPTag } from '@/utils/richTextHelper.js';
 import '@wangeditor/editor/dist/css/style.css';
 
 // 文件上传相关
@@ -174,7 +175,33 @@ watch(() => props.modelValue, (newPropValue) => {
 
 // (子 -> 父 同步)
 watch(localQuestion, (newValue) => {
-  emit('update:modelValue', newValue);
+  // 在向父组件传递数据前，清理富文本字段的外层 <p> 标签
+  const cleanedValue = { ...newValue };
+  
+  // 清理题目标题
+  if (cleanedValue.title && cleanedValue.editMode === 'complex') {
+    cleanedValue.title = removeOuterPTag(cleanedValue.title);
+  }
+  
+  // 清理选项内容（单选、多选）
+  if (cleanedValue.options && cleanedValue.editMode === 'complex') {
+    cleanedValue.options = cleanedValue.options.map(opt => ({
+      ...opt,
+      content: removeOuterPTag(opt.content)
+    }));
+  }
+  
+  // 清理解析内容
+  if (cleanedValue.analysisContent && cleanedValue.analysisType === 'HAS_ANALYSIS') {
+    cleanedValue.analysisContent = removeOuterPTag(cleanedValue.analysisContent);
+  }
+  
+  // 清理论述题详情
+  if (cleanedValue.details && cleanedValue.questionType === 'ESSAY') {
+    cleanedValue.details = removeOuterPTag(cleanedValue.details);
+  }
+  
+  emit('update:modelValue', cleanedValue);
 }, { deep: true });
 
 
