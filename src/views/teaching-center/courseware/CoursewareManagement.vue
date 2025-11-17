@@ -56,10 +56,10 @@
         </el-table-column>
         <el-table-column prop="fileType" label="文件类型" width="110" />
         <el-table-column prop="duration" label="时长" width="100" class-name="nowrap" label-class-name="nowrap" show-overflow-tooltip />
-        <el-table-column prop="category" label="分类" width="100" class-name="nowrap" label-class-name="nowrap" show-overflow-tooltip />
+        <el-table-column prop="category" label="分类" width="120" class-name="nowrap" label-class-name="nowrap" show-overflow-tooltip />
         <el-table-column prop="group" label="课件组" width="120" />
         <el-table-column prop="creatorName" label="创建人" width="110" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
+        <el-table-column prop="createTime" label="创建时间" width="220" />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEditCourseware(scope.row)">编辑</el-button>
@@ -556,7 +556,7 @@ onMounted(async () => {
 
 .page-title {
   margin: 0 0 20px 0;
-  font-size: 24px;
+  font-size: 24px !important;
   font-weight: 600;
   color: #303133;
 }

@@ -2,7 +2,7 @@
   <div class="home-page">
     <div class="hero-section">
       <div class="hero-content">
-        <h1 class="main-title">进阶》资金分析师</h1>
+        <h1 class="main-title">进阶》》资金分析师</h1>
         <h2 class="sub-title">360°洞穿经济犯罪</h2>
         <p class="description">源源不断提供优质的课程通过AI能力提升业务能力，有效帮助您提供经济犯罪破案率，期待您的加入</p>
       </div>
@@ -20,7 +20,7 @@
           <div class="feature-content">
             <el-icon :size="32" class="feature-icon"><component :is="feature.icon" /></el-icon>
             <span class="feature-title">{{ feature.title }}</span>
-            <p class="feature-description">点击功能描述可功能跳转功能描述</p>
+            <p class="feature-description">{{ feature.description }}</p>
           </div>
         </el-card>
       </div>
@@ -163,11 +163,11 @@ import { getDictByType } from '@/api/system-management/dictionary.js';
 const router = useRouter();
 
 const features = ref([
-  { title: '金析课堂', icon: School, routeName: 'Courses' },
-  { title: '随堂练习', icon: Edit, routeName: 'Practice' },
-  { title: '正式考试', icon: Reading, routeName: 'Student-Exams' },
-  { title: '实战靶场', icon: TrendCharts, routeName: 'ShootingRange' },
-  { title: '我的班级', icon: User, routeName: 'MyClasses' }
+  { title: '金析课堂', icon: School, routeName: 'Courses', description: '前沿知识库，好课等您来学。' },
+  { title: '随堂练习', icon: Edit, routeName: 'Practice', description: '小试牛刀，巩固课堂所学精华。' },
+  { title: '正式考试', icon: Reading, routeName: 'Student-Exams', description: '迎接挑战，用分数证明您的实力。' },
+  { title: '实战靶场', icon: TrendCharts, routeName: 'ShootingRange', description: '真操实练，成为真正的技术专家。' },
+  { title: '我的班级', icon: User, routeName: 'MyClasses', description: '加入集体，与优秀的同学共同进步。' }
 ]);
 
 const navigateTo = (routeName) => {
@@ -353,7 +353,7 @@ onMounted(() => {
 
 /* Hero 横幅区域 - 保留原图颜色 + 响应式优化 */
 .hero-section {
-  background-image: url('@/assets/img/123.jpg');
+  background-image: url('@/assets/img/首页1.png');
   background-size: cover;
   background-position: center;
   background-attachment: fixed;

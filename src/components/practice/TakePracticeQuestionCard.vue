@@ -493,7 +493,7 @@ watch(() => props.questionData, async (newData) => {
   align-items: center;
   gap: 8px;
   font-weight: bold;
-  font-size: 15px;
+  font-size: 15px !important;
   margin-bottom: 10px;
   color: #303133;
 }

@@ -6,8 +6,10 @@
     @update:model-value="closeDialog"
     :close-on-click-modal="false"
   >
+    <el-skeleton v-if="isLoadingMaterials" animated />
+    
     <!-- 已有资料展示 -->
-    <div v-if="hasExistingMaterial && existingMaterialData" class="existing-material">
+    <div v-else-if="hasExistingMaterial && existingMaterialData" class="existing-material">
       <el-table :data="[existingMaterialData]" style="width: 100%">
         <el-table-column prop="fileName" label="资料名称" />
         <el-table-column label="操作" width="150" align="center">
@@ -68,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { genFileId } from 'element-plus';
 import { Download, Delete } from '@element-plus/icons-vue';
@@ -88,28 +90,72 @@ const isUploading = ref(false);
 const uploadProgress = ref(0);
 const hasExistingMaterial = ref(false);
 const existingMaterialData = ref(null);
+const isLoadingMaterials = ref(false);
 
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    fetchExistingMaterials();
+// 当对话框打开时加载资料
+watch(() => props.visible, async (newVal) => {
+  if (newVal && props.sectionData && props.sectionData.id) {
+    fileList.value = [];
+    uploadProgress.value = 0;
+    isUploading.value = false;
+    uploadRef.value?.clearFiles();
+    
+    // 重置状态
+    hasExistingMaterial.value = false;
+    existingMaterialData.value = null;
+    
+    // 使用 nextTick 确保 DOM 更新后再加载资料
+    await nextTick();
+    await fetchExistingMaterials();
   }
 });
 
 const fetchExistingMaterials = async () => {
-  fileList.value = [];
-  hasExistingMaterial.value = false;
-  existingMaterialData.value = null;
-  uploadRef.value?.clearFiles();
-
+  if (!props.sectionData || !props.sectionData.id) {
+    console.warn('sectionData或sectionData.id未定义');
+    hasExistingMaterial.value = false;
+    existingMaterialData.value = null;
+    isLoadingMaterials.value = false;
+    return;
+  }
+  
+  isLoadingMaterials.value = true;
   try {
+    console.log('开始获取资料，sectionId:', props.sectionData.id);
     const res = await getSectionMaterials(props.sectionData.id);
-    if (res.code === 200 && res.data && res.data.length > 0) {
-      const material = res.data[0];
-      hasExistingMaterial.value = true;
-      existingMaterialData.value = material;
+    console.log('获取资料响应:', res);
+    
+    if (res && res.code === 200) {
+      // 检查是否有数据
+      if (res.data) {
+        let materialData = null;
+        
+        // 处理不同的数据格式
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          materialData = res.data[0];
+        } else if (typeof res.data === 'object' && !Array.isArray(res.data)) {
+          materialData = res.data;
+        }
+        
+        if (materialData && materialData.fileName) {
+          hasExistingMaterial.value = true;
+          existingMaterialData.value = materialData;
+          console.log('已有资料:', materialData);
+          return;
+        }
+      }
     }
+    
+    // 没有资料
+    hasExistingMaterial.value = false;
+    existingMaterialData.value = null;
+    console.log('暂无资料');
   } catch (error) {
     console.error('获取已有资料失败:', error);
+    hasExistingMaterial.value = false;
+    existingMaterialData.value = null;
+  } finally {
+    isLoadingMaterials.value = false;
   }
 };
 
@@ -146,6 +192,7 @@ const deleteMaterial = async (material) => {
       ElMessage.success('删除成功');
       hasExistingMaterial.value = false;
       existingMaterialData.value = null;
+      fileList.value = [];
       emit('update-material', { 
         sectionId: props.sectionData.id,
         materialName: null

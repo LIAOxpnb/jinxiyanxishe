@@ -958,6 +958,7 @@ const confirmDrawQuestions = async () => {
 // 批量导入相关方法
 const handleFileChange = (uploadFile) => {
   importFile.value = uploadFile.raw;
+  ElMessage.success('文件上传成功！');
 };
 
 const handleFileRemove = () => {
@@ -985,7 +986,7 @@ const handleBatchImportSubmit = async () => {
         errorFileUrl: response.data?.errorFileUrl || null
       };
       
-      ElMessage.success(`批量导入成功！正确数: ${importResult.value.successCount}, 错误数: ${importResult.value.errorCount}`);
+      ElMessage.success(`批量导入成功！`);
       
       if (importResult.value.errorCount === 0) {
         setTimeout(() => {

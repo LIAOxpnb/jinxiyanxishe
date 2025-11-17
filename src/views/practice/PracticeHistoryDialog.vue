@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     title="练习记录"
-    width="900px"
+    width="1000px"
     @update:model-value="$emit('update:visible', $event)"
   >
     <div class="dialog-content" v-loading="loading">
@@ -16,7 +16,7 @@
             </template>
         </el-table-column>
         <el-table-column prop="rightCount" label="正确数" align="center" />
-        <el-table-column prop="submitTime" label="提交时间" />
+        <el-table-column prop="submitTime" label="提交时间" width="180px" />
         <el-table-column label="操作" align="center">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="viewRecordDetail(scope.row)">查看</el-button>

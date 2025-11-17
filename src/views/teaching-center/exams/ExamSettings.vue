@@ -2137,6 +2137,7 @@ onMounted(async () => {
 // 文件变化处理
 const handleFileChange = (uploadFile) => {
   importFile.value = uploadFile.raw;
+  ElMessage.success('文件上传成功！');
 };
 
 // 文件移除处理
@@ -2169,7 +2170,7 @@ const handleBatchImportSubmit = async () => {
         errorFileUrl: response.data?.errorFileUrl || null
       };
       
-      ElMessage.success(`批量导入成功！正确数: ${importResult.value.successCount}, 错误数: ${importResult.value.errorCount}`);
+      ElMessage.success(`批量导入成功！`);
       
       // 如果全部成功，延迟关闭对话框并刷新列表
       if (importResult.value.errorCount === 0) {

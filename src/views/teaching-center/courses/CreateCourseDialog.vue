@@ -39,9 +39,10 @@
     :http-request="handleUploadCover"
   >
     <img v-if="coverPreviewUrl" :src="coverPreviewUrl" class="cover-image" />
+    <img v-else-if="!coverPreviewUrl && formModel.cover" src="@/assets/img/u4045.png" class="cover-image default-cover" />
     <el-icon v-else class="cover-uploader-icon"><Plus /></el-icon>
   </el-upload>
-  <div class="form-item-hint">建议上传300px*200px (3:2) 的图片，未上传则展示默认图</div>
+  <div class="form-item-hint">建议上传300px*200px (3:2) 的图片，未上传将使用默认封面</div>
 </el-form-item>
       <el-form-item label="课程讲师" prop="instructorId">
         <el-select
@@ -128,7 +129,7 @@ const formModel = reactive(getInitialFormModel());
 const formRules = reactive({
   name: [{ required: true, message: '请输入课程名称', trigger: 'blur' }],
   courseCategory: [{ required: true, message: '请选择分类', trigger: 'change' }],
-  cover: [{ required: true, message: '请上传封面图片', trigger: 'change' }],
+  // 封面不再是必填项，未上传时将使用默认封面
   instructorId: [{ required: true, message: '请选择课程讲师', trigger: 'change' }],
 });
 
@@ -271,7 +272,7 @@ const submitForm = async () => {
       const payload = {
         name: formModel.name,
         courseCategory: formModel.courseCategory,
-        cover: formModel.cover,
+        cover: formModel.cover || 'default-cover.png', // 如果没有封面，使用默认封面标识
         summary: formModel.summary,
         intro: formModel.intro,
         instructor: formModel.instructorId, // 课程讲师字段
@@ -334,5 +335,10 @@ const submitForm = async () => {
   max-width: 100%;
   max-height: 100%;
   display: block;
+}
+
+.default-cover {
+  opacity: 0.6;
+  filter: grayscale(20%);
 }
 </style>

@@ -38,12 +38,13 @@
             accept="image/jpeg,image/png"
           >
             <img v-if="coverPreviewUrl" :src="coverPreviewUrl" class="cover-image" />
+            <img v-else-if="!coverPreviewUrl && formModel.cover" src="@/assets/img/u4045.png" class="cover-image default-cover" />
             <div v-else class="cover-uploader-placeholder">
               <el-icon><Plus /></el-icon>
               <span class="upload-text">点击上传</span>
             </div>
           </el-upload>
-          <div class="form-item-hint">建议上传300px*200px (3:2) 的图片</div>
+          <div class="form-item-hint">建议上传300px*200px (3:2) 的图片，未上传将使用默认封面</div>
         </div>
       </el-form-item>
       
@@ -142,28 +143,14 @@ const formModel = reactive({
   courseCategory: '',
   cover: '',
   instructorId: null,
-  intro: '',
+  intro: '', // 确保有默认值
   summary: '',
 });
 
 const formRules = {
   name: [{ required: true, message: '请输入课程名称', trigger: 'blur' }],
   courseCategory: [{ required: true, message: '请选择分类', trigger: 'change' }],
-  cover: [
-    { 
-      required: true, 
-      message: '请上传封面图片', 
-      trigger: 'change',
-      validator: (rule, value, callback) => {
-        // 编辑时如果原本有封面，即使当前值为空也通过验证
-        if (!value && !originalCover.path) {
-          callback(new Error('请上传封面图片'));
-        } else {
-          callback();
-        }
-      }
-    }
-  ],
+  // 封面不再是必填项，未上传时将使用默认封面
   instructorId: [{ required: true, message: '请选择课程讲师', trigger: 'change' }],
 };
 
@@ -199,7 +186,12 @@ watch(() => props.visible, async (newVal) => {
       console.error('获取讲师列表失败:', error);
     }
     
-    Object.assign(formModel, props.courseData);
+    // 复制课程数据，确保 intro 不为 null
+    Object.assign(formModel, {
+      ...props.courseData,
+      intro: props.courseData.intro || '', // 确保 intro 不为 null
+      summary: props.courseData.summary || '' // 确保 summary 不为 null
+    });
     
     // 如果没有设置讲师ID，但有创建人姓名，则根据创建人姓名匹配讲师
     if (!formModel.instructorId && props.courseData.creatorName) {
@@ -272,6 +264,17 @@ const beforeUpload = (file) => {
 };
 
 const closeDialog = () => {
+  // 重置表单数据，确保 intro 为空字符串而非 null
+  Object.assign(formModel, {
+    id: null,
+    name: '',
+    courseCategory: '',
+    cover: '',
+    instructorId: null,
+    intro: '',
+    summary: '',
+  });
+  coverPreviewUrl.value = '';
   emit('update:visible', false);
 };
 
@@ -281,6 +284,7 @@ const submitForm = async () => {
       const payload = {
         ...formModel,
         intro: removeOuterPTag(formModel.intro), // 去除外层 <p> 标签
+        cover: formModel.cover || 'default-cover.png', // 如果没有封面，使用默认封面标识
         scope: props.courseData.scope,
         status: props.courseData.status,
       };
@@ -327,6 +331,11 @@ const submitForm = async () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.default-cover {
+  opacity: 0.6;
+  filter: grayscale(20%);
 }
 
 .cover-uploader-placeholder {

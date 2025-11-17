@@ -22,7 +22,7 @@
         <el-table-column prop="courseInfo" label="关联课程" min-width="250" show-overflow-tooltip />
         <el-table-column prop="questionCount" label="试题数量" width="110" align="center" />
         <el-table-column prop="creatorName" label="创建人" width="120" align="center" />
-        <el-table-column prop="createTime" label="创建时间" width="180" />
+        <el-table-column prop="createTime" label="创建时间" width="220" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleSettings(scope.row)">练习设置</el-button>
@@ -451,7 +451,7 @@ onMounted(() => {
 }
 .page-title {
   margin: 0 0 20px 0;
-  font-size: 24px;
+  font-size: 24px !important;
   font-weight: 600;
   color: #303133;
 }

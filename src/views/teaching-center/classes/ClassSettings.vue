@@ -1345,6 +1345,9 @@ const loadClazzName = async () => {
 
 .list-items {
   min-height: 200px;
+  max-height: calc(100vh - 400px);
+  overflow-y: auto;
+  padding-bottom: 40px;
 }
 
 .list-item {

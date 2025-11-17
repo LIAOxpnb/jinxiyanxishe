@@ -19,12 +19,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="shootingRangeType" label="类型" width="80" align="center">
+        <el-table-column prop="shootingRangeType" label="类型" min-width="80" align="center">
           <template #default="scope">
             {{ scope.row.shootingRangeType === 0 ? '训练' : '比武' }}
           </template>
         </el-table-column>
-        <el-table-column label="比武时间" width="160" show-overflow-tooltip>
+        <el-table-column label="比武时间" min-width="90" show-overflow-tooltip>
           <template #default="scope">
             <div v-if="scope.row.participateDate === 0">不限制</div>
             <div v-else style="font-size: 12px; line-height: 1.4;">
@@ -33,20 +33,20 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="时长" width="80" align="center">
+        <el-table-column prop="duration" label="时长" width="90" align="center">
           <template #default="scope">
             {{ scope.row.duration === -1 ? '不限' : `${scope.row.duration}分` }}
           </template>
         </el-table-column>
-        <el-table-column label="分类" width="100" show-overflow-tooltip>
+        <el-table-column label="分类" width="110" show-overflow-tooltip>
           <template #default="scope">
             {{ getCategoryName(scope.row.shootingRangeCategory) }}
           </template>
         </el-table-column>
-        <el-table-column prop="submitCount" label="交卷" width="70" align="center" />
-        <el-table-column prop="clazzCount" label="班级" width="70" align="center" />
-        <el-table-column prop="creatorName" label="创建人" width="100" align="center" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="创建时间" width="155" show-overflow-tooltip />
+        <el-table-column prop="submitCount" label="交卷" width="80" align="center" />
+        <el-table-column prop="clazzCount" label="班级" width="80" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="100" align="center"  />
+        <el-table-column prop="createTime" label="创建时间" width="170" show-overflow-tooltip />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEdit(scope.row)">靶场设置</el-button>
@@ -491,7 +491,7 @@ onMounted(() => {
 
 .page-title {
   margin: 0 0 20px 0;
-  font-size: 24px;
+  font-size: 24px !important;
   font-weight: 600;
   color: #303133;
 }

@@ -92,17 +92,44 @@
           </el-input>
         </div>
         <div class="list-container">
-            <el-tree ref="orgTreeRef" :data="orgTreeData" :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" 
-              show-checkbox node-key="id" lazy :load="loadOrgTreeNode" @check="handleOrgTreeCheck">
-              <template #default="{ data }">
-                <div class="tree-node">
-                  <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
-                  <el-avatar v-else :size="20"><el-icon><User /></el-icon></el-avatar>
-                  <span class="node-label">{{ data.name }}</span>
-                  <span v-if="data.type === 'user'" class="user-dept">{{ data.department }}</span>
+          <!-- 搜索结果展示 -->
+          <div v-if="userSearchKeyword.trim() && searchedUsers.length > 0" class="search-results">
+            <div v-for="user in searchedUsers" :key="user.id" class="search-result-item">
+              <el-checkbox 
+                :model-value="user.checked" 
+                @change="(val) => handleSearchResultCheck(user, val)"
+              >
+                <div class="user-info">
+                  <el-avatar :size="20"><el-icon><User /></el-icon></el-avatar>
+                  <div class="user-details">
+                    <span class="user-name">{{ user.name }}</span>
+                    <span class="user-dept">{{ user.department }}</span>
+                  </div>
                 </div>
-              </template>
-            </el-tree>
+              </el-checkbox>
+            </div>
+          </div>
+          <!-- 搜索框为空时显示组织树 -->
+          <el-tree 
+            v-else
+            ref="orgTreeRef" 
+            :data="orgTreeData" 
+            :props="{ children: 'children', label: 'name', isLeaf: 'isLeaf' }" 
+            show-checkbox 
+            node-key="id" 
+            lazy 
+            :load="loadOrgTreeNode" 
+            @check="handleOrgTreeCheck"
+          >
+            <template #default="{ data }">
+              <div class="tree-node">
+                <el-icon v-if="data.type === 'org'" class="org-icon"><OfficeBuilding /></el-icon>
+                <el-avatar v-else :size="20"><el-icon><User /></el-icon></el-avatar>
+                <span class="node-label">{{ data.name }}</span>
+                <span v-if="data.type === 'user'" class="user-dept">{{ data.department }}</span>
+              </div>
+            </template>
+          </el-tree>
         </div>
       </div>
       <div class="right-section">
@@ -219,6 +246,7 @@ const selectedScopeClasses = ref([]);
 const orgTreeData = ref([]);
 const orgTreeRef = ref(null);
 const userSearchKeyword = ref('');
+const searchedUsers = ref([]);
 
 const classListData = ref([]);
 const classSearchKeyword = ref('');
@@ -395,9 +423,63 @@ const transformOrgTreeData = (nodes) => {
 };
 
 const handleUserSearch = async () => {
-  // 在这个简化版本中，我们假设组织树足够用，不单独实现关键词搜索结果列表
-  // 如果需要，可以像RangeSetup.vue一样实现
-  ElMessage.info('请在左侧组织树中进行选择');
+  if (!userSearchKeyword.value.trim()) {
+    searchedUsers.value = [];
+    return;
+  }
+  try {
+    const response = await getUserList({ 
+      pageNum: 1, 
+      pageSize: 50, 
+      param: userSearchKeyword.value.trim(), 
+      pagination: true 
+    });
+    if (response.code === 200) {
+      searchedUsers.value = response.data.records.map(user => {
+        let department = user.orgName || user.organizationName || user.deptName || user.department;
+
+        // 如果搜索结果中没有部门信息，尝试从组织树中查找
+        if (!department && orgTreeData.value.length > 0) {
+          const findUserInTree = (nodes) => {
+            for (const node of nodes) {
+              if (node.type === 'user' && node.originalId === user.id) {
+                return node.department;
+              }
+              if (node.children && node.children.length > 0) {
+                const found = findUserInTree(node.children);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+
+          department = findUserInTree(orgTreeData.value);
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          department: department || '未知部门',
+          avatar: user.avatar || '',
+          checked: selectedScopeUsers.value.some(u => u.id === user.id)
+        };
+      });
+    }
+  } catch (error) { 
+    ElMessage.error('搜索用户失败'); 
+  }
+};
+
+const handleSearchResultCheck = (user, isChecked) => {
+  if (isChecked) {
+    if (!selectedScopeUsers.value.some(u => u.id === user.id)) {
+      selectedScopeUsers.value.push({ id: user.id, name: user.name, department: user.department });
+    }
+  } else {
+    selectedScopeUsers.value = selectedScopeUsers.value.filter(u => u.id !== user.id);
+  }
+  // 更新搜索结果的勾选状态
+  user.checked = isChecked;
 };
 
 const handleOrgTreeCheck = (data, { checkedNodes }) => {
@@ -667,5 +749,42 @@ const submitForm = async () => {
 .class-item {
     padding: 5px 0;
 }
+
+.search-results {
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.search-result-item {
+    padding: 8px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.search-result-item .el-checkbox {
+    width: 100%;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.user-name {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* --- 新增样式结束 --- */
 </style>

@@ -203,7 +203,7 @@ const getClazzStatusType = (status) => {
 .class-detail-page { background-color: #f5f7fa; padding: 20px; }
 .main-container { display: flex; gap: 20px; }
 .left-content { flex: 1; }
-.right-sidebar { width: 320px; flex-shrink: 0; }
+.right-sidebar { width: 320px; flex-shrink: 0;margin-top: 50px; }
 .banner { background: linear-gradient(135deg, #53a8ff, #409eff); color: white; padding: 24px; border-radius: 8px; position: relative; }
 .banner h2 { margin: 0 0 10px 0; font-size: 24px; }
 .banner p { margin: 0; font-size: 14px; opacity: 0.9; }

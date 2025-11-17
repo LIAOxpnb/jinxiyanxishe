@@ -138,9 +138,13 @@ export function getSectionMaterials(id) {
 
 /**
  * 删除小节资料
+ * @param {string|number} id - 资料ID
+ * @returns {Promise}
  */
 export function deleteSectionMaterial(id) {
-  return request.delete(`/teacher/course/material/${id}`);
+  return request.get('/teacher/course/deleteMaterial', {
+    params: { id }
+  });
 }
 
 /**
@@ -160,6 +164,39 @@ export function deleteSectionMaterial(id) {
  *   }
  * ]
  */
+/**
+ * @description 保存或更新章节和课时
+ * @param {Object} data - 章节课时数据
+ * @returns {Promise}
+ * @example
+ * saveOrUpdateChaptersAndSections({
+ *   courseId: 10,
+ *   courseChapterList: [
+ *     {
+ *       courseId: 10,
+ *       name: '第一章 函数',
+ *       sort: 1,
+ *       courseSectionList: [
+ *         { name: '1.1 定义', sort: 1, coursewareId: 1 },
+ *         { name: '1.2 例题', sort: 2, coursewareId: 2 }
+ *       ]
+ *     }
+ *   ]
+ * })
+ */
 export function saveOrUpdateChaptersAndSections(data) {
   return request.post('/teacher/courseChapter/saveUpdate', data);
+}
+
+/**
+ * @description 导入课程
+ * @param {FormData} data - 包含文件的FormData对象
+ * @returns {Promise}
+ */
+export function importFullCourse(data) {
+  return request.post('/teacher/course/importFullCourse', data, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
 }

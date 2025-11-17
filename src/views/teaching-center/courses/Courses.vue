@@ -5,9 +5,10 @@
       <h1 class="page-title">课程管理 <span class="title-remark">【备注】默认展示我创建的课程</span></h1>
 
       <FilterBar
-        create-button-text="新增课程"
+        create-button-text="课程操作"
+        :create-options="courseCreateOptions"
         :fields="courseFilterFields"
-        @create="handleCreateCourse"
+        @create="handleCreateAction"
         @filter="handleFilter"
       />
 
@@ -19,8 +20,8 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="课程名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="status" label="发布" width="90">
+        <el-table-column prop="name" label="课程名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="status" label="发布" width="105">
           <template #default="scope">
             <el-tag
               :type="scope.row.status === 1 ? 'success' : 'info'"
@@ -30,7 +31,7 @@
         </el-table-column>
         <el-table-column prop="courseCategory" label="分类" min-width="100">
           <template #default="scope">
-            {{ (categoryOptions.find(opt => String(opt.value) === String(scope.row.courseCategory)) || {}).label || scope.row.courseCategory }}
+            {{ getCategoryLabel(scope.row.courseCategory) }}
           </template>
         </el-table-column>
         <el-table-column prop="scope" label="学习范围" width="120">
@@ -41,7 +42,7 @@
         <el-table-column prop="userCount" label="学习人数" width="110" align="center" />
         <el-table-column prop="clazzCount" label="班级数" width="100" align="center" />
         <el-table-column prop="creatorName" label="创建人" width="120" align="center" />
-        <el-table-column prop="createTime" label="创建时间" width="180" />
+        <el-table-column prop="createTime" label="创建时间" width="230" />
 
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
@@ -135,6 +136,84 @@
       </template>
     </el-dialog>
 
+    <!-- 导入课程对话框 -->
+    <el-dialog
+      v-model="importDialogVisible"
+      title="导入课程"
+      width="700px"
+      @close="resetImportForm"
+    >
+      <el-form
+        ref="importFormRef"
+        :model="importForm"
+        :rules="importFormRules"
+        label-width="100px"
+      >
+        <el-form-item label="课程文件" prop="file">
+          <el-upload
+            ref="uploadRef"
+            class="upload-demo"
+            drag
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            accept=".doc,.docx"
+            style="width: 100%"
+          >
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">
+              将文件拖到此处，或<em>点击上传</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">
+                仅支持 .doc/.docx 格式文件
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        
+        <el-form-item label="课程分类" prop="courseCategory">
+          <el-select
+            v-model="importForm.courseCategory"
+            placeholder="请选择课程分类"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="option in categoryOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="课件分类" prop="coursewareCategory">
+          <el-select
+            v-model="importForm.coursewareCategory"
+            placeholder="请选择课件分类"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="option in coursewareCategoryOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="importDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitImportCourse" :loading="importLoading">
+            {{ importLoading ? `上传中... ${uploadProgress}%` : '确定' }}
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -142,12 +221,12 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { More } from '@element-plus/icons-vue';
+import { More, UploadFilled } from '@element-plus/icons-vue';
 import FilterBar from '@/components/common/FilterBar.vue'; // 确保路径正确
 import  CreateCourseDialog  from '../courses/CreateCourseDialog.vue'; // 确保路径正确f
 
 // 【注意】请确保已创建对应的API文件和函数
-import { getCourseList, createCourse, updateCourseStatus, deleteCourse, copyCourse } from '../../../api/teaching-center/CourseManagement.js';
+import { getCourseList, createCourse, updateCourseStatus, deleteCourse, copyCourse, importFullCourse } from '../../../api/teaching-center/CourseManagement.js';
 import { getDictByType } from '@/api/system-management/dictionary.js';
 
 const router = useRouter();
@@ -174,6 +253,7 @@ const pagination = reactive({
 });
 
 const categoryOptions = ref([]); // 课程分类选项
+const coursewareCategoryOptions = ref([]); // 课件分类选项
 const scopeMap = { // 用于在表格中显示学习范围的文本
     0: '公开课',
     1: '指定人员',
@@ -226,6 +306,12 @@ const courseFilterFields = ref([
 // --- 新增课程对话框 ---
 const createDialogVisible = ref(false);
 
+// --- 课程操作下拉选项 ---
+const courseCreateOptions = ref([
+  { label: '新增课程', value: 'create' },
+  { label: '导入课程', value: 'import' },
+]);
+
 // --- 复制课程对话框相关 ---
 const copyDialogVisible = ref(false);
 const copyFormRef = ref(null);
@@ -236,6 +322,23 @@ const copyForm = reactive({
 });
 const copyFormRules = reactive({
   name: [{ required: true, message: '请输入新课程名称', trigger: 'blur' }],
+});
+
+// --- 导入课程对话框相关 ---
+const importDialogVisible = ref(false);
+const importFormRef = ref(null);
+const uploadRef = ref(null);
+const importLoading = ref(false);
+const uploadProgress = ref(0);
+const importForm = reactive({
+  file: null,
+  courseCategory: '',
+  coursewareCategory: '',
+});
+const importFormRules = reactive({
+  file: [{ required: true, message: '请选择要导入的文件', trigger: 'change' }],
+  courseCategory: [{ required: true, message: '请选择课程分类', trigger: 'change' }],
+  coursewareCategory: [{ required: true, message: '请选择课件分类', trigger: 'change' }],
 });
 
 
@@ -266,19 +369,85 @@ const fetchCourses = async () => {
 const fetchCategories = async () => {
   try {
     const res = await getDictByType('course_category'); // 【API】获取课程分类字典
-    if (res.code === 200) {
+    console.log('课程分类字典数据:', res);
+    if (res.code === 200 && res.data && res.data.length > 0) {
+      // 先打印第一个数据项看看字段结构
+      console.log('第一个分类项的字段结构:', res.data[0]);
+      
       categoryOptions.value = res.data.map(item => ({
-        label: item.dictLabel,
-        value: item.dictValue,
+        label: item.dictLabel || item.label || item.name || '未知标签',
+        value: item.course_category || item.dictValue || item.value || item.id, // 用于下拉选择和API调用
+        dictValue: item.dictValue || item.value || item.id, // 用于表格显示匹配
+        courseCategory: item.course_category || item.dictValue || item.value || item.id, // 用于表格显示匹配
       }));
+      console.log('处理后的课程分类选项:', categoryOptions.value);
+    } else {
+      // 如果API没有返回数据，使用临时测试数据
+      console.log('API未返回数据，使用临时测试数据');
+      categoryOptions.value = [
+        { label: '自选分析课程', value: 'zi_jin_fen_xi_ke_cheng' },
+        { label: '其他课程', value: 'other_course' }
+      ];
     }
   } catch (error) { 
     console.error("获取课程分类失败", error);
     ElMessage.error('获取课程分类选项失败');
+    // 出错时也使用临时测试数据
+    categoryOptions.value = [
+      { label: '自选分析课程', value: 'zi_jin_fen_xi_ke_cheng' },
+      { label: '其他课程', value: 'other_course' }
+    ];
+  }
+};
+
+const fetchCoursewareCategories = async () => {
+  try {
+    const res = await getDictByType('courseware_category'); // 【API】获取课件分类字典
+    console.log('课件分类字典数据:', res);
+    if (res.code === 200 && res.data && res.data.length > 0) {
+      // 先打印第一个数据项看看字段结构
+      console.log('第一个课件分类项的字段结构:', res.data[0]);
+      
+      coursewareCategoryOptions.value = res.data.map(item => ({
+        label: item.dictLabel || item.label || item.name || '未知标签',
+        value: item.courseware_category || item.dictValue || item.value || item.id,
+      }));
+      console.log('处理后的课件分类选项:', coursewareCategoryOptions.value);
+    } else {
+      // 如果API没有返回数据，使用临时测试数据
+      console.log('API未返回课件分类数据，使用临时测试数据');
+      coursewareCategoryOptions.value = [
+        { label: '视频', value: 'video' },
+        { label: '文档', value: 'document' },
+        { label: '图片', value: 'image' }
+      ];
+    }
+  } catch (error) { 
+    console.error("获取课件分类失败", error);
+    ElMessage.error('获取课件分类选项失败');
+    // 出错时也使用临时测试数据
+    coursewareCategoryOptions.value = [
+      { label: '视频', value: 'video' },
+      { label: '文档', value: 'document' },
+      { label: '图片', value: 'image' }
+    ];
   }
 };
 
 // --- 事件处理 ---
+const getCategoryLabel = (categoryValue) => {
+  if (!categoryValue) return '未分类';
+  
+  // 尝试多种匹配方式
+  const category = categoryOptions.value.find(opt => 
+    String(opt.value) === String(categoryValue) ||
+    String(opt.dictValue) === String(categoryValue) ||
+    String(opt.courseCategory) === String(categoryValue)
+  );
+  
+  return category ? category.label : categoryValue;
+};
+
 const handleFilter = (data) => {
   Object.assign(filterParams, data);
   pagination.page = 1;
@@ -297,6 +466,17 @@ const handleCurrentChange = (newPage) => {
 
 const handleCreateCourse = () => {
   createDialogVisible.value = true;
+};
+
+const handleCreateAction = (command) => {
+  switch (command) {
+    case 'create':
+      handleCreateCourse();
+      break;
+    case 'import':
+      handleImportCourse();
+      break;
+  }
 };
 
 const resetCreateForm = () => {
@@ -443,7 +623,7 @@ const handleMoreActions = (command, row) => {
 
 const togglePublishStatus = (row, status) => {
   const actionText = status === 1 ? '发布' : '取消发布';
-  ElMessageBox.confirm(`确定要${actionText}课程 “${row.name}” 吗？`, '操作确认', { type: 'warning' })
+  ElMessageBox.confirm(`确定要${actionText}课程 "${row.name}" 吗？`, '操作确认', { type: 'warning' })
     .then(async () => {
       await updateCourseStatus({ id: row.id, status }); // 【API】更新课程状态
       ElMessage.success(`${actionText}成功！`);
@@ -451,9 +631,102 @@ const togglePublishStatus = (row, status) => {
     }).catch(() => {});
 };
 
+// --- 导入课程相关函数 ---
+const handleImportCourse = () => {
+  importDialogVisible.value = true;
+};
+
+const resetImportForm = () => {
+  if (importFormRef.value) {
+    importFormRef.value.resetFields();
+  }
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles();
+  }
+  importForm.file = null;
+  importForm.courseCategory = '';
+  importForm.coursewareCategory = '';
+  uploadProgress.value = 0;
+};
+
+const handleFileChange = (file) => {
+  importForm.file = file.raw; // 保留原始文件对象用于导入
+};
+
+const handleFileRemove = () => {
+  importForm.file = null;
+  uploadProgress.value = 0;
+};
+
+const submitImportCourse = async () => {
+  console.log('点击了确定按钮');
+  console.log('当前表单数据:', importForm);
+  
+  if (!importFormRef.value) {
+    console.log('表单引用不存在');
+    return;
+  }
+  
+  await importFormRef.value.validate(async (valid) => {
+    console.log('表单验证结果:', valid);
+    
+    if (valid) {
+      console.log('开始执行导入逻辑');
+      importLoading.value = true;
+      
+      try {
+        // 构建导入API的参数，传递原始文件对象
+        const formData = new FormData();
+        formData.append('file', importForm.file); // 传递原始文件对象
+        formData.append('courseCategory', importForm.courseCategory);
+        formData.append('coursewareCategory', importForm.coursewareCategory);
+        
+        console.log('开始导入课程，参数:', {
+          file: importForm.file.name,
+          courseCategory: importForm.courseCategory,
+          coursewareCategory: importForm.coursewareCategory,
+        });
+        
+        const res = await importFullCourse(formData);
+        
+        console.log('导入结果:', res);
+        
+        if (res.code === 200) {
+          ElMessage.success('课程导入成功！');
+          resetImportForm(); // 重置表单
+          importDialogVisible.value = false; // 关闭对话框
+          fetchCourses(); // 重新加载课程列表
+        } else {
+          ElMessage.error(res.msg || '导入失败');
+        }
+        
+      } catch (error) {
+        console.error('导入课程失败:', error);
+        let errorMessage = '导入失败';
+        if (error.message.includes('Required part')) {
+          errorMessage = '文件参数缺失，请重新选择文件';
+        } else if (error.message.includes('413') || error.message.includes('Request Entity Too Large')) {
+          errorMessage = '文件过大，超过服务器限制';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = '导入超时，请检查网络连接';
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        ElMessage.error(errorMessage);
+      } finally {
+        importLoading.value = false;
+      }
+    } else {
+      console.log('表单验证失败');
+      ElMessage.error('请填写完整的导入信息');
+    }
+  });
+};
+
 onMounted(() => {
   fetchCourses();
   fetchCategories();
+  fetchCoursewareCategories();
 });
 </script>
 
@@ -476,7 +749,7 @@ onMounted(() => {
 }
 .page-title {
   margin: 0 0 20px 0;
-  font-size: 24px;
+  font-size: 24px !important;
   font-weight: 600;
   color: #303133;
 }
@@ -508,5 +781,8 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.5;
   margin-top: 4px;
+}
+.progress-container {
+  margin-top: 16px;
 }
 </style>

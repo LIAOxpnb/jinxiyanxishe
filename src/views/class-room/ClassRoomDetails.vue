@@ -249,7 +249,7 @@
 
       </el-main>
 
-      <el-aside width="300px" class="sidebar-column">
+      <el-aside width="320px" class="sidebar-column">
         <el-card class="sidebar-card" shadow="never">
           <template #header>
             <div class="card-header">
@@ -274,11 +274,17 @@
                 :key="section.id" 
                 :index="`${chapter.id}-${section.id}`"
                 @click="handleSectionClick(section)"
-                :class="{ 'is-active-section': currentSection && currentSection.id === section.id }"
+                :class="{ 
+                  'is-active-section': currentSection && currentSection.id === section.id,
+                  'is-completed-section': completedSectionIds.has(section.id) && (!currentSection || currentSection.id !== section.id)
+                }"
               >
                 <div class="menu-item-content">
                   <el-icon v-if="currentSection && currentSection.id === section.id" class="playing-icon">
                     <VideoPlay />
+                  </el-icon>
+                  <el-icon v-else-if="completedSectionIds.has(section.id)" class="completed-icon" style="color: #67c23a; font-size: 18px;">
+                    <Check />
                   </el-icon>
                   <span>{{ section.name }}</span>
                 </div>
@@ -324,14 +330,15 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download, Loading, WarningFilled, Headset, FullScreen } from '@element-plus/icons-vue';
+import { VideoPlay, InfoFilled, Star, StarFilled, Document, Download, Loading, WarningFilled, Headset, FullScreen, Check } from '@element-plus/icons-vue';
 import { 
   getStudentCourseDetail, 
   getStudentCourseList,
   toggleCourseCollect, 
   getStudentSectionDetail,
   submitSection,
-  sendHeartbeat 
+  sendHeartbeat,
+  getCourseProgress 
 } from '@/api/classroom.js';
 // 移除单独的练习管理API引入，改用课程详情中的practiceList
 
@@ -369,6 +376,10 @@ let autoSubmitted = false;  // 文档/图片自动提交一次
 // 练习列表相关状态 - 从当前小节获取
 const practiceList = ref([]);
 const practiceLoading = ref(false);
+
+// 课程进度相关状态
+const courseProgress = ref({});
+const completedSectionIds = ref(new Set()); // 存储已完成的小节ID
 
 const currentCourseware = reactive({
   type: '',
@@ -835,6 +846,9 @@ const fetchCourseDetail = async () => {
       if (res.data.courseCategory) {
         fetchRecommendedCourses(res.data.courseCategory);
       }
+      
+      // 获取课程进度
+      fetchCourseProgress();
     } else {
       ElMessage.error(res.msg || '获取课程详情失败');
     }
@@ -858,7 +872,6 @@ const fetchInstructorInfo = async (creatorId) => {
       if (res.data.avatar) {
         try {
           courseDetail.instructorAvatar = await previewFile(res.data.avatar);
-          console.log('讲师头像URL:', courseDetail.instructorAvatar);
         } catch (error) {
           console.error('获取讲师头像失败:', error);
           courseDetail.instructorAvatar = '';
@@ -866,7 +879,6 @@ const fetchInstructorInfo = async (creatorId) => {
       } else {
         courseDetail.instructorAvatar = '';
       }
-      console.log('讲师信息:', res.data);
     } else {
       console.error('获取讲师信息失败:', res.msg);
       courseDetail.instructorName = '讲师';
@@ -922,13 +934,32 @@ const fetchRecommendedCourses = async (courseCategory) => {
           coverUrl: '' 
         }));
       }
-      
-      console.log('推荐课程:', recommendedCourses.value);
     }
   } catch (error) {
     console.error('获取推荐课程失败:', error);
   } finally {
     recommendLoading.value = false;
+  }
+};
+
+// 获取课程进度
+const fetchCourseProgress = async () => {
+  try {
+    const res = await getCourseProgress(courseId.value);
+    
+    if (res.code === 200 && res.data) {
+      // API 返回的 res.data 直接就是数组
+      const sectionsData = Array.isArray(res.data) ? res.data : [];
+      
+      // 根据 status 字段（1=已学）识别已完成的小节
+      const completedIds = sectionsData
+        .filter(section => section.status === 1)
+        .map(section => section.sectionId);
+      
+      completedSectionIds.value = new Set(completedIds);
+    }
+  } catch (error) {
+    console.error('获取课程进度失败:', error);
   }
 };
 
@@ -1086,26 +1117,37 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .details-page-container {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 20px auto;
   background-color: #fff;
   padding: 24px;
   box-sizing: border-box;
   overflow-x: hidden;
 }
+
+.details-page-container :deep(.el-container) {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
 .main-column {
   padding-right: 24px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
+
 .sidebar-column {
   border-left: 1px solid #e4e7ed;
   padding-left: 24px;
+  flex-shrink: 0;
 }
 .video-player-wrapper {
   margin-bottom: 24px;
 }
 .video-player {
   width: 100%;
-  height: 650px;
+  height: 720px;
   background-color: #000;
   border-radius: 8px;
   display: flex;
@@ -1120,7 +1162,7 @@ onBeforeUnmount(() => {
 }
 .audio-player {
   width: 100%;
-  height: 650px;
+  height: 720px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 8px;
   display: flex;
@@ -1416,7 +1458,7 @@ onBeforeUnmount(() => {
   padding: 16px 0;
 }
 .section-title {
-  font-size: 18px;
+  font-size: 18px !important;
   font-weight: 600;
   padding-left: 12px;
   border-left: 4px solid #409eff;
@@ -1535,12 +1577,13 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
-/* 活跃小节的特殊样式 */
+/* 活跃小节的特殊样式 - 优先级最高 */
 .syllabus-menu .el-menu-item.is-active-section {
   background-color: #ecf5ff !important;
   color: #409eff !important;
   font-weight: 500;
   border-left: 3px solid #409eff;
+  opacity: 1 !important;
 }
 
 .syllabus-menu .el-menu-item.is-active-section::before {
@@ -1557,6 +1600,39 @@ onBeforeUnmount(() => {
 .playing-icon {
   color: #409eff;
   font-size: 14px;
+}
+
+/* 已完成小节的样式 - 绿色高亮 */
+.syllabus-menu .el-menu-item.is-completed-section {
+  background-color: #f0f9ff !important;
+  border-left: 3px solid #67c23a !important;
+}
+
+.syllabus-menu .el-menu-item.is-completed-section > span {
+  color: #67c23a !important;
+  font-weight: 500 !important;
+}
+
+.syllabus-menu .el-menu-item.is-completed-section:hover {
+  background-color: #e6f7ff !important;
+}
+
+.syllabus-menu .el-menu-item.is-completed-section::before {
+  background-color: #67c23a !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.syllabus-menu .el-menu-item.is-completed-section:hover::before {
+  background-color: #67c23a !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.completed-icon {
+  color: #67c23a !important;
+  font-size: 16px !important;
+  flex-shrink: 0;
 }
 
 /* 移除旧的活跃样式，使用新的样式 */

@@ -1878,7 +1878,7 @@ onBeforeUnmount(() => {
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 16px !important;
   font-weight: 600;
   margin-bottom: 16px;
 }

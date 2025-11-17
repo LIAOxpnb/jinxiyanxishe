@@ -20,7 +20,7 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="考试名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="name" label="考试名称" min-width="120" show-overflow-tooltip />
         <el-table-column prop="status" label="发布" width="90" align="center">
           <template #default="scope">
             <el-tag
@@ -44,13 +44,13 @@
             {{ scope.row.duration === -1 ? '不限' : `${scope.row.duration}分` }}
            </template>
         </el-table-column>
-        <el-table-column prop="examCategoryName" label="分类" width="100" show-overflow-tooltip />
-        <el-table-column prop="questionCount" label="题数" width="70" align="center" />
-        <el-table-column prop="totalScore" label="总分" width="70" align="center" />
-        <el-table-column prop="submitCount" label="交卷" width="70" align="center" />
-        <el-table-column prop="qualifiedCount" label="合格" width="70" align="center" />
-        <el-table-column prop="creatorName" label="创建人" width="100" align="center" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="创建时间" width="155" show-overflow-tooltip />
+        <el-table-column prop="examCategoryName" label="分类" width="120" show-overflow-tooltip />
+        <el-table-column prop="questionCount" label="题数" width="80" align="center" />
+        <el-table-column prop="totalScore" label="总分" width="80" align="center" />
+        <el-table-column prop="submitCount" label="交卷" width="80" align="center" />
+        <el-table-column prop="qualifiedCount" label="合格" width="80" align="center" />
+        <el-table-column prop="creatorName" label="创建人" width="100" align="center"  />
+        <el-table-column prop="createTime" label="创建时间" width="170" show-overflow-tooltip />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEdit(scope.row)">考试设置</el-button>
@@ -549,7 +549,7 @@ onMounted(() => {
 }
 .page-title {
   margin: 0 0 20px 0;
-  font-size: 24px;
+  font-size: 24px !important;
   font-weight: 600;
   color: #303133;
 }

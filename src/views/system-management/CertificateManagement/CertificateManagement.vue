@@ -9,31 +9,31 @@
       <el-table v-loading="loading" :data="tableData" style="width: 100%"
         :header-cell-style="{ background: '#f5f7fa', color: '#606266' }" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="证书名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="courseCount" label="关联课程" width="100" align="center">
+        <el-table-column prop="name" label="证书名称" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="courseCount" label="关联课程" width="120" align="center">
           <template #default="scope">
             <span class="link-text" @click="handleViewCourses(scope.row)">{{ scope.row.courseCount || 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="examCount" label="关联考试" width="100" align="center">
+        <el-table-column prop="examCount" label="关联考试" width="120" align="center">
           <template #default="scope">
             <span class="link-text" @click="handleViewExams(scope.row)">{{ scope.row.examCount || 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="shootingRangeCount" label="关联靶场" width="100" align="center">
+        <el-table-column prop="shootingRangeCount" label="关联靶场" width="120" align="center">
           <template #default="scope">
             <span class="link-text" @click="handleViewShootingRanges(scope.row)">{{ scope.row.shootingRangeCount || 0
               }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="grantedUserCount" label="获得人数" width="100" align="center">
+        <el-table-column prop="grantedUserCount" label="获得人数" width="120" align="center">
           <template #default="scope">
             <span class="link-text" @click="handleViewGrantedUsers(scope.row)">{{ scope.row.grantedUserCount || 0
               }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="creatorName" label="创建人" width="120" />
-        <el-table-column prop="createTime" label="创建时间" width="180" />
+        <el-table-column prop="createTime" label="创建时间" width="220" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="scope">
             <el-button link type="primary" size="small" @click="handleEdit(scope.row)">编辑</el-button>

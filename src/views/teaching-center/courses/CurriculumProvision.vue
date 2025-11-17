@@ -163,7 +163,7 @@
                 </el-icon></el-button>
             </div>
           </template>
-          <el-image class="course-cover" :src="courseDetail.coverPreviewUrl" fit="cover"></el-image>
+          <el-image class="course-cover" :src="courseDetail.coverPreviewUrl || defaultCover" fit="cover"></el-image>
           <div class="info-item">
             <span class="info-label">课程名称</span>
             <span class="info-value">{{ courseDetail.name }}</span>
@@ -227,13 +227,11 @@
     />
 
     <SectionExercisesDialog
-      v-if="activeSection"
       :visible="exercisesDialogVisible"
       @update:visible="exercisesDialogVisible = $event"
       :section-data="activeSection"
     />
     <SectionMaterialsDialog
-      v-if="activeSection"
       :visible="materialsDialogVisible"
       @update:visible="materialsDialogVisible = $event"
       :section-data="activeSection"
@@ -255,6 +253,7 @@ import EditCourseInfoDialog from './EditCourseInfoDialog.vue';
 import EditScopeDialog from './EditScopeDialog.vue';
 import SectionExercisesDialog from './SectionExercisesDialog.vue';
 import SectionMaterialsDialog from './SectionMaterialsDialog.vue';
+import defaultCover from '@/assets/img/u71.png';
 
 const route = useRoute();
 const router = useRouter();
@@ -627,18 +626,20 @@ onMounted(() => {
   gap: 20px;
 }
 .left-panel {
-  flex: 3;
+  flex: 4;
   min-width: 0;
+  margin-top: 17px;
 }
 .right-panel {
   flex: 1;
-  min-width: 320px;
+  min-width: 180px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   position: sticky;
-  top: 20px;
+  top: 1px;
   align-self: flex-start;
+  height: fit-content;
 }
 .card-header {
   display: flex;
@@ -786,34 +787,40 @@ onMounted(() => {
   gap: 12px;
 }
 .info-card .el-card__body {
-  padding: 15px;
+  padding: 10px 12px;
 }
 .course-cover {
-  width: 100%;
-  height: 180px;
+  width: 60%;
+  height: auto;
+  aspect-ratio: 16/9;
   border-radius: 4px;
-  margin-bottom: 15px;
+  margin: 0 auto 8px;
+  display: block;
 }
 .info-item {
   display: flex;
   justify-content: space-between;
-  font-size: 14px;
-  margin-bottom: 12px;
+  font-size: 13px;
+  margin-bottom: 6px;
   color: #303133;
 }
 .info-label {
   color: #606266;
 }
 .setting-remark {
-  font-size: 12px;
+  font-size: 11px;
   color: #909399;
   background-color: #f5f7fa;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border-radius: 4px;
+  line-height: 1.3;
+}
+.setting-remark p {
+  margin: 1px 0;
 }
 .publish-btn {
   width: 100%;
-  height: 40px;
+  height: 36px;
 }
 
 /* 【仅此处有变动 Part 3】为禁用的图标添加样式 */

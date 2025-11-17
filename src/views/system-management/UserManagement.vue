@@ -535,21 +535,6 @@ const batchUserCount = computed(() => {
   return batchUserInput.value.trim().split('\n').filter(line => line.trim()).length
 })
 
-// 创建组织ID到名称的映射
-const createOrgMap = (orgTree) => {
-  const map = {}
-  const traverse = (nodes) => {
-    nodes.forEach(node => {
-      map[node.id] = node.orgName
-      if (node.children && node.children.length > 0) {
-        traverse(node.children)
-      }
-    })
-  }
-  traverse(orgTree)
-  return map
-}
-
 // 获取用户列表
 const fetchUserList = async () => {
   loading.value = true
@@ -563,18 +548,9 @@ const fetchUserList = async () => {
     
     const response = await getUserList(params)
     if (response.code === 200) {
-      // 接口返回的数据在 records 字段中
+      // 接口返回的数据在 records 字段中，直接使用后端返回的 orgName
       tableData.value = response.data?.records || []
       pagination.total = response.data?.total || 0
-      
-      // 处理组织名称显示（如果后端没有返回orgName，需要从组织树中匹配）
-      if (orgTreeData.value.length > 0) {
-        const orgMap = createOrgMap(orgTreeData.value)
-        tableData.value = tableData.value.map(user => ({
-          ...user,
-          orgName: orgMap[user.orgId] || '未知组织'
-        }))
-      }
     } else {
       ElMessage.error(response.msg || '获取用户列表失败')
       tableData.value = []
@@ -706,13 +682,6 @@ const handleFilter = (filters) => {
   currentFilters.value = filters
   pagination.pageNum = 1
   fetchUserList()
-}
-
-// 根据组织ID获取组织名称
-const getOrgName = (orgId) => {
-  if (!orgId || !orgTreeData.value.length) return '未知组织'
-  const orgMap = createOrgMap(orgTreeData.value)
-  return orgMap[orgId] || '未知组织'
 }
 
 // 从详情页跳转到编辑
