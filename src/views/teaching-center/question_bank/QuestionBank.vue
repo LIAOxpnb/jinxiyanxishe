@@ -186,13 +186,56 @@
               <Editor
                 ref="analysisEditorRef"
                 v-model="questionForm.analysis"
-                style="height: 200px; overflow-y: hidden;"
+                
                 :defaultConfig="analysisEditorConfig"
                 mode="default"
                 @onCreated="handleAnalysisCreated"
               />
             </div>
           </div>
+        </el-form-item>
+        <el-form-item label="题目详情" prop="details">
+          <el-radio-group v-model="showDetails">
+            <el-radio :label="false">无详情</el-radio>
+            <el-radio :label="true">设置详情</el-radio>
+          </el-radio-group>
+          <div v-if="showDetails" style="margin-top: 10px;">
+            <div style="border: 1px solid #ccc; width: 450px;">
+              <Toolbar
+                ref="detailsToolbarRef"
+                style="border-bottom: 1px solid #ccc"
+                :editor="detailsEditor"
+                :defaultConfig="{}"
+                mode="default"
+              />
+              <Editor
+                ref="detailsEditorRef"
+                v-model="questionForm.details"
+                
+                :defaultConfig="detailsEditorConfig"
+                mode="default"
+                @onCreated="handleDetailsCreated"
+              />
+              <!-- style="min-height: 330px; max-height: 300px; overflow-y: auto;" -->
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="附件上传" v-if="['论述', '简答'].includes(questionForm.questionType)">
+          <el-upload
+            ref="attachmentUploadRef"
+            :file-list="attachmentFileList"
+            :before-upload="beforeAttachmentUpload"
+            :on-change="handleAttachmentChange"
+            :on-remove="handleAttachmentRemove"
+            :auto-upload="false"
+            :limit="1"
+            accept=".pdf,.doc,.docx,.xls,.xlsx"
+          >
+            <el-button type="primary" size="small">选择文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 pdf、doc、docx、xls、xlsx 格式，文件大小不超过100MB</div>
+            </template>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -320,6 +363,14 @@ const analysisEditorRef = shallowRef();
 const analysisToolbarRef = ref();
 const analysisEditor = shallowRef();
 
+const detailsEditorRef = shallowRef();
+const detailsToolbarRef = ref();
+const detailsEditor = shallowRef();
+
+// 附件上传相关
+const attachmentUploadRef = ref();
+const attachmentFileList = ref([]);
+
 // --- 筛选栏选项配置 ---
 
 // 【修改点】分类选项保持从字典API动态获取
@@ -364,6 +415,7 @@ const createOptions = ref([
 const dialogVisible = ref(false);
 const formRef = ref(null);
 const showAnalysis = ref(false);
+const showDetails = ref(false);
 const questionForm = reactive({
   id: null,
   questionType: '单选',
@@ -375,8 +427,32 @@ const questionForm = reactive({
   analysis: '',
   details: '',
   answer: '',
+  fileName: '',
+  filePath: '',
 });
 const rules = reactive({});
+
+// 统一的图片上传处理函数
+const handleImageUpload = (file, insertFn) => {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过5MB');
+    return;
+  }
+  
+  uploadFiles([file]).then(async (uploadRes) => {
+    if (uploadRes && uploadRes.code === 200 && uploadRes.data) {
+      const relativePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+      const previewUrl = await previewFile(relativePath);
+      insertFn(previewUrl, file.name, previewUrl);
+      ElMessage.success('图片上传成功');
+    } else {
+      ElMessage.error(uploadRes.msg || '图片上传失败');
+    }
+  }).catch((error) => {
+    console.error('上传或预览过程中出错:', error);
+    ElMessage.error(error.message || '图片上传失败');
+  });
+};
 
 // 富文本编辑器配置
 const analysisEditorConfig = {
@@ -386,6 +462,11 @@ const analysisEditorConfig = {
       fieldName: 'file',
       maxFileSize: 5 * 1024 * 1024, // 5M
       allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
       customBrowseAndUpload(insertFn) {
         const input = document.createElement('input');
         input.type = 'file';
@@ -393,29 +474,35 @@ const analysisEditorConfig = {
         input.onchange = function(event) {
           const file = event.target.files[0];
           if (!file) return;
-          
-          if (file.size > 5 * 1024 * 1024) {
-            ElMessage.error('图片大小不能超过5MB');
-            return;
-          }
-          
-          uploadFiles([file]).then(async (uploadRes) => {
-            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
-              const relativePath = uploadRes.data;
-              
-              // 获取预览URL
-              const previewUrl = await previewFile(relativePath);
-              
-              // 插入图片到编辑器
-              insertFn(previewUrl, file.name, previewUrl);
-              ElMessage.success('图片上传成功');
-            } else {
-              ElMessage.error(uploadRes.msg || '图片上传失败');
-            }
-          }).catch((error) => {
-            console.error('上传或预览过程中出错:', error);
-            ElMessage.error(error.message || '图片上传失败');
-          });
+          handleImageUpload(file, insertFn);
+        };
+        input.click();
+      }
+    }
+  }
+};
+
+// details 富文本编辑器配置
+const detailsEditorConfig = {
+  placeholder: '请输入题目详情...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          handleImageUpload(file, insertFn);
         };
         input.click();
       }
@@ -729,7 +816,40 @@ const handleEditQuestion = async (row) => {
           { value: '1', text: '错误' }
         ];
         questionForm.answer = data.answer;
+        questionForm.details = ''; // 判断题不使用 details 作为富文本
+      } else if (data.questionType === '填空') {
+        // 填空题直接设置答案
+        questionForm.answer = data.answer;
+        questionForm.options = [];
+        // 转换填空题详情中的图片URL
+        if (data.details) {
+          questionForm.details = await convertImagesToPreviewUrls(data.details);
+        } else {
+          questionForm.details = '';
+        }
+      } else if (data.questionType === '论述' || data.questionType === '简答') {
+        // 论述题和简答题的 details 是富文本内容，需要转换图片URL
+        if (data.details) {
+          questionForm.details = await convertImagesToPreviewUrls(data.details);
+        } else {
+          questionForm.details = '';
+        }
+        questionForm.options = [];
+        questionForm.answer = data.answer || '';
+        // 加载附件信息
+        questionForm.fileName = data.fileName || '';
+        questionForm.filePath = data.filePath || '';
+        if (data.fileName && data.filePath) {
+          attachmentFileList.value = [{
+            name: data.fileName,
+            url: data.filePath,
+            uid: Date.now()
+          }];
+        } else {
+          attachmentFileList.value = [];
+        }
       } else {
+        // 单选、多选题的 details 是选项的 JSON 数据
         let parsedOptions = [];
         try {
           parsedOptions = JSON.parse(data.details || '[]');
@@ -746,9 +866,11 @@ const handleEditQuestion = async (row) => {
         if (questionForm.questionType === '单选' || questionForm.questionType === '填空') {
           questionForm.answer = data.answer;
         }
+        questionForm.details = ''; // 单选、多选题不使用 details 作为富文本
       }
 
       showAnalysis.value = !!data.analysis;
+      showDetails.value = !!(data.questionType === '论述' || data.questionType === '简答') && !!data.details;
       dialogVisible.value = true;
     } else {
       ElMessage.error(res.msg || '获取题目详情失败');
@@ -764,22 +886,31 @@ const handleSubmit = async () => {
     const correctAnswers = [];
     questionForm.options.forEach(opt => { if (opt.isCorrect) correctAnswers.push(opt.value); });
     finalAnswer = correctAnswers.join('#@#');
+    // 多选题的 details 存储选项 JSON
     detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
       option: uiOpt.value,
       value: uiOpt.text
     })));
   } else if (questionForm.questionType === '单选') {
     finalAnswer = questionForm.answer;
+    // 单选题的 details 存储选项 JSON
     detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
       option: uiOpt.value,
       value: uiOpt.text
     })));
+  } else if (questionForm.questionType === '论述' || questionForm.questionType === '简答') {
+    // 论述题和简答题的 details 存储富文本内容
+    finalAnswer = questionForm.answer;
+    detailsForBackend = showDetails.value ? removeOuterPTag(questionForm.details) : '';
   } else if (questionForm.questionType === '判断') {
     finalAnswer = questionForm.answer;
     detailsForBackend = ''; // 判断题不需要details
   } else {
+    // 其他题型（填空）
     finalAnswer = questionForm.answer;
-    detailsForBackend = '';
+    detailsForBackend = questionForm.questionType === '填空' && showDetails.value 
+      ? removeOuterPTag(questionForm.details) 
+      : '';
   }
 
   try {
@@ -794,6 +925,13 @@ const handleSubmit = async () => {
       details: detailsForBackend,
       answer: finalAnswer,
     };
+    
+    // 如果是论述题或简答题，添加附件信息
+    if (questionForm.questionType === '论述' || questionForm.questionType === '简答') {
+      dataToSubmit.fileName = questionForm.fileName || '';
+      dataToSubmit.filePath = questionForm.filePath || '';
+    }
+    
     await updateQuestion(dataToSubmit);
     ElMessage.success('修改成功！');
     dialogVisible.value = false;
@@ -984,11 +1122,69 @@ const handleAnalysisCreated = (editor) => {
   analysisEditor.value = editor;
 };
 
+const handleDetailsCreated = (editor) => {
+  detailsEditor.value = editor;
+};
+
+// 附件上传相关函数
+const beforeAttachmentUpload = (file) => {
+  const validExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+  const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+  const isValidType = validExtensions.includes(fileExtension);
+  const isValidSize = file.size / 1024 / 1024 < 100; // 100MB
+
+  if (!isValidType) {
+    ElMessage.error('只能上传 pdf、doc、docx、xls、xlsx 格式的文件!');
+    return false;
+  }
+  if (!isValidSize) {
+    ElMessage.error('文件大小不能超过 100MB!');
+    return false;
+  }
+  return true;
+};
+
+const handleAttachmentChange = async (uploadFile) => {
+  if (!uploadFile.raw) return;
+  
+  try {
+    const response = await uploadFiles([uploadFile.raw]);
+    if (response.code === 200) {
+      questionForm.fileName = uploadFile.name;
+      questionForm.filePath = response.data;
+      attachmentFileList.value = [{
+        name: uploadFile.name,
+        url: response.data,
+        uid: uploadFile.uid
+      }];
+      ElMessage.success('附件上传成功');
+    } else {
+      ElMessage.error(response.msg || '附件上传失败');
+      attachmentFileList.value = [];
+    }
+  } catch (error) {
+    console.error('附件上传错误:', error);
+    ElMessage.error('附件上传失败');
+    attachmentFileList.value = [];
+  }
+};
+
+const handleAttachmentRemove = () => {
+  questionForm.fileName = '';
+  questionForm.filePath = '';
+  attachmentFileList.value = [];
+  ElMessage.success('附件已移除');
+};
+
 // 组件销毁前清理编辑器
 onBeforeUnmount(() => {
   const editor = analysisEditor.value;
   if (editor == null) return;
   editor.destroy();
+  
+  const detailsEditorInstance = detailsEditor.value;
+  if (detailsEditorInstance == null) return;
+  detailsEditorInstance.destroy();
 });
 
 watch(() => [pagination.page, pagination.size], () => {
@@ -1253,10 +1449,30 @@ const downloadErrorResult = () => {
   color: #909399 !important;
 }
 
-/* 默认插入图片的显示比例（无内联样式时生效），用户通过编辑器工具栏更改样式会覆盖 */
-:deep(.w-e-text-container img) {
-  width: 50%;
-  height: auto;
-  max-width: none;
+/* 富文本编辑器全屏样式 - 解决全屏时被弹窗遮挡的问题 */
+:deep(.w-e-full-screen-container) {
+  z-index: 3000 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: #fff;
 }
-</style>2
+
+/* 全屏模式下，移除外层div的宽度限制和边框 */
+:deep(.w-e-full-screen-container) > div {
+  width: 100% !important;
+  border: none !important;
+}
+
+/* 全屏模式下，富文本编辑区域有滚动条，图片不限制宽度 */
+:deep(.w-e-full-screen-container .w-e-text-container) {
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+}
+
+:deep(.w-e-full-screen-container img) {
+  max-width: none !important;
+}
+</style>

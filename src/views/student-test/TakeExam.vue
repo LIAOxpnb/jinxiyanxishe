@@ -18,12 +18,17 @@
                 <span style="float: right;">{{ answeredCount }}/{{ questionList.length }}</span>
               </div>
             </template>
-            <div class="question-nav-grid">
-              <div v-for="(q, index) in questionList" :key="q.questionId" class="nav-item" :class="{
-                'answered': isAnswered(q.question.id),
-                'current': currentQuestionIndex === index
-              }" @click="goToQuestion(index)">
-                {{ index + 1 }}
+            <div class="answer-sheet-content">
+              <div v-for="group in groupedQuestions" :key="group.type" class="question-group">
+                <div class="group-title">{{ group.type }}</div>
+                <div class="question-nav-grid">
+                  <div v-for="q in group.questions" :key="q.questionId" class="nav-item" :class="{
+                    'answered': isAnswered(q.question.id),
+                    'current': currentQuestionIndex === q.originalIndex
+                  }" @click="goToQuestion(q.originalIndex)">
+                    {{ q.originalIndex + 1 }}
+                  </div>
+                </div>
               </div>
             </div>
           </el-card>
@@ -36,7 +41,10 @@
             :key="questionList[currentQuestionIndex].questionId" 
             :question-data="questionList[currentQuestionIndex]"
             :index="currentQuestionIndex" 
-            v-model="answers[questionList[currentQuestionIndex].question.id]" 
+            :model-value="answers[questionList[currentQuestionIndex].question.id]"
+            @update:model-value="(val) => handleAnswerUpdate(questionList[currentQuestionIndex].question.id, val)"
+            :attachment="attachments[questionList[currentQuestionIndex].question.id] || {}"
+            @update:attachment="handleAttachmentUpdate"
           />
 
           <!-- 翻页按钮 -->
@@ -75,6 +83,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getStudentExamDetail, submitStudentExamPaper, submitStudentExamRecord, saveRecordUseTime, getRecordUseTime } from '@/api/exams.js';
 import TakeExamQuestionCard from '@/components/exam/TakeExamQuestionCard.vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const route = useRoute();
 const router = useRouter();
@@ -85,12 +94,64 @@ const examId = ref(null);
 const examDetails = ref(null);
 const questionList = ref([]);
 const answers = reactive({});
+const attachments = reactive({}); // 【新增】存储每个题目的附件信息 { questionId: { fileName, filePath } }
 const currentQuestionIndex = ref(0);
 const examRecordId = ref(null);
 const isExamSubmitted = ref(false);
 const isRestoringAnswers = ref(false);
 let saveTimeout = null;
-let lastSavedState = ''; // 【新增】跟踪上次保存的状态
+const changedQuestionIds = new Set(); // 【新增】跟踪有变更的题目ID
+
+const groupedQuestions = computed(() => {
+  const groups = {};
+  
+  questionList.value.forEach((q, index) => {
+    // 确保 questionType 存在，如果不存在归类为"其他"
+    const type = q.question.questionType || '其他';
+    if (!groups[type]) {
+      groups[type] = [];
+    }
+    groups[type].push({
+      ...q,
+      originalIndex: index
+    });
+  });
+  
+  const result = [];
+  // 定义排序顺序
+  const typeOrder = ['单选', '多选', '判断', '填空', '简答', '论述', '其他'];
+  
+  // 按预定顺序添加存在的组
+  typeOrder.forEach(type => {
+    // 尝试精确匹配
+    let matchedType = type;
+    if (!groups[matchedType]) {
+      // 尝试模糊匹配（例如 "单选" 匹配 "单选题"）
+      const foundKey = Object.keys(groups).find(key => key.includes(type));
+      if (foundKey) {
+        matchedType = foundKey;
+      }
+    }
+
+    if (groups[matchedType]) {
+      result.push({
+        type: matchedType,
+        questions: groups[matchedType]
+      });
+      delete groups[matchedType];
+    }
+  });
+  
+  // 添加未在预定顺序中的其他组
+  Object.keys(groups).forEach(type => {
+    result.push({
+      type: type,
+      questions: groups[type]
+    });
+  });
+  
+  return result;
+});
 
 // --- 倒计时逻辑 ---
 let timerInterval = null;
@@ -105,20 +166,77 @@ const formattedCountdown = computed(() => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 });
 
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
 const startTimer = (durationMinutes) => {
   if (durationMinutes <= 0 || durationMinutes === -1) {
     remainingSeconds.value = Infinity;
     return;
   }
-  remainingSeconds.value = durationMinutes * 60;
+  
+  // 计算提醒阈值
+  const totalSeconds = (examDetails.value?.duration || 0) * 60;
+  const halfTime = Math.floor(totalSeconds * 0.5);
+  const quarterTime = Math.floor(totalSeconds * 0.25);
+
+  remainingSeconds.value = Math.floor(durationMinutes * 60);
+  
   timerInterval = setInterval(() => {
     if (remainingSeconds.value > 0) {
       remainingSeconds.value--;
       usedSeconds.value++; // 增加已使用时间
+      
+      // 时间提醒
+      if (remainingSeconds.value === halfTime) {
+        ElMessageBox.alert('考试时间已经过半，请注意答题进度', '时间提醒', {
+          confirmButtonText: '我知道了',
+          type: 'warning',
+        });
+      }
+      if (remainingSeconds.value === quarterTime) {
+        ElMessageBox.alert('考试时间仅剩1/4，请抓紧时间', '时间提醒', {
+          confirmButtonText: '我知道了',
+          type: 'warning',
+        });
+      }
     } else {
       clearInterval(timerInterval);
       ElMessage.warning('考试时间到,系统将自动交卷!');
-      submitExam();
+      submitExam(true);
     }
   }, 1000);
   
@@ -128,7 +246,7 @@ const startTimer = (durationMinutes) => {
   }, 10000);
 };
 
-// 保存已使用时间
+// 
 const saveUsedTime = async () => {
   if (!examRecordId.value || examRecordId.value <= 0) {
     return;
@@ -219,6 +337,33 @@ onBeforeUnmount(() => {
 });
 
 // --- 页面逻辑 ---
+// 【新增】处理附件更新
+const handleAttachmentUpdate = (attachmentInfo) => {
+  if (isRestoringAnswers.value) return;
+
+  const { questionId, fileName, filePath } = attachmentInfo;
+  // 只更新 attachments 对象，不要修改 questionList 中的 question 对象
+  attachments[questionId] = { fileName, filePath };
+  
+  console.log('📎 附件更新:', { questionId, fileName, filePath });
+  console.log('📋 当前所有附件:', attachments);
+  
+  // 标记题目为已变更
+  changedQuestionIds.add(questionId);
+  
+  // 附件更新后触发暂存
+  debounceSaveExamRecord();
+};
+
+// 【新增】处理答案更新
+const handleAnswerUpdate = (questionId, val) => {
+  if (isRestoringAnswers.value) return;
+  
+  answers[questionId] = val;
+  changedQuestionIds.add(questionId);
+  debounceSaveExamRecord();
+};
+
 const answeredCount = computed(() => {
   return Object.values(answers).filter(ans => {
     if (Array.isArray(ans)) return ans.some(item => item !== null && item !== '');
@@ -263,7 +408,7 @@ const confirmSubmit = () => {
   }).catch(() => { });
 };
 
-const submitExam = async () => {
+const submitExam = async (isForced = false) => {
   if (submitting.value) return;
 
   if (!examRecordId.value) {
@@ -278,17 +423,27 @@ const submitExam = async () => {
     // 交卷前先保存一次时间
     await saveUsedTime();
     
-    const res = await submitStudentExamPaper(examRecordId.value);
+    const res = await submitStudentExamPaper(examRecordId.value, isForced ? 1 : undefined);
     if (res.code === 200) {
       ElMessage.success('交卷成功!');
       router.push({ name: 'Student-Exams' });
     } else {
       ElMessage.error(res.msg || '交卷失败');
-      isExamSubmitted.value = false;
+      // 如果是强制交卷且后端返回了成功，也要跳转
+      if (isForced) {
+        router.push({ name: 'Student-Exams' });
+      } else {
+        isExamSubmitted.value = false;
+      }
     }
   } catch (error) {
     ElMessage.error('交卷失败,请检查网络连接');
-    isExamSubmitted.value = false;
+    // 如果是强制交卷，发生异常也要跳转
+    if (isForced) {
+      router.push({ name: 'Student-Exams' });
+    } else {
+      isExamSubmitted.value = false;
+    }
   } finally {
     submitting.value = false;
   }
@@ -296,15 +451,33 @@ const submitExam = async () => {
 
 // 暂存答题记录
 const saveExamRecord = async () => {
-  const examSubmitRecordList = questionList.value.map(q => {
+  // 如果没有变更的题目，不需要保存
+  // ...
+  if (changedQuestionIds.size === 0) return;
+
+  // 获取当前需要保存的题目ID快照
+  const idsToSave = Array.from(changedQuestionIds);
+  
+  // 筛选出需要保存的题目
+  const questionsToSave = questionList.value.filter(q => idsToSave.includes(q.question.id));
+  
+  if (questionsToSave.length === 0) return;
+
+  const examSubmitRecordList = questionsToSave.map(q => {
     let userAnswer = answers[q.question.id];
     if (Array.isArray(userAnswer)) {
       userAnswer = userAnswer.filter(a => a !== null && a !== '').join('#@#');
     }
+    
+    // 【修改】添加附件信息
+    const attachment = attachments[q.question.id] || {};
+    
     return {
       questionId: q.question.id,
       userAnswer: userAnswer || '',
-      details: q.question.details
+      details: q.question.details,
+      fileName: attachment.fileName || '',
+      filePath: attachment.filePath || ''
     };
   });
 
@@ -322,8 +495,9 @@ const saveExamRecord = async () => {
     
     if (res.code === 200 && res.data && res.data.id) {
       examRecordId.value = res.data.id;
-      // 【新增】保存成功后更新 lastSavedState
-      lastSavedState = JSON.stringify(answers);
+      
+      // 保存成功后，从变更集合中移除已保存的ID
+      idsToSave.forEach(id => changedQuestionIds.delete(id));
     }
   } catch (error) {
     // 静默处理错误
@@ -340,45 +514,44 @@ const debounceSaveExamRecord = () => {
   }, 1000);
 };
 
-// 【修改】监听答案变化,自动暂存 - 添加序列化比较
-watch(answers, (newVal) => {
-  if (!isRestoringAnswers.value) {
-    // 序列化当前状态
-    const currentState = JSON.stringify(newVal);
-    // 只有当序列化后的值真的变化时才保存
-    if (currentState !== lastSavedState) {
-      lastSavedState = currentState;
-      debounceSaveExamRecord();
-    }
-  }
-}, { deep: true });
-
 // 处理页面关闭前的警告和暂存
 const handleBeforeUnload = (e) => {
-  if (!isExamSubmitted.value && examRecordId.value) {
+  if (!isExamSubmitted.value && examRecordId.value && changedQuestionIds.size > 0) {
     try {
-      const examSubmitRecordList = questionList.value.map(q => {
-        let userAnswer = answers[q.question.id];
-        if (Array.isArray(userAnswer)) {
-          userAnswer = userAnswer.filter(a => a !== null && a !== '').join('#@#');
+      // 仅保存有变更的题目
+      const idsToSave = Array.from(changedQuestionIds);
+      const questionsToSave = questionList.value.filter(q => idsToSave.includes(q.question.id));
+
+      if (questionsToSave.length > 0) {
+        const examSubmitRecordList = questionsToSave.map(q => {
+          let userAnswer = answers[q.question.id];
+          if (Array.isArray(userAnswer)) {
+            userAnswer = userAnswer.filter(a => a !== null && a !== '').join('#@#');
+          }
+          
+          // 【修改】添加附件信息
+          const attachment = attachments[q.question.id] || {};
+          
+          return {
+            questionId: q.question.id,
+            userAnswer: userAnswer || '',
+            details: q.question.details,
+            fileName: attachment.fileName || '',
+            filePath: attachment.filePath || ''
+          };
+        });
+
+        const payload = {};
+        if (examRecordId.value) {
+          payload.id = examRecordId.value;
         }
-        return {
-          questionId: q.question.id,
-          userAnswer: userAnswer || '',
-          details: q.question.details
-        };
-      });
+        payload.examId = examId.value;
+        payload.examSubmitRecordList = examSubmitRecordList;
 
-      const payload = {};
-      if (examRecordId.value) {
-        payload.id = examRecordId.value;
+        const url = '/api/student/exam/submitRecord';
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
       }
-      payload.examId = examId.value;
-      payload.examSubmitRecordList = examSubmitRecordList;
-
-      const url = '/api/student/exam/submitRecord';
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-      navigator.sendBeacon(url, blob);
     } catch (error) {
       // 静默处理错误
     }
@@ -410,7 +583,23 @@ onMounted(async () => {
     
     if (res.code === 200) {
       examDetails.value = res.data;
-      questionList.value = res.data.examQuestionList || [];
+      
+      // 处理题目列表并转换图片URL
+      const processedQuestions = await Promise.all(
+        (res.data.examQuestionList || []).map(async (q) => {
+          // 转换题目详情中的图片
+          if (q.question && q.question.details) {
+            q.question.details = await convertImagesToPreviewUrls(q.question.details);
+          }
+          // 转换题目标题中的图片
+          if (q.question && q.question.title) {
+            q.question.title = await convertImagesToPreviewUrls(q.question.title);
+          }
+          return q;
+        })
+      );
+      
+      questionList.value = processedQuestions;
       
       if (res.data.examRecord && res.data.examRecord.id) {
         if (!isRestart) {
@@ -441,7 +630,8 @@ onMounted(async () => {
         }
         
         // 2. 如果是继续答题且有保存的答案,恢复答案
-        if (recordId && !isRestart && userAnswer) {
+        // 【修复】不再依赖 URL 中的 recordId，而是根据接口返回的 examRecordId 判断
+        if (examRecordId.value && !isRestart && userAnswer) {
           hasRestoredAnswers = true;
           
           if (questionType === '填空') {
@@ -467,10 +657,29 @@ onMounted(async () => {
             answers[questionId] = userAnswer;
           }
         }
+        
+        // 【修复】3. 恢复学生答题附件信息（从 examSubmitRecord 中读取，而不是 question）
+        // question.fileName/filePath 是题目本身的附件，不能混淆
+        if (examRecordId.value && !isRestart) {
+          // 假设后端在 question 的某个字段返回学生的附件信息
+          // 需要根据实际后端返回的数据结构调整
+          // 如果是在 examSubmitRecord 中，则需要从那里读取
+          const studentFileName = q.studentFileName || q.userFileName || '';
+          const studentFilePath = q.studentFilePath || q.userFilePath || '';
+          
+          if (studentFileName || studentFilePath) {
+            attachments[questionId] = { 
+              fileName: studentFileName, 
+              filePath: studentFilePath 
+            };
+            console.log('恢复学生答题附件:', { questionId, studentFileName, studentFilePath });
+          }
+        }
       });
       
       // 【新增】初始化 lastSavedState,避免恢复后立即触发保存
-      lastSavedState = JSON.stringify(answers);
+      // lastSavedState = JSON.stringify({ answers, attachments }); // 已移除
+      
       
       if (hasRestoredAnswers) {
         ElMessage.success('已恢复之前的答题记录');
@@ -483,19 +692,19 @@ onMounted(async () => {
       currentQuestionIndex.value = 0;
       
       // 获取已使用时间并启动计时器
-      console.log('📋 检查是否需要恢复时间:', {
+      console.log('检查是否需要恢复时间:', {
         recordId,
         isRestart,
         examRecordId: examRecordId.value,
-        condition: recordId && !isRestart && examRecordId.value && examRecordId.value > 0
+        condition: !isRestart && examRecordId.value && examRecordId.value > 0
       });
       
-      if (recordId && !isRestart && examRecordId.value && examRecordId.value > 0) {
-        console.log('✅ 满足条件，开始获取已使用时间');
+      if (!isRestart && examRecordId.value && examRecordId.value > 0) {
+        console.log('满足条件，开始获取已使用时间');
         // 继续答题：获取已使用时间
         const usedTime = await getUsedTime();
         usedSeconds.value = usedTime;
-        console.log('⏱️ 已使用时间(秒):', usedTime);
+        console.log('已使用时间(秒):', usedTime);
         
         // 根据已使用时间调整剩余时间
         if (examDetails.value.duration > 0) {
@@ -512,7 +721,7 @@ onMounted(async () => {
           } else {
             // 时间已用完，自动交卷
             ElMessage.warning('考试时间已用完,系统将自动交卷!');
-            submitExam();
+            submitExam(true);
             return;
           }
         } else {
@@ -651,6 +860,20 @@ onBeforeRouteLeave((to, from, next) => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
   gap: 10px;
+}
+
+.group-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 15px 0 10px;
+  color: #303133;
+  padding-left: 4px;
+  border-left: 3px solid #409eff;
+  line-height: 1.2;
+}
+
+.question-group:first-child .group-title {
+  margin-top: 0;
 }
 
 .nav-item {

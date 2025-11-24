@@ -6,6 +6,12 @@
     </div>
     <div class="question-title" v-html="questionData.title"></div>
 
+    <!-- 论述题详情 -->
+    <div class="details-wrapper" v-if="['论述', '简答'].includes(questionData.questionType) && questionData.details">
+      <p class="details-title">详情：</p>
+      <div class="details-content" v-html="questionData.details"></div>
+    </div>
+
     <div class="answer-area">
       <el-radio-group v-if="questionData.questionType === '单选'" v-model="answerModel" :disabled="disabled">
         <el-radio v-for="opt in displayOptions" :key="opt.displayOption" :label="opt.originalOption" size="large">
@@ -61,7 +67,8 @@ const answerModel = computed({
 });
 
 const displayOptions = computed(() => {
-  if (props.questionData.details) {
+  // 只有单选、多选题才解析 details 为选项
+  if (['单选', '多选'].includes(props.questionData.questionType) && props.questionData.details) {
     try {
       const originalOptions = JSON.parse(props.questionData.details);
       return originalOptions.map((opt, index) => ({
@@ -90,9 +97,40 @@ const blankCount = computed(() => {
 
 <style scoped>
 /* 样式与 TakeExamQuestionCard.vue 保持一致 */
-.question-card { border: none; box-shadow: none; }
+.question-card { 
+  border: none; 
+  box-shadow: none; 
+  max-height: 80vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .question-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 16px; }
 .question-title { font-size: 15px; line-height: 1.7; color: #303133; margin-bottom: 20px; }
+.details-wrapper {
+  margin-top: 12px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 13px;
+}
+.details-content, .details-content p {
+  font-size: 13px;
+  margin: 0;
+  color: #606266;
+}
+.details-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
 .el-radio-group, .el-checkbox-group { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; }
 .blank-fill-item { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
 .blank-fill-item span { font-size: 14px; font-weight: 500; min-width: 60px; }

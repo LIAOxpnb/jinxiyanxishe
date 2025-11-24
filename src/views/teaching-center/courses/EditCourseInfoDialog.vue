@@ -115,7 +115,55 @@ const emit = defineEmits(['update:visible', 'success']);
 // --- 富文本编辑器相关 ---
 const editorRef = shallowRef();
 const toolbarConfig = {};
-const editorConfig = { placeholder: '请输入内容...' };
+
+// 统一的图片上传处理函数
+const handleImageUpload = (file, insertFn) => {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过5MB');
+    return;
+  }
+  
+  uploadFiles([file]).then(async (uploadRes) => {
+    if (uploadRes && uploadRes.code === 200 && uploadRes.data) {
+      const relativePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+      const previewUrl = await previewFile(relativePath);
+      insertFn(previewUrl, file.name, previewUrl);
+      ElMessage.success('图片上传成功');
+    } else {
+      ElMessage.error(uploadRes.msg || '图片上传失败');
+    }
+  }).catch((error) => {
+    console.error('上传或预览过程中出错:', error);
+    ElMessage.error(error.message || '图片上传失败');
+  });
+};
+
+const editorConfig = {
+  placeholder: '请输入内容...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          handleImageUpload(file, insertFn);
+        };
+        input.click();
+      }
+    }
+  }
+};
 
 // 组件销毁时，也及时销毁编辑器
 onBeforeUnmount(() => {
@@ -360,5 +408,23 @@ const submitForm = async () => {
   font-size: 12px;
   line-height: 1.5;
   align-self: center;
+}
+
+/* 富文本编辑器图片样式 */
+:deep(.w-e-text-container img) {
+  width: 50%;
+  height: auto;
+  max-width: none;
+}
+
+/* 富文本编辑器全屏样式 - 解决全屏时被弹窗遮挡的问题 */
+:deep(.w-e-full-screen-container) {
+  z-index: 3000 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: #fff;
 }
 </style>

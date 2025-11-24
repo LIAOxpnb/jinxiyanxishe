@@ -232,9 +232,14 @@ const handleCurrentChange = (newPage) => {
 
 // [核心修改] 点击标题是进入考试的主要入口
 const handleTitleClick = (row) => {
-  // 场景1：未开始(0)和进行中(1)的考试
-  if (row.examStatus === 0 || row.examStatus === 1) {
-    
+  // 场景1：未开始的考试(0)，提示未开始
+  if (row.examStatus === 0) {
+    ElMessage.warning('当前考试尚未开始，无法参加考试');
+    return;
+  }
+  
+  // 场景2：进行中的考试(1)
+  if (row.examStatus === 1) {
     // 【第1道关卡：检查考试次数是否用完】
     // (row.attempts !== -1) 意味着 "次数有限制"
     // (row.attemptedTimes || 0) >= row.attempts 意味着 "已用次数 >= 总次数"
@@ -266,7 +271,7 @@ const handleTitleClick = (row) => {
     // --- 允许跳转 ---
     // 能运行到这里，说明：
     // 1. 考试次数未用完 (或不限制)
-    // 2. 并且，没有“正在处理中”的考卷
+    // 2. 并且，没有"正在处理中"的考卷
     //
     // 允许跳转的场景:
     // 1. !row.examRecord (首次尝试)
@@ -275,12 +280,12 @@ const handleTitleClick = (row) => {
     router.push({ name: 'Student-ExamStart', params: { id: row.id } });
     
   } 
-  // 场景2：已结束的考试(2)，提示已结束
+  // 场景3：已结束的考试(2)，提示已结束
   else if (row.examStatus === 2) {
     ElMessage.warning('当前考试已结束，无法参加考试');
     return;
   }
-  // 场景3：其他状态
+  // 场景4：其他状态
   else {
     ElMessage.warning('考试状态异常，无法参加');
     return;

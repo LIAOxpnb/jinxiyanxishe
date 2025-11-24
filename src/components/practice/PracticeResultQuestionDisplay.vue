@@ -10,6 +10,12 @@
       </div>
       <div class="question-title" v-html="processedTitle"></div>
 
+      <!-- 论述题详情 -->
+      <div class="details-wrapper" v-if="['论述', '简答'].includes(record.question.questionType) && processedDetails">
+        <p class="details-title">详情：</p>
+        <div class="details-content" v-html="processedDetails"></div>
+      </div>
+
       <div class="answer-area">
         <el-radio-group v-if="record.question.questionType === '单选'" :model-value="record.userAnswer" disabled>
           <el-radio v-for="opt in parsedOptions" :key="opt.option" :label="opt.option" size="large">
@@ -30,7 +36,13 @@
         </div>
 
       <div class="feedback-section">
-        <p><strong>你的答案：</strong> <span :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">{{ formatUserAnswer(record.userAnswer) || '未作答' }}</span></p>
+        <!-- 论述题/简答题使用富文本显示 -->
+        <div v-if="['论述', '简答'].includes(record.question.questionType)">
+          <p><strong>你的答案：</strong></p>
+          <div class="essay-answer-content" :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'" v-html="processedUserAnswer || '未作答'"></div>
+        </div>
+        <!-- 其他题型使用纯文本显示 -->
+        <p v-else><strong>你的答案：</strong> <span :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">{{ formatUserAnswer(record.userAnswer) || '未作答' }}</span></p>
         <p><strong>正确答案：</strong> <span class="correct-text">{{ formatCorrectAnswer(record.question.answer) }}</span></p>
         <div v-if="processedAnalysis">
           <p><strong>题目解析：</strong></p>
@@ -86,20 +98,31 @@ const convertImagesToPreviewUrls = async (htmlContent) => {
 
 // 处理后的题目标题
 const processedTitle = ref('');
+// 处理后的详情
+const processedDetails = ref('');
 // 处理后的解析
 const processedAnalysis = ref('');
+// 处理后的学生答案（富文本）
+const processedUserAnswer = ref('');
 
 // 监听 record 变化，处理图片
 watch(() => props.record, async (newRecord) => {
   if (newRecord && newRecord.question) {
     processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedDetails.value = await convertImagesToPreviewUrls(newRecord.question.details);
     processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+    // 处理学生答案（论述题/简答题可能包含富文本）
+    if (['论述', '简答'].includes(newRecord.question.questionType)) {
+      processedUserAnswer.value = await convertImagesToPreviewUrls(newRecord.userAnswer);
+    }
   }
 }, { immediate: true });
 
 const parsedOptions = computed(() => {
   const details = props.record.question?.details;
-  if (details) {
+  const questionType = props.record.question?.questionType;
+  // 只有单选、多选题才解析 details 为选项
+  if (['单选', '多选'].includes(questionType) && details) {
     try { 
       return JSON.parse(details);
     } catch (e) { 
@@ -194,11 +217,32 @@ const formatCorrectAnswer = (answer) => {
   overflow-wrap: break-word;
 }
 .question-title :deep(img),
-.feedback-section :deep(img) {
+.details-content :deep(img),
+.feedback-section :deep(img),
+.essay-answer-content :deep(img) {
   max-width: 100%;
   height: auto;
   display: block;
   margin: 10px 0;
+}
+.details-wrapper {
+  margin-top: 12px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 13px;
+}
+.details-content, .details-content p {
+  font-size: 13px;
+  margin: 0;
+  color: #606266;
 }
 .answer-area { margin-bottom: 15px; }
 .el-radio-group, .el-checkbox-group { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; }
@@ -209,4 +253,14 @@ const formatCorrectAnswer = (answer) => {
 .feedback-section p { margin: 0 0 8px 0; }
 .correct-text { color: #67c23a; font-weight: 500; }
 .incorrect-text { color: #f56c6c; font-weight: 500; }
+.essay-answer-content {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: white;
+  border: 1px dashed #dcdfe6;
+  border-radius: 4px;
+  min-height: 60px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 </style>

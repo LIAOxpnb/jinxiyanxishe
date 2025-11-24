@@ -88,40 +88,40 @@
             <div class="rich-text-wrapper">
               <Toolbar :editor="editorRefs.details" :defaultConfig="fullToolbarConfig"
                 style="border-bottom: 1px solid #ccc" />
-              <Editor v-model="localQuestion.details" style="height: 150px" :defaultConfig="fullEditorConfig"
+              <Editor v-model="localQuestion.details" style="height: 400px" :defaultConfig="fullEditorConfig"
                 @onCreated="editor => handleCreated(editor, 'details')" />
             </div>
           </div>
         </el-form-item>
         <el-form-item label="答题"><el-radio-group v-model="localQuestion.answerLimit"><el-radio
               label="unlimited">不限制</el-radio><el-radio label="limited">限制</el-radio></el-radio-group></el-form-item>
-        <div v-if="localQuestion.answerLimit === 'limited'">
-          <el-form-item label="字数不少于"><el-input v-model="localQuestion.wordCountRange" placeholder="可输入50-1000之间"
-              style="width: 200px;" /></el-form-item>
-          <el-form-item label="附件上传">
-            <el-radio-group v-model="localQuestion.attachmentRequired">
-              <el-radio label="no">无需上传</el-radio>
-              <el-radio label="yes">需上传 (仅支持doc、docx、xls、xlsx)</el-radio>
-            </el-radio-group>
-            <div v-if="localQuestion.attachmentRequired === 'yes'" style="margin-top: 10px;">
-              <el-upload
-                :auto-upload="false"
-                :on-change="handleFileChange"
-                :file-list="fileList"
-                :limit="1"
-                accept=".doc,.docx,.xls,.xlsx"
-                :before-upload="beforeFileUpload"
-              >
-                <el-button type="primary">选择文件</el-button>
-                <template #tip>
-                  <div class="el-upload__tip">
-                    只能上传doc、docx、xls、xlsx文件，且不超过10MB
-                  </div>
-                </template>
-              </el-upload>
-            </div>
-          </el-form-item>
-        </div>
+        <el-form-item label="字数不少于" v-if="localQuestion.answerLimit === 'limited'">
+          <el-input v-model="localQuestion.wordCountRange" placeholder="可输入50-1000之间" style="width: 200px;" />
+        </el-form-item>
+        <el-form-item label="学生答题附件">
+          <el-radio-group v-model="localQuestion.attachmentRequired">
+            <el-radio label="no">无需上传</el-radio>
+            <el-radio label="yes">需上传 (仅支持doc、docx、xls、xlsx)</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <!-- 题目附件：老师出题时上传的参考资料，一直显示 -->
+        <el-form-item label="上传题目附件">
+          <el-upload
+            ref="uploadRef"
+            :file-list="attachmentFileList"
+            :before-upload="beforeAttachmentUpload"
+            :on-change="handleAttachmentChange"
+            :on-remove="handleAttachmentRemove"
+            :auto-upload="false"
+            :limit="1"
+            accept=".doc,.docx,.xls,.xlsx"
+          >
+            <el-button type="primary">选择文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">仅支持doc、docx、xls、xlsx格式，文件大小不超过10MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
       </div>
 
       <el-form-item label="难度"><el-radio-group v-model="localQuestion.difficulty"><el-radio
@@ -154,6 +154,7 @@ import '@wangeditor/editor/dist/css/style.css';
 // 文件上传相关
 const uploadAction = '/api/upload/files';
 const fileList = ref([]);
+const attachmentFileList = ref([]); // 论述题附件列表
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -214,6 +215,33 @@ const questionTypeName = computed(() => questionTypeMap[localQuestion.value.ques
 const addOption = () => { localQuestion.value.options.push({ content: '' }); };
 const removeOption = (index) => { localQuestion.value.options.splice(index, 1); };
 
+// 统一的图片上传处理函数
+const handleImageUpload = (file, insertFn) => {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过5MB');
+    return;
+  }
+  
+  uploadFiles([file]).then(async (uploadRes) => {
+    // 兼容处理 data 可能是字符串或数组的情况
+    if (uploadRes && uploadRes.code === 200 && uploadRes.data) {
+      const relativePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+      
+      // 获取预览URL
+      const previewUrl = await previewFile(relativePath);
+      
+      // 插入图片到编辑器
+      insertFn(previewUrl, file.name, previewUrl);
+      ElMessage.success('图片上传成功');
+    } else {
+      ElMessage.error(uploadRes.msg || '图片上传失败');
+    }
+  }).catch((error) => {
+    console.error('上传或预览过程中出错:', error);
+    ElMessage.error(error.message || '图片上传失败');
+  });
+};
+
 const editorRefs = shallowRef({});
 const fullEditorConfig = {
   placeholder: '请输入内容...',
@@ -223,39 +251,19 @@ const fullEditorConfig = {
       fieldName: 'file',
       maxFileSize: 5 * 1024 * 1024, // 5M
       allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
       customBrowseAndUpload(insertFn) {
-        // 自定义图片上传
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
         input.onchange = function(event) {
           const file = event.target.files[0];
           if (!file) return;
-          
-          // 检查文件大小
-          if (file.size > 5 * 1024 * 1024) {
-            ElMessage.error('图片大小不能超过5MB');
-            return;
-          }
-          
-          // 调用正确的上传API
-          uploadFiles([file]).then(async (uploadRes) => {
-            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
-              const relativePath = uploadRes.data;
-              
-              // 获取预览URL
-              const previewUrl = await previewFile(relativePath);
-              
-              // 插入图片到编辑器
-              insertFn(previewUrl, file.name, previewUrl);
-              ElMessage.success('图片上传成功');
-            } else {
-              ElMessage.error(uploadRes.msg || '图片上传失败');
-            }
-          }).catch((error) => {
-            console.error('上传或预览过程中出错:', error);
-            ElMessage.error(error.message || '图片上传失败');
-          });
+          handleImageUpload(file, insertFn);
         };
         input.click();
       }
@@ -315,7 +323,7 @@ const fullToolbarConfig = {
     'undo',
     'redo',
     '|',
-    'fullScreen'
+    
   ]
 };
 const limitedToolbarConfig = {
@@ -330,6 +338,11 @@ const analysisEditorConfig = {
       fieldName: 'file',
       maxFileSize: 5 * 1024 * 1024, // 5M
       allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
       customBrowseAndUpload(insertFn) {
         const input = document.createElement('input');
         input.type = 'file';
@@ -337,29 +350,7 @@ const analysisEditorConfig = {
         input.onchange = function(event) {
           const file = event.target.files[0];
           if (!file) return;
-          
-          if (file.size > 5 * 1024 * 1024) {
-            ElMessage.error('图片大小不能超过5MB');
-            return;
-          }
-          
-          uploadFiles([file]).then(async (uploadRes) => {
-            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
-              const relativePath = uploadRes.data;
-              
-              // 获取预览URL
-              const previewUrl = await previewFile(relativePath);
-              
-              // 插入图片到编辑器
-              insertFn(previewUrl, file.name, previewUrl);
-              ElMessage.success('图片上传成功');
-            } else {
-              ElMessage.error(uploadRes.msg || '图片上传失败');
-            }
-          }).catch((error) => {
-            console.error('上传或预览过程中出错:', error);
-            ElMessage.error(error.message || '图片上传失败');
-          });
+          handleImageUpload(file, insertFn);
         };
         input.click();
       }
@@ -482,7 +473,7 @@ const handleFileChange = async (uploadFile) => {
   }
 };
 
-// 监听本地问题对象的文件信息变化，同步到文件列表
+// 监听本地问题对象的文件信息变化,同步到文件列表
 watch(() => [localQuestion.value.fileName, localQuestion.value.filePath], ([fileName, filePath]) => {
   if (fileName && filePath) {
     fileList.value = [{
@@ -494,6 +485,81 @@ watch(() => [localQuestion.value.fileName, localQuestion.value.filePath], ([file
     fileList.value = [];
   }
 }, { immediate: true });
+
+// 论述题附件上传相关函数
+const beforeAttachmentUpload = (file) => {
+  const validTypes = [
+    'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  const validExtensions = ['.doc', '.docx', '.xls', '.xlsx'];
+  
+  const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+  const isValidType = validTypes.includes(file.type) || validExtensions.includes(fileExtension);
+  const isValidSize = file.size / 1024 / 1024 < 10; // 10MB
+
+  if (!isValidType) {
+    ElMessage.error('只能上传 doc、docx、xls、xlsx 格式的文件!');
+    return false;
+  }
+  if (!isValidSize) {
+    ElMessage.error('文件大小不能超过 10MB!');
+    return false;
+  }
+  return true;
+};
+
+const handleAttachmentChange = async (uploadFile) => {
+  if (!uploadFile.raw) return;
+  
+  try {
+    const response = await uploadFiles([uploadFile.raw]);
+    if (response.code === 200) {
+      localQuestion.value.fileUpload = 1; // 标记为已上传
+      localQuestion.value.fileName = uploadFile.name;
+      localQuestion.value.filePath = response.data;
+      attachmentFileList.value = [{
+        name: uploadFile.name,
+        url: response.data,
+        uid: uploadFile.uid
+      }];
+      ElMessage.success('附件上传成功');
+    } else {
+      ElMessage.error(response.msg || '附件上传失败');
+      attachmentFileList.value = [];
+    }
+  } catch (error) {
+    console.error('附件上传错误:', error);
+    ElMessage.error('附件上传失败');
+    attachmentFileList.value = [];
+  }
+};
+
+const handleAttachmentRemove = () => {
+  localQuestion.value.fileUpload = 0;
+  localQuestion.value.fileName = '';
+  localQuestion.value.filePath = '';
+  attachmentFileList.value = [];
+  ElMessage.success('附件已移除');
+};
+
+// 监听论述题附件信息变化，同步到附件列表
+watch(() => [localQuestion.value.fileName, localQuestion.value.filePath, localQuestion.value.fileUpload], 
+  ([fileName, filePath, fileUpload]) => {
+    if (fileName && filePath && fileUpload === 1) {
+      attachmentFileList.value = [{
+        name: fileName,
+        url: filePath,
+        uid: Date.now()
+      }];
+    } else {
+      attachmentFileList.value = [];
+    }
+  }, 
+  { immediate: true }
+);
 </script>
 
 <style scoped>
@@ -525,7 +591,10 @@ watch(() => [localQuestion.value.fileName, localQuestion.value.filePath], ([file
   border: 1px solid #ccc;
   border-radius: 4px;
   width: 100%;
-  z-index: 100;
+  /* z-index: 100; */
+}
+:deep(.w-e-full-screen-container) {
+  z-index: 9999 !important; /* 确保远大于 header/footer 的 100 */
 }
 
 /* 默认插入图片的显示比例（无内联样式时生效），用户通过编辑器工具栏更改样式会覆盖 */

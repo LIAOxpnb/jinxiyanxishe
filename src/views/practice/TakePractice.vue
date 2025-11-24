@@ -63,6 +63,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { getStudentPracticeDetail, submitPracticePaper } from '@/api/practice.js';
 // 确保引入的子组件路径正确
 import TakePracticeQuestionCard from '@/components/practice/TakePracticeQuestionCard.vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const route = useRoute();
 const router = useRouter();
@@ -108,6 +109,42 @@ const nextQuestion = () => {
   if (currentQuestionIndex.value < listLength - 1) {
     currentQuestionIndex.value++;
   }
+};
+
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
 };
 
 // 处理答案提交
@@ -213,31 +250,49 @@ onMounted(async () => {
       practiceDetails.value = res.data;
       
       const rawQuestionList = res.data.practiceQuestionList || [];
-      rawQuestionList.forEach(q => {
-        if (q.question && q.question.details && typeof q.question.details === 'string') {
-          try {
-            q.question.details = JSON.parse(q.question.details);
-          } catch (e) {
-            console.error(`解析题目ID ${q.question.id} 的details字段失败:`, e);
-            q.question.details = []; 
-          }
-        }
-        
-        // 【BUG修复 Part 6】初始化 answers 对象时，使用唯一的 q.id 作为 key
-        if (q.question.questionType === '多选' || q.question.questionType === '填空') {
-          answers[q.id] = [];
-        } else {
-          answers[q.id] = '';
-        }
-        
-        // 初始化题目状态
-        questionStatus[q.id] = {
-          submitted: false,
-          correct: false
-        };
-      });
       
-      questionList.value = rawQuestionList;
+      // 处理题目列表并转换图片URL
+      const processedQuestions = await Promise.all(
+        rawQuestionList.map(async (q) => {
+          // 处理 details 字段
+          if (q.question && q.question.details && typeof q.question.details === 'string') {
+            // 如果是 JSON 格式的选项数据，保持原样解析
+            if (q.question.details.trim().startsWith('[')) {
+              try {
+                q.question.details = JSON.parse(q.question.details);
+              } catch (e) {
+                console.error(`解析题目ID ${q.question.id} 的details字段失败:`, e);
+                q.question.details = []; 
+              }
+            } else {
+              // 如果是富文本内容（论述题、简答题、填空题），转换图片
+              q.question.details = await convertImagesToPreviewUrls(q.question.details);
+            }
+          }
+          
+          // 转换题目标题中的图片
+          if (q.question && q.question.title) {
+            q.question.title = await convertImagesToPreviewUrls(q.question.title);
+          }
+          
+          // 初始化 answers 对象
+          if (q.question.questionType === '多选' || q.question.questionType === '填空') {
+            answers[q.id] = [];
+          } else {
+            answers[q.id] = '';
+          }
+          
+          // 初始化题目状态
+          questionStatus[q.id] = {
+            submitted: false,
+            correct: false
+          };
+          
+          return q;
+        })
+      );
+      
+      questionList.value = processedQuestions;
       currentQuestionIndex.value = 0;
 
     } else {

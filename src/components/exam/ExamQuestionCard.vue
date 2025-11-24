@@ -1,5 +1,5 @@
 <template>
-  <div class="exam-question-card">
+  <div class="exam-question-card" v-image-preview>
     <div class="header">
       <div class="header-left">
         <el-checkbox />
@@ -25,6 +25,9 @@
         <el-tooltip content="删除"><el-icon class="action-icon delete-icon" @click="$emit('delete', index)"><Delete /></el-icon></el-tooltip>
       </div>
     </div>
+    
+    <!-- 图片预览组件 -->
+    <ImagePreview ref="imagePreviewRef" />
     
     <div class="body">
       <div class="title" v-html="question.title"></div>
@@ -68,13 +71,26 @@
         </div>
       </div>
       
+      <!-- 论述题详情 -->
+      <div class="details-wrapper" v-if="['论述', '简答'].includes(question.questionType) && question.details">
+        <p class="details-title">详情：</p>
+        <div class="details-content" v-html="question.details"></div>
+      </div>
+      
       <div class="analysis-wrapper" v-if="question.analysis">
         <p class="analysis-title">解析：</p>
         <div class="analysis-content" v-html="question.analysis"></div>
       </div>
       
       <div class="attachment-wrapper" v-if="question.filePath">
-        <el-link :icon="Link" type="primary">{{ question.fileName || '附件' }}</el-link>
+        <el-link 
+          :icon="Link" 
+          type="primary"
+          @click="handleDownloadAttachment"
+          :underline="false"
+        >
+          {{ question.fileName || '附件' }}
+        </el-link>
       </div>
 
     </div>
@@ -85,6 +101,7 @@
 import { ref, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Top, Bottom, Edit, Delete, Link } from '@element-plus/icons-vue';
+import { previewFile } from '@/api/common/PreviewFile';
 
 const props = defineProps({
   // 接收的 `item` 是 examQuestionList 数组中的一个元素
@@ -112,8 +129,11 @@ const difficultyMap = { 0: '困难', 1: '中等', 2: '简单' };
 const difficultyText = computed(() => difficultyMap[question.value.difficulty] || '未知');
 
 // 解析后端返回的 JSON 字符串格式的 details 字段
+// 注意：只有单选、多选题的 details 才是 JSON 格式的选项数据
+// 论述题、简答题的 details 是富文本内容，不需要解析
 const parsedOptions = computed(() => {
-  if (question.value.details) {
+  // 只有单选、多选题才解析 details 为选项
+  if (['单选', '多选'].includes(question.value.questionType) && question.value.details) {
     try {
       const options = JSON.parse(question.value.details);
       return options;
@@ -145,6 +165,30 @@ const onScoreChange = (newScore) => {
     questionId: question.value.id, 
     newScore
   });
+};
+
+// 下载题目附件
+const handleDownloadAttachment = async () => {
+  try {
+    if (!question.value.filePath) {
+      ElMessage.warning('附件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    // 使用 previewFile 获取下载链接
+    const downloadUrl = await previewFile(question.value.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = question.value.fileName || '附件';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('下载附件失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
 };
 </script>
 
@@ -236,6 +280,30 @@ const onScoreChange = (newScore) => {
 .el-radio, .el-checkbox {
   display: block;
   margin-bottom: 8px;
+}
+.details-wrapper {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 13px;
+}
+.details-content, .details-content p {
+  font-size: 13px;
+  margin: 0;
+  color: #606266;
+}
+.details-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
 }
 .analysis-wrapper {
   margin-top: 12px;

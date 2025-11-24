@@ -165,8 +165,8 @@
           </template>
           <el-image class="course-cover" :src="courseDetail.coverPreviewUrl || defaultCover" fit="cover"></el-image>
           <div class="info-item">
-            <span class="info-label">课程名称</span>
-            <span class="info-value">{{ courseDetail.name }}</span>
+            <span class="info-label">课程名称：</span>
+            <span class="info-value" :title="courseDetail.name">{{ courseDetail.name }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">分类</span>
@@ -806,6 +806,17 @@ onMounted(() => {
 }
 .info-label {
   color: #606266;
+}
+.info-item .info-label { 
+  flex: 0 0 auto; 
+}
+.info-item .info-value {
+  flex: 1 1 auto;
+  min-width: 0; 
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
 }
 .setting-remark {
   font-size: 11px;

@@ -1,5 +1,5 @@
 <template>
-  <div class="marking-card">
+  <div class="marking-card" v-image-preview>
     <div class="question-header">
       <span class="question-index">{{ index + 1 }}.</span>
       <el-tag size="small">{{ record.question.questionType }}</el-tag>
@@ -9,13 +9,26 @@
     </div>
 
     <div class="question-title" v-html="processedTitle"></div>
-
+    
+    <!-- 论述题详情 -->
+    <div class="details-wrapper" v-if="record.question.questionType === '论述' && processedDetails">
+      <p class="details-title">详情：</p>
+      <div class="details-content" v-html="processedDetails"></div>
+    </div>
+    
     <div class="analysis-wrapper" v-if="processedAnalysis">
       <p class="analysis-title">解析：</p>
       <div class="analysis-content" v-html="processedAnalysis"></div>
     </div>
     <div class="attachment-wrapper" v-if="record.question.filePath">
-      <el-link :icon="Link" type="primary">{{ record.question.fileName || '附件' }}</el-link>
+      <el-link 
+        :icon="Link" 
+        type="primary"
+        @click="handleDownloadQuestionAttachment"
+        :underline="false"
+      >
+        {{ record.question.fileName || '附件' }}
+      </el-link>
     </div>
 
     <div class="answer-summary" :class="{
@@ -36,8 +49,20 @@
         
         <div class="student-answer-wrapper">
           <span>学生答案：</span>
-          <div class="student-answer-content">
+          <div class="student-answer-content" v-if="record.question.questionType === '论述' || record.question.questionType === '简答'" v-html="processedUserAnswer || '未作答'"></div>
+          <div class="student-answer-content" v-else>
             {{ formatAnswer(record.userAnswer, record.question.questionType) || '未作答' }}
+          </div>
+          <!-- 【新增】学生上传的附件 -->
+          <div v-if="record.fileName && record.filePath" class="student-attachment">
+            <el-link 
+              :icon="Document" 
+              type="primary" 
+              @click="handleDownloadAttachment"
+              :underline="false"
+            >
+              {{ record.fileName }}
+            </el-link>
           </div>
         </div>
         
@@ -67,9 +92,10 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { ElTag, ElIcon, ElLink, ElDivider, ElInputNumber, ElTooltip } from 'element-plus';
-import { SuccessFilled, CircleCloseFilled, Link } from '@element-plus/icons-vue';
+import { ElTag, ElIcon, ElLink, ElDivider, ElInputNumber, ElTooltip, ElMessage } from 'element-plus';
+import { SuccessFilled, CircleCloseFilled, Link, Document } from '@element-plus/icons-vue';
 import { previewFile } from '@/api/common/PreviewFile';
+import { downloadFile } from '@/api/common/FileDownload';
 
 const props = defineProps({
   record: {
@@ -121,14 +147,23 @@ const convertImagesToPreviewUrls = async (htmlContent) => {
 
 // 处理后的题目标题
 const processedTitle = ref('');
+// 处理后的详情
+const processedDetails = ref('');
 // 处理后的解析
 const processedAnalysis = ref('');
+// 处理后的学生答案（富文本）
+const processedUserAnswer = ref('');
 
 // 监听 record 变化，处理图片
 watch(() => props.record, async (newRecord) => {
   if (newRecord && newRecord.question) {
     processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedDetails.value = await convertImagesToPreviewUrls(newRecord.question.details);
     processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+    // 处理学生答案（论述题/简答题可能包含富文本）
+    if (newRecord.question.questionType === '论述' || newRecord.question.questionType === '简答') {
+      processedUserAnswer.value = await convertImagesToPreviewUrls(newRecord.userAnswer);
+    }
   }
 }, { immediate: true });
 
@@ -150,6 +185,54 @@ const formatAnswer = (answer, questionType) => {
   
   // 论述题或其他类型，直接返回原文本
   return answer;
+};
+
+// 【新增】下载学生上传的附件
+const handleDownloadAttachment = async () => {
+  try {
+    if (!props.record.filePath) {
+      ElMessage.warning('附件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    // 使用 previewFile 获取下载链接（和 ClassRoomDetails.vue 一致）
+    const downloadUrl = await previewFile(props.record.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = props.record.fileName;
+    // 移除 target='_blank' 避免浏览器打开文件
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('下载附件失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
+};
+
+// 下载题目附件
+const handleDownloadQuestionAttachment = async () => {
+  try {
+    if (!props.record.question.filePath) {
+      ElMessage.warning('附件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    // 使用 previewFile 获取下载链接
+    const downloadUrl = await previewFile(props.record.question.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = props.record.question.fileName || '附件';
+    // 移除 target='_blank' 避免浏览器打开文件
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('下载题目附件失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
 };
 </script>
 
@@ -181,11 +264,30 @@ const formatAnswer = (answer, questionType) => {
 }
 
 .question-title :deep(img),
-.analysis-content :deep(img) {
+.details-content :deep(img),
+.analysis-content :deep(img),
+.student-answer-content :deep(img) {
   max-width: 100%;
   height: auto;
   display: block;
   margin: 10px 0;
+}
+.details-wrapper {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  font-size: 13px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+}
+.details-content, .details-content p {
+  margin: 0;
+  color: #606266;
 }
 .analysis-wrapper {
   margin-top: 12px;
@@ -245,6 +347,8 @@ const formatAnswer = (answer, questionType) => {
 .student-answer-wrapper {
   display: inline-flex; /* 保持 "学生答案：" 和内容在同一行 */
   align-items: center;
+  flex-wrap: wrap; /* 【新增】允许附件换行 */
+  gap: 8px; /* 【新增】答案和附件之间的间距 */
 }
 
 .student-answer-content {
@@ -252,6 +356,25 @@ const formatAnswer = (answer, questionType) => {
   white-space: pre-wrap; /* 保留换行符，并自动换行 */
   word-break: break-all; /* 强制长单词换行 */
   line-height: 1.5;
+}
+
+/* 【新增】学生上传的附件样式 */
+.student-attachment {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 4px 8px;
+  background-color: #f0f2f5;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.student-attachment:hover {
+  background-color: #e4e7ed;
+}
+
+.student-attachment .el-link {
+  font-size: 13px;
 }
 
 /* 得分 */

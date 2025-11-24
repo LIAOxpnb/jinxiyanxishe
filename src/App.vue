@@ -7,6 +7,8 @@
     <PageFooter v-if="!isLoginPage" />
     <!-- 水印组件 -->
     <Watermark v-if="showWatermark" :text="watermarkText" />
+    <!-- 全局图片预览组件 -->
+    <ImagePreview />
   </div>
 </template>
 

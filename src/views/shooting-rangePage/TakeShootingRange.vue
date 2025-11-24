@@ -185,6 +185,42 @@ const formattedCountdown = computed(() => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 });
 
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
 const startTimer = (durationMinutes) => {
   // 先清除旧的定时器
   if (timerInterval) {
@@ -896,7 +932,22 @@ onMounted(async () => {
       }
       
       if (questionsRes.data.shootingRangeQuestionList && Array.isArray(questionsRes.data.shootingRangeQuestionList)) {
-        questions.value = questionsRes.data.shootingRangeQuestionList;
+        // 处理题目列表并转换图片URL
+        const processedQuestions = await Promise.all(
+          questionsRes.data.shootingRangeQuestionList.map(async (q) => {
+            // 转换题目详情中的图片
+            if (q.details) {
+              q.details = await convertImagesToPreviewUrls(q.details);
+            }
+            // 转换题目标题中的图片
+            if (q.title) {
+              q.title = await convertImagesToPreviewUrls(q.title);
+            }
+            return q;
+          })
+        );
+        
+        questions.value = processedQuestions;
         totalQuestionCount.value = questions.value.length; // 设置题目总数
         
         // 初始化答案对象并恢复已保存的答案

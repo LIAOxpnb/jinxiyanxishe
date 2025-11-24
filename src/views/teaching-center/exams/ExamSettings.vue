@@ -904,8 +904,17 @@ const fetchExamDetails = async () => {
       const examQuestionList = data.examQuestionList || [];
       const processedQuestions = await Promise.all(
         examQuestionList.map(async (item) => {
+          // 转换解析内容中的图片
           if (item.question && item.question.analysis) {
             item.question.analysis = await convertImagesToPreviewUrls(item.question.analysis);
+          }
+          // 转换题目详情中的图片
+          if (item.question && item.question.details) {
+            item.question.details = await convertImagesToPreviewUrls(item.question.details);
+          }
+          // 转换题目标题中的图片
+          if (item.question && item.question.title) {
+            item.question.title = await convertImagesToPreviewUrls(item.question.title);
           }
           return item;
         })

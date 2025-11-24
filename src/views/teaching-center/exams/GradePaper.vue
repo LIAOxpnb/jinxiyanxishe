@@ -331,13 +331,22 @@ onMounted(() => {
   border-radius: 4px;
 }
 
-.question-nav {
+/* .question-nav {
   margin-top: 20px;
   overflow-y: auto;
   flex: 1;
-}
+} */
 
-.nav-grid {
+.question-nav {
+  margin-top: 20px;
+  flex: 1;
+  /* 新增以下属性 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 禁止外层滚动 */
+  min-height: 0; /* 关键：防止 flex 子元素溢出导致布局破坏 */
+}
+/* .nav-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
@@ -345,8 +354,24 @@ onMounted(() => {
   overflow-y: auto;
   max-height: calc(100vh - 320px);
   padding-right: 5px;
-}
+} */
 
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  align-content: start;
+  
+  /* 修改部分开始 */
+  overflow-y: auto; /* 保留这个滚动 */
+  flex: 1; /* 自动占满 .question-nav 剩下的空间 */
+  max-height: none; /* 删除原来的 calc(100vh - 320px) */
+  padding-bottom: 10px; /* 增加一点底部内边距，避免最后一个元素贴底 */
+  /* 修改部分结束 */
+
+  padding-right: 5px;
+}
 .nav-item {
   border: 1px solid #dcdfe6;
   border-radius: 4px;

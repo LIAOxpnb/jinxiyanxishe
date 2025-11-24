@@ -5,7 +5,8 @@
     width="800px" 
     :close-on-click-modal="false"
   >
-    <el-form ref="formRef" :model="questionForm" :rules="rules" label-width="80px">
+    <div v-image-preview>
+      <el-form ref="formRef" :model="questionForm" :rules="rules" label-width="80px">
       <el-form-item label="题型" prop="questionType">
         <el-tag type="primary" disable-transitions>{{ questionForm.questionType }}</el-tag>
       </el-form-item>
@@ -102,7 +103,33 @@
           </div>
         </div>
       </el-form-item>
+      <el-form-item label="题目详情" prop="details">
+        <el-radio-group v-model="showDetails">
+          <el-radio :label="false">无详情</el-radio>
+          <el-radio :label="true">设置详情</el-radio>
+        </el-radio-group>
+        <div v-if="showDetails" style="margin-top: 10px;">
+          <div style="border: 1px solid #ccc; width: 450px;">
+            <Toolbar
+              ref="detailsToolbarRef"
+              style="border-bottom: 1px solid #ccc"
+              :editor="detailsEditor"
+              :defaultConfig="{}"
+              mode="default"
+            />
+            <Editor
+              ref="detailsEditorRef"
+              v-model="questionForm.details"
+              style="height: 200px; overflow-y: hidden;"
+              :defaultConfig="detailsEditorConfig"
+              mode="default"
+              @onCreated="handleDetailsCreated"
+            />
+          </div>
+        </div>
+      </el-form-item>
     </el-form>
+    </div>
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="handleCancel">取消</el-button>
@@ -143,6 +170,7 @@ const emit = defineEmits(['update:visible', 'success']);
 
 const formRef = ref(null);
 const showAnalysis = ref(false);
+const showDetails = ref(false);
 const categoryOptions = ref([]);
 const dialogVisible = ref(false);
 
@@ -150,6 +178,10 @@ const dialogVisible = ref(false);
 const analysisEditorRef = shallowRef();
 const analysisToolbarRef = ref();
 const analysisEditor = shallowRef();
+
+const detailsEditorRef = shallowRef();
+const detailsToolbarRef = ref();
+const detailsEditor = shallowRef();
 
 const questionForm = reactive({
   id: null,
@@ -169,6 +201,28 @@ const rules = reactive({
   questionCategory: [{ required: true, message: '请选择分类', trigger: 'change' }],
 });
 
+// 统一的图片上传处理函数
+const handleImageUpload = (file, insertFn) => {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过5MB');
+    return;
+  }
+  
+  uploadFiles([file]).then(async (uploadRes) => {
+    if (uploadRes && uploadRes.code === 200 && uploadRes.data) {
+      const relativePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+      const previewUrl = await previewFile(relativePath);
+      insertFn(previewUrl, file.name, previewUrl);
+      ElMessage.success('图片上传成功');
+    } else {
+      ElMessage.error(uploadRes.msg || '图片上传失败');
+    }
+  }).catch((error) => {
+    console.error('上传或预览过程中出错:', error);
+    ElMessage.error(error.message || '图片上传失败');
+  });
+};
+
 // 富文本编辑器配置
 const analysisEditorConfig = {
   placeholder: '请输入解析内容...',
@@ -177,6 +231,11 @@ const analysisEditorConfig = {
       fieldName: 'file',
       maxFileSize: 5 * 1024 * 1024, // 5M
       allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
       customBrowseAndUpload(insertFn) {
         const input = document.createElement('input');
         input.type = 'file';
@@ -184,29 +243,35 @@ const analysisEditorConfig = {
         input.onchange = function(event) {
           const file = event.target.files[0];
           if (!file) return;
-          
-          if (file.size > 5 * 1024 * 1024) {
-            ElMessage.error('图片大小不能超过5MB');
-            return;
-          }
-          
-          uploadFiles([file]).then(async (uploadRes) => {
-            if (uploadRes.code === 200 && typeof uploadRes.data === 'string') {
-              const relativePath = uploadRes.data;
-              
-              // 获取预览URL
-              const previewUrl = await previewFile(relativePath);
-              
-              // 插入图片到编辑器
-              insertFn(previewUrl, file.name, previewUrl);
-              ElMessage.success('图片上传成功');
-            } else {
-              ElMessage.error(uploadRes.msg || '图片上传失败');
-            }
-          }).catch((error) => {
-            console.error('上传或预览过程中出错:', error);
-            ElMessage.error(error.message || '图片上传失败');
-          });
+          handleImageUpload(file, insertFn);
+        };
+        input.click();
+      }
+    }
+  }
+};
+
+// details 富文本编辑器配置
+const detailsEditorConfig = {
+  placeholder: '请输入题目详情...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          handleImageUpload(file, insertFn);
         };
         input.click();
       }
@@ -229,6 +294,42 @@ const fetchCategoryOptions = async () => {
   }
 };
 
+// 将HTML内容中的图片路径转换为预览URL
+const convertImagesToPreviewUrls = async (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  const imagePromises = Array.from(images).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      let relativePath = src;
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          relativePath = '/' + pathParts.slice(1).join('/');
+        } else {
+          relativePath = pathname;
+        }
+      }
+      
+      const previewUrl = await previewFile(relativePath);
+      img.setAttribute('src', previewUrl);
+    } catch (error) {
+      console.error('预览图片失败:', src, error);
+    }
+  });
+  
+  await Promise.all(imagePromises);
+  return doc.body.innerHTML;
+};
+
 // 加载题目详情
 const loadQuestionDetail = async () => {
   if (!props.questionId) return;
@@ -246,7 +347,8 @@ const loadQuestionDetail = async () => {
       questionForm.questionCategory = data.questionCategory;
       questionForm.groupId = data.groupId;
       questionForm.difficulty = data.difficulty;
-      questionForm.analysis = data.analysis;
+      // 转换解析内容中的图片URL
+      questionForm.analysis = await convertImagesToPreviewUrls(data.analysis);
 
       if (data.questionType === '判断') {
         questionForm.options = [
@@ -254,11 +356,20 @@ const loadQuestionDetail = async () => {
           { value: '0', text: '错误' }
         ];
         questionForm.answer = data.answer;
+        questionForm.details = ''; // 判断题不使用 details 作为富文本
       } else if (data.questionType === '填空') {
         // 填空题直接设置答案
         questionForm.answer = data.answer;
         questionForm.options = [];
+        // 转换填空题详情中的图片URL
+        questionForm.details = await convertImagesToPreviewUrls(data.details || '');
+      } else if (data.questionType === '论述' || data.questionType === '简答') {
+        // 论述题和简答题的 details 是富文本内容，需要转换图片URL
+        questionForm.details = await convertImagesToPreviewUrls(data.details || '');
+        questionForm.options = [];
+        questionForm.answer = data.answer || '';
       } else {
+        // 单选、多选题的 details 是选项的 JSON 数据
         let parsedOptions = [];
         try {
           parsedOptions = JSON.parse(data.details || '[]');
@@ -277,9 +388,11 @@ const loadQuestionDetail = async () => {
         if (questionForm.questionType === '单选') {
           questionForm.answer = data.answer;
         }
+        questionForm.details = ''; // 单选、多选题不使用 details 作为富文本
       }
 
       showAnalysis.value = !!data.analysis;
+      showDetails.value = !!(data.questionType === '论述' || data.questionType === '简答') && !!data.details;
     } else {
       ElMessage.error(res.msg || '获取题目详情失败');
     }
@@ -307,20 +420,37 @@ const handleSubmit = async () => {
     await formRef.value.validate();
     
     let finalAnswer = '';
+    let detailsForBackend = '';
+    
     if (questionForm.questionType === '多选') {
       const correctAnswers = [];
       questionForm.options.forEach(opt => { 
         if (opt.isCorrect) correctAnswers.push(opt.value); 
       });
       finalAnswer = correctAnswers.join('#@#');
-    } else {
+      // 多选题的 details 存储选项 JSON
+      detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
+        option: uiOpt.value,
+        value: uiOpt.text
+      })));
+    } else if (questionForm.questionType === '单选') {
       finalAnswer = questionForm.answer;
+      // 单选题的 details 存储选项 JSON
+      detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
+        option: uiOpt.value,
+        value: uiOpt.text
+      })));
+    } else if (questionForm.questionType === '论述' || questionForm.questionType === '简答') {
+      // 论述题和简答题的 details 存储富文本内容
+      finalAnswer = questionForm.answer;
+      detailsForBackend = showDetails.value ? removeOuterPTag(questionForm.details) : '';
+    } else {
+      // 其他题型（填空、判断）
+      finalAnswer = questionForm.answer;
+      detailsForBackend = questionForm.questionType === '填空' && showDetails.value 
+        ? removeOuterPTag(questionForm.details) 
+        : '';
     }
-
-    const detailsForBackend = JSON.stringify(questionForm.options.map(uiOpt => ({
-      option: uiOpt.value,
-      value: uiOpt.text
-    })));
 
     const dataToSubmit = {
       id: questionForm.id,
@@ -355,11 +485,19 @@ const handleAnalysisCreated = (editor) => {
   analysisEditor.value = editor;
 };
 
+const handleDetailsCreated = (editor) => {
+  detailsEditor.value = editor;
+};
+
 // 组件销毁前清理编辑器
 onBeforeUnmount(() => {
   const editor = analysisEditor.value;
   if (editor == null) return;
   editor.destroy();
+  
+  const detailsEditorInstance = detailsEditor.value;
+  if (detailsEditorInstance == null) return;
+  detailsEditorInstance.destroy();
 });
 
 // 监听弹窗显示状态
@@ -391,5 +529,16 @@ fetchCategoryOptions();
 
 .delete-option-btn {
   margin-left: 10px;
+}
+
+/* 富文本编辑器全屏样式 - 解决全屏时被弹窗遮挡的问题 */
+:deep(.w-e-full-screen-container) {
+  z-index: 3000 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: #fff;
 }
 </style>

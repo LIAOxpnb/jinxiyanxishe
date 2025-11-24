@@ -5,6 +5,8 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import App from './App.vue'
 import router from './router' // 引入 router
 import { getGlobalConfig } from '@/utils/globalConfig'
+import { imagePreviewDirective } from '@/directives/imagePreview'
+import ImagePreview from '@/components/common/ImagePreview.vue'
 
 // 引入本地字体包 - 思源黑体（Noto Sans SC）
 // 引入多个字重以支持不同粗细
@@ -49,6 +51,12 @@ const app = createApp(App)
 
 app.use(ElementPlus, { locale: zhCn })
 app.use(router) // 使用 router
+
+// 注册全局指令
+app.directive('image-preview', imagePreviewDirective)
+
+// 注册全局组件
+app.component('ImagePreview', ImagePreview)
 
 // 初始化全局设置后再挂载应用
 initGlobalSettings().finally(() => {

@@ -2217,4 +2217,15 @@ onBeforeUnmount(() => {
   display: block;
   margin: 10px 0;
 }
+
+/* 富文本编辑器全屏样式 - 解决全屏时被弹窗遮挡的问题 */
+:deep(.w-e-full-screen-container) {
+  z-index: 3000 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background-color: #fff;
+}
 </style>

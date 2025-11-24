@@ -61,7 +61,7 @@
                 <!-- <el-tag v-if="course.type === '录播课'" size="small" type="success">{{ course.type }}</el-tag> -->
                 <!-- <el-tag v-if="course.isNew" size="small" type="warning">知识扩充</el-tag> -->
               </div>
-              <h3 class="course-title">{{ course.name }}</h3>
+              <h4  class="course-title" :title="course.name">{{ course.name }}</h4>
               <div class="course-meta">
                 <span><el-icon><VideoCamera /></el-icon> 共{{ course.sectionCount || 0 }}节</span>
                 <span><el-icon><User /></el-icon> {{ course.lecturer || '金榜社' }}</span>
@@ -334,13 +334,13 @@ onMounted(() => {
   font-weight: 600;
   color: #303133;
   margin: 0 0 12px 0;
-  height: 48px;
+  height: 24px;
+  line-height: 24px;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
 }
 .course-meta {
   display: flex;

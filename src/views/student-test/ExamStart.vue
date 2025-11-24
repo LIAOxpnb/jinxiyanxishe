@@ -154,7 +154,14 @@ const startExam = () => {
     ElMessage.warning('考试当前不可开始');
     return;
   }
-  router.push({ name: 'Student-TakeExam', params: { id: examId.value } });
+  
+  // 检查是否有暂存的答题记录，如果有则弹出选择框
+  if (examDetail.value.examRecord && examDetail.value.examRecord.id) {
+    checkContinueExam(examDetail.value.examRecord.id);
+  } else {
+    // 没有记录，直接开始新考试
+    router.push({ name: 'Student-TakeExam', params: { id: examId.value } });
+  }
 };
 
 onMounted(() => {

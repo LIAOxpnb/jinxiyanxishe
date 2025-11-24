@@ -1,10 +1,12 @@
 <template>
-  <el-card class="question-card" :id="'question-' + questionData.question.id">
+  <el-card class="question-card" :id="'question-' + questionData.question.id" v-image-preview>
     <div class="question-header">
       <span>{{ index + 1 }}.</span>
       <el-tag>{{ questionData.question.questionType }}</el-tag>
     </div>
     <div class="question-title" v-html="processedTitle"></div>
+
+    <!-- 论述题详情 -->
 
     <div class="answer-area">
       <el-radio-group 
@@ -165,6 +167,8 @@
 import { computed, watch, ref } from 'vue';
 import { CircleCheck, CircleClose, Document } from '@element-plus/icons-vue';
 import { previewFile } from '@/api/common/PreviewFile';
+import ImagePreview from '@/components/common/ImagePreview.vue';
+import { useImagePreview } from '@/composables/useImagePreview';
 
 const props = defineProps({
   questionData: { type: Object, required: true },
@@ -186,6 +190,7 @@ const isAnswerCorrect = ref(false);
 
 // 处理后的题目标题和解析
 const processedTitle = ref('');
+const processedDetails = ref('');
 const processedAnalysis = ref('');
 
 // 转换HTML中的图片URL为预览URL
@@ -435,15 +440,33 @@ watch(() => props.questionData.id, () => {
 watch(() => props.questionData, async (newData) => {
   if (newData && newData.question) {
     processedTitle.value = await convertImagesToPreviewUrls(newData.question.title);
+    processedDetails.value = await convertImagesToPreviewUrls(newData.question.details);
     processedAnalysis.value = await convertImagesToPreviewUrls(newData.question.analysis);
   }
-}, { immediate: true, deep: true });
+}, { immediate: true });
+
+// 图片预览相关
+const cardRef = ref(null);
+const imagePreviewRef = ref(null);
+
+// 处理图片点击事件
+const handleImageClick = (imageUrl, allImages) => {
+  if (imagePreviewRef.value) {
+    imagePreviewRef.value.open(imageUrl, allImages);
+  }
+};
+
+// 使用图片预览 composable
+useImagePreview(cardRef, handleImageClick);
 </script>
 
 <style scoped>
 .question-card { 
   margin-bottom: 20px;
   height: auto;
+  max-height: 80vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   width: 100%;
   box-sizing: border-box;
 }
@@ -459,6 +482,31 @@ watch(() => props.questionData, async (newData) => {
   overflow-wrap: break-word;
 }
 .question-title :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
+.details-wrapper {
+  margin-top: 12px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 13px;
+}
+.details-content, .details-content p {
+  font-size: 13px;
+  margin: 0;
+  color: #606266;
+}
+.details-content :deep(img) {
   max-width: 100%;
   height: auto;
   display: block;

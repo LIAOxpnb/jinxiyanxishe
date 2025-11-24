@@ -1,5 +1,5 @@
 <template>
-  <el-card class="question-card" :id="'question-' + record.questionId">
+  <el-card class="question-card" :id="'question-' + record.questionId" v-image-preview>
     <div class="card-content">
       <div v-if="record.isCorrect === 2" class="stamp correct">回答正确</div>
       <div v-else-if="record.isCorrect === 1" class="stamp incorrect">回答错误</div>
@@ -11,6 +11,24 @@
         <el-tag>得分：{{ record.score }}</el-tag>
       </div>
       <div class="question-title" v-html="processedTitle"></div>
+
+      <!-- 论述题详情 -->
+      <div class="details-wrapper" v-if="['论述', '简答'].includes(record.question.questionType) && processedDetails">
+        <p class="details-title">详情：</p>
+        <div class="details-content" v-html="processedDetails"></div>
+      </div>
+
+      <!-- 题目附件（老师提供的参考附件） -->
+      <div class="question-attachment-wrapper" v-if="record.question.filePath">
+        <el-link 
+          :icon="Link" 
+          type="primary"
+          @click="handleDownloadAttachment"
+          :underline="false"
+        >
+          {{ record.question.fileName || '附件' }}
+        </el-link>
+      </div>
 
       <div class="answer-area">
         <el-radio-group v-if="record.question.questionType === '单选'" :model-value="record.userAnswer" disabled>
@@ -40,8 +58,18 @@
 
         <div v-else-if="['论述', '简答'].includes(record.question.questionType)" class="essay-answer">
           <p><strong>你的答案：</strong></p>
-          <div class="essay-content" :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'">
-            {{ record.userAnswer || '未作答' }}
+          <div class="essay-content" :class="record.isCorrect === 2 ? 'correct-text' : 'incorrect-text'" v-html="processedUserAnswer || '未作答'">
+          </div>
+          <!-- 【新增】学生上传的答题附件 -->
+          <div v-if="record.fileName && record.filePath" class="student-attachment">
+            <el-link 
+              :icon="Document" 
+              type="primary" 
+              @click="handleDownloadStudentAttachment"
+              :underline="false"
+            >
+              {{ record.fileName }}
+            </el-link>
           </div>
         </div>
         
@@ -52,9 +80,6 @@
         <p><strong>正确答案：</strong> {{ formatCorrectAnswer(record.question.answer) }}</p>
         <p v-if="processedAnalysis"><strong>题目解析：</strong></p>
         <div v-if="processedAnalysis" v-html="processedAnalysis"></div>
-      </div>
-       <div class="attachment-wrapper" v-if="record.question.filePath">
-        <el-link :icon="Link" type="primary">{{ record.question.fileName || '附件' }}</el-link>
       </div>
 
       <!-- <div class="nav-buttons">
@@ -67,8 +92,9 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Link } from '@element-plus/icons-vue';
+import { Link, Document } from '@element-plus/icons-vue';
 import { previewFile } from '@/api/common/PreviewFile';
+import { ElMessage } from 'element-plus';
 
 const props = defineProps({
   record: { type: Object, required: true },
@@ -113,19 +139,30 @@ const convertImagesToPreviewUrls = async (htmlContent) => {
 
 // 处理后的题目标题
 const processedTitle = ref('');
+// 处理后的详情
+const processedDetails = ref('');
 // 处理后的解析
 const processedAnalysis = ref('');
+// 处理后的学生答案（富文本）
+const processedUserAnswer = ref('');
 
 // 监听 record 变化，处理图片
 watch(() => props.record, async (newRecord) => {
   if (newRecord && newRecord.question) {
     processedTitle.value = await convertImagesToPreviewUrls(newRecord.question.title);
+    processedDetails.value = await convertImagesToPreviewUrls(newRecord.question.details);
     processedAnalysis.value = await convertImagesToPreviewUrls(newRecord.question.analysis);
+    // 处理学生答案（论述题/简答题可能包含富文本）
+    if (['论述', '简答'].includes(newRecord.question.questionType)) {
+      processedUserAnswer.value = await convertImagesToPreviewUrls(newRecord.userAnswer);
+    }
   }
 }, { immediate: true });
 
 const parsedOptions = computed(() => {
-  if (props.record.question.details) {
+  const questionType = props.record.question?.questionType;
+  // 只有单选、多选题才解析 details 为选项
+  if (['单选', '多选'].includes(questionType) && props.record.question.details) {
     try { return JSON.parse(props.record.question.details); } catch (e) { return []; }
   }
   return [];
@@ -193,6 +230,54 @@ const formatCorrectAnswer = (answer) => {
   return answer;
 };
 
+// 下载题目附件
+const handleDownloadAttachment = async () => {
+  try {
+    if (!props.record.question.filePath) {
+      ElMessage.warning('附件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    // 使用 previewFile 获取下载链接
+    const downloadUrl = await previewFile(props.record.question.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = props.record.question.fileName || '附件';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('下载题目附件失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
+};
+
+// 【新增】下载学生上传的答题附件
+const handleDownloadStudentAttachment = async () => {
+  try {
+    if (!props.record.filePath) {
+      ElMessage.warning('附件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    // 使用 previewFile 获取下载链接
+    const downloadUrl = await previewFile(props.record.filePath);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = props.record.fileName || '学生附件';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('下载学生附件失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
+};
+
 </script>
 
 <style scoped>
@@ -214,11 +299,32 @@ const formatCorrectAnswer = (answer) => {
   overflow-wrap: break-word;
 }
 .question-title :deep(img),
-.feedback-section :deep(img) {
+.details-content :deep(img),
+.feedback-section :deep(img),
+.essay-content :deep(img) {
   max-width: 100%;
   height: auto;
   display: block;
   margin: 10px 0;
+}
+.details-wrapper {
+  margin-top: 12px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #fff9e6;
+  border-radius: 4px;
+  border-left: 3px solid #e6a23c;
+}
+.details-title {
+  margin: 0 0 5px 0;
+  font-weight: bold;
+  color: #e6a23c;
+  font-size: 13px;
+}
+.details-content, .details-content p {
+  font-size: 13px;
+  margin: 0;
+  color: #606266;
 }
 .answer-area { margin-bottom: 15px; }
 .el-radio-group, .el-checkbox-group { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; }
@@ -228,6 +334,37 @@ const formatCorrectAnswer = (answer) => {
 .incorrect-text { color: #f56c6c; font-weight: bold; }
 .fill-blank-answer, .essay-answer { margin-bottom: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; }
 .essay-content { margin-top: 8px; padding: 8px; background-color: white; border: 1px solid #dcdfe6; border-radius: 4px; min-height: 60px; white-space: pre-wrap; }
+.student-attachment {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 4px 8px;
+  background-color: #f0f2f5;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+.student-attachment:hover {
+  background-color: #e4e7ed;
+}
+.student-attachment .el-link {
+  font-size: 13px;
+}
+.question-attachment-wrapper {
+  margin-top: 12px;
+  margin-bottom: 15px;
+  padding: 8px 12px;
+  background-color: #f0f2f5;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 0.3s;
+}
+.question-attachment-wrapper:hover {
+  background-color: #e4e7ed;
+}
+.question-attachment-wrapper .el-link {
+  font-size: 14px;
+}
 .feedback-section { margin-top: 20px; padding: 15px; background-color: #f9fafb; border: 1px solid #f0f2f5; border-radius: 4px; font-size: 14px; line-height: 1.6; }
 .attachment-wrapper { margin-top: 8px; }
 .nav-buttons { margin-top: 20px; text-align: center; }

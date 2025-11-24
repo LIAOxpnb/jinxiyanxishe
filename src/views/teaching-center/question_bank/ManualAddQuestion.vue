@@ -510,12 +510,21 @@ const onSubmit = async () => {
           break;
         case 'ESSAY':
           backendQuestion.answer = q.answer;
+          // 论述题的详情字段
+          backendQuestion.details = q.details || '';
           // 处理论述题的答题限制
           if (q.answerLimit === 'limited') {
             backendQuestion.wordLimit = parseInt(q.wordCountRange) || 0;
-            backendQuestion.fileUpload = q.attachmentRequired === 'yes' ? 1 : 0;
+          }
+          // 处理论述题的附件上传（无论是否有答题限制，都要检查附件）
+          if (q.attachmentRequired === 'yes') {
+            backendQuestion.fileUpload = 1;
             backendQuestion.fileName = q.fileName || '';
             backendQuestion.filePath = q.filePath || '';
+          } else {
+            backendQuestion.fileUpload = 0;
+            backendQuestion.fileName = '';
+            backendQuestion.filePath = '';
           }
           break;
       }

@@ -354,8 +354,11 @@ onMounted(() => {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin-top: 10px;
+  align-content: start;
   overflow-y: auto;
-  max-height: calc(100vh - 320px);
+  flex: 1;
+  max-height: none;
+  padding-bottom: 10px;
   padding-right: 5px;
 }
 

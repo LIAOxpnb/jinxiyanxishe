@@ -2,9 +2,9 @@
   <div class="home-page">
     <div class="hero-section">
       <div class="hero-content">
-        <h1 class="main-title">进阶》》资金分析师</h1>
-        <h2 class="sub-title">360°洞穿经济犯罪</h2>
-        <p class="description">源源不断提供优质的课程通过AI能力提升业务能力，有效帮助您提供经济犯罪破案率，期待您的加入</p>
+        <h1 class="main-title">进阶>>>资金分析师</h1>
+        <h2 class="sub-title">360°穿透资金迷雾</h2>
+        <p class="description">提升专业能力，强化专业攻坚<br></br>全力打造专业精通，技术过硬的资金分析人才队伍</p>
       </div>
     </div>
     <div class="features-section1">
@@ -61,7 +61,7 @@
           <el-card v-for="course in hotCourses" :key="course.id" class="course-card" shadow="hover" :body-style="{ padding: '0px' }" @click="goToCourseDetail(course)">
             <img :src="course.coverUrl || 'https://shadow.elemecdn.com/app/element/hamburger.9cf7b091-55e9-11e9-a976-7f4d0b07eef6.png'" class="course-image" alt="课程封面"/>
             <div class="course-info">
-              <h3 class="course-title">{{ course.name }}</h3>
+              <h4 class="course-title" :title="course.name">{{ course.name }}</h4>
               <div class="course-meta">
                 <span><el-icon><VideoCamera /></el-icon> 共{{ course.sectionCount || 0 }}节</span>
                 <span><el-icon><User /></el-icon> {{ course.lecturerName || '金析研习社' }}</span>
@@ -78,7 +78,7 @@
     <div class="lecturer-section">
       <div class="section-header">
         <div>
-          <h2>金析轩讲师</h2>
+          <h2>课堂讲师</h2>
           <p>来自各业界专家，提供丰富的经验，帮助您提升专业知识能力</p>
         </div>
         <div class="carousel-controls">
@@ -299,10 +299,13 @@ const fetchLecturers = async () => {
     if (res.code === 200 && res.data) {
       const userList = res.data.records || [];
       
-      const avatarPromises = userList.map(user => 
+      // 过滤掉 id=1 的用户
+      const filteredUserList = userList.filter(user => user.id !== 1);
+      
+      const avatarPromises = filteredUserList.map(user => 
         user.teacherObj?.avatar ? previewFile(user.teacherObj.avatar) : Promise.resolve('')
       );
-      const bgImagePromises = userList.map(user => 
+      const bgImagePromises = filteredUserList.map(user => 
         user.teacherObj?.bgImage ? previewFile(user.teacherObj.bgImage) : Promise.resolve('https://picsum.photos/seed/' + user.id + '/800/600')
       );
 
@@ -311,7 +314,7 @@ const fetchLecturers = async () => {
           Promise.all(bgImagePromises)
       ]);
 
-      lecturers.value = userList.map((user, index) => ({
+      lecturers.value = filteredUserList.map((user, index) => ({
         id: user.id,
         name: user.name || '匿名讲师',
         avatar: avatarUrls[index],
@@ -355,8 +358,9 @@ onMounted(() => {
 .hero-section {
   background-image: url('@/assets/img/首页1.png');
   background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
+  background-position: center center;
+  background-attachment: scroll; /* 改为 scroll 避免不同设备显示不一致 */
+  background-repeat: no-repeat;
   color: white;
   padding: clamp(40px, 6vw, 80px) clamp(20px, 4vw, 40px); /* 响应式padding */
   text-align: left;
@@ -369,12 +373,13 @@ onMounted(() => {
   overflow: hidden;
 }
 
-@keyframes rotateGlow {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
+/* 高DPI屏幕优化 - 如果有@2x图片可以添加 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .hero-section {
+    /* background-image: url('@/assets/img/首页1@2x.png'); */
+    /* 如果没有2x图片，使用更好的渲染 */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
   }
 }
 
@@ -405,6 +410,7 @@ onMounted(() => {
                0 0 30px rgba(102, 126, 234, 0.5);
   letter-spacing: clamp(1px, 0.15vw, 2px);
   line-height: 1.2;
+  text-align: left;
 }
 
 .sub-title {
@@ -415,6 +421,7 @@ onMounted(() => {
   text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5),
                0 0 25px rgba(102, 126, 234, 0.4);
   letter-spacing: clamp(0.5px, 0.1vw, 1px);
+  text-align: left;
 }
 
 .description {
@@ -430,13 +437,14 @@ onMounted(() => {
   border-radius: 8px;
   backdrop-filter: blur(5px);
   border-left: 4px solid rgba(255, 255, 255, 0.6);
+  text-align: left;
 }
 /* 功能卡片区域 */
 .features-section {
   display: flex;
   justify-content: center;
-  gap: 24px;
-  max-width: 1200px;
+  gap: 90px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 60px 20px;
   background: transparent;
@@ -482,11 +490,12 @@ onMounted(() => {
 }
 
 .feature-content {
-  padding: 32px 24px;
+  padding: 40px 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  min-width: 200px;
 }
 
 .feature-icon {
@@ -513,11 +522,12 @@ onMounted(() => {
 }
 
 .feature-description {
-  font-size: 13px;
+  font-size: 12px;
   color: #909399;
   margin: 0;
   transition: color 0.3s ease;
   text-align: center;
+  white-space: nowrap;
 }
 
 .feature-card:hover .feature-description {
@@ -527,7 +537,7 @@ onMounted(() => {
 /* 课程区域 */
 .courses-section {
   padding: 60px 20px;
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   background: transparent;
 }
@@ -629,12 +639,13 @@ onMounted(() => {
   font-weight: 600;
   color: #303133;
   margin: 0 0 12px 0;
-  height: 48px;
+  height: 24px;
+  line-height: 24px;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
 }
 .course-meta {
   display: flex;
@@ -878,5 +889,116 @@ onMounted(() => {
 
 .loading-state, .empty-state {
   margin-top: 24px;
+}
+
+/* =================================== */
+/* 2K 显示器适配 (2560x1440, 27寸常见分辨率) */
+/* =================================== */
+@media screen and (min-width: 2560px) {
+  .hero-section {
+    min-height: 600px;
+    padding: 100px 60px;
+  }
+  
+  .main-title {
+    font-size: 60px;
+  }
+  
+  .sub-title {
+    font-size: 44px;
+  }
+  
+  .description {
+    font-size: 18px;
+    max-width: 680px;
+    
+  }
+  
+  .features-section {
+    gap: 110px;
+    max-width: 1800px;
+  }
+  
+  .courses-section,
+  .lecturer-section {
+    max-width: 1800px;
+  }
+  
+  .course-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+/* =================================== */
+/* 4K 显示器适配 (3840x2160) */
+/* =================================== */
+@media screen and (min-width: 3840px) {
+  .hero-section {
+    min-height: 800px;
+    padding: 140px 100px;
+  }
+  
+  .main-title {
+    font-size: 76px;
+  }
+  
+  .sub-title {
+    font-size: 52px;
+  }
+  
+  .description {
+    font-size: 20px;
+    max-width: 800px;
+    padding: 16px 28px;
+  }
+  
+  .features-section {
+    gap: 130px;
+    max-width: 2400px;
+    padding: 80px 40px;
+  }
+  
+  .feature-content {
+    padding: 48px 36px;
+  }
+  
+  .feature-icon {
+    font-size: 64px;
+  }
+  
+  .feature-title {
+    font-size: 22px;
+  }
+  
+  .feature-description {
+    font-size: 15px;
+  }
+  
+  .courses-section,
+  .lecturer-section {
+    max-width: 2400px;
+    padding: 80px 40px;
+  }
+  
+  .section-header h2 {
+    font-size: 44px;
+  }
+  
+  .section-header p {
+    font-size: 18px;
+  }
+  
+  .course-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 32px;
+  }
+  
+  .course-title {
+    font-size: 18px;
+  }
+  
+  .course-meta {
+    font-size: 15px;
+  }
 }
 </style>

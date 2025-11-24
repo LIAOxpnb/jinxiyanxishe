@@ -611,6 +611,14 @@ const fetchPracticeDetails = async () => {
             item.question.analysis = await convertImagesToPreviewUrls(item.question.analysis);
           }
           
+          // 转换题目详情中的图片（论述题、简答题、填空题可能有详情）
+          if (item.question && item.question.details && 
+              ['论述', '简答', '填空'].includes(item.question.questionType) &&
+              typeof item.question.details === 'string' && 
+              !item.question.details.trim().startsWith('[')) {
+            item.question.details = await convertImagesToPreviewUrls(item.question.details);
+          }
+          
           return item;
         })
       );

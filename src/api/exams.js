@@ -32,12 +32,17 @@ export function getStudentExamDetail(id) {
 /**
  * @description [学生端] 交卷
  * @param {string} id - 答题记录ID (必填)
+ * @param {number} forcedSubmission - 是否强制交卷 (1: 强制, 其他: 非强制)
  */
-export function submitStudentExamPaper(id) {
+export function submitStudentExamPaper(id, forcedSubmission) {
+  const params = { id };
+  if (forcedSubmission !== undefined) {
+    params.forcedSubmission = forcedSubmission;
+  }
   return request({
     url: '/student/exam/submitPaper',
     method: 'get',
-    params: { id }
+    params: params
   });
 }
 
@@ -62,6 +67,8 @@ export function getStudentExamResult(id) {
  * @param {number} data.examSubmitRecordList[].questionId - 题目ID (必填)
  * @param {string} data.examSubmitRecordList[].userAnswer - 用户答案 (必填)
  * @param {string} data.examSubmitRecordList[].details - 试卷给的选项，原封不动返回 (必填)
+ * @param {string} data.examSubmitRecordList[].fileName - 文件名 (必填)
+ * @param {string} data.examSubmitRecordList[].filePath - 文件路径 (必填)
  */
 export function submitStudentExamRecord(data) {
   return request({
