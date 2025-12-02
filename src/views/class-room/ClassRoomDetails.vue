@@ -4,10 +4,19 @@
       <el-main class="main-column">
         <div class="video-player-wrapper">
           <div class="video-player" v-if="currentCourseware.type === 'video' && currentCourseware.url">
-            <video ref="videoPlayerRef" class="video-js vjs-big-play-centered" controls preload="metadata">
+            <video ref="videoPlayerRef" class="video-js vjs-big-play-centered" controls preload="metadata" crossorigin="anonymous">
               <source :src="currentCourseware.url" :type="currentCourseware.mimeType" />
-              您的浏览器不支持视频播放
+              <!-- 备用格式支持 -->
+              <source v-if="currentCourseware.webmUrl" :src="currentCourseware.webmUrl" type="video/webm" />
+              <source v-if="currentCourseware.ogvUrl" :src="currentCourseware.ogvUrl" type="video/ogg" />
+              您的浏览器不支持视频播放，请尝试升级浏览器或下载视频
             </video>
+            <!-- 浏览器兼容性提示 -->
+            <div v-if="videoError" class="video-compatibility-notice">
+              <el-icon :size="20"><WarningFilled /></el-icon>
+              <span>当前浏览器可能不支持此视频格式，建议使用Chrome浏览器</span>
+              <el-button type="text" @click="downloadCourseware">下载视频</el-button>
+            </div>
           </div>
 
           <div class="audio-player" v-else-if="currentCourseware.type === 'audio' && currentCourseware.url">
@@ -37,11 +46,13 @@
             <el-button class="fullscreen-btn" type="primary" :icon="FullScreen" circle @click="toggleFullscreen"
               :title="isFullscreen ? '退出全屏' : '全屏查看'">
             </el-button>
-            <iframe :src="`${currentCourseware.url}#toolbar=0`" class="pdf-viewer" frameborder="0"></iframe>
+            <iframe :src="`${currentCourseware.url}#toolbar=0`" class="pdf-viewer" frameborder="0"
+                    @contextmenu.prevent=""></iframe>
           </div>
 
           <div class="courseware-viewer" v-else-if="currentCourseware.type === 'image' && currentCourseware.url">
-            <img :src="currentCourseware.url" class="image-viewer" alt="课件图片" />
+            <img :src="currentCourseware.url" class="image-viewer" alt="课件图片" 
+                 @contextmenu.prevent="" @dragstart.prevent="" />
           </div>
 
           <div class="courseware-viewer office-viewer word-viewer"
@@ -326,6 +337,46 @@ import VueOfficeDocx from '@vue-office/docx';
 import '@vue-office/docx/lib/index.css';
 import VueOfficePptx from '@vue-office/pptx';
 
+// 禁用右键菜单防护
+const disableContextMenu = () => {
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+  });
+};
+
+// 禁用视频右键和拖拽
+const disableVideoContextMenu = () => {
+  const videos = document.querySelectorAll('video');
+  videos.forEach(video => {
+    video.addEventListener('contextmenu', e => e.preventDefault());
+    video.addEventListener('dragstart', e => e.preventDefault());
+  });
+};
+
+// 检测浏览器视频格式支持
+const checkVideoSupport = () => {
+  const video = document.createElement('video');
+  const support = {
+    mp4: video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"'),
+    webm: video.canPlayType('video/webm; codecs="vp8, vorbis"'),
+    ogg: video.canPlayType('video/ogg; codecs="theora, vorbis"')
+  };
+  
+  console.log('浏览器视频格式支持:', support);
+  return support;
+};
+
+// 检测浏览器类型
+const detectBrowser = () => {
+  const userAgent = navigator.userAgent;
+  if (userAgent.indexOf('Chrome') > -1) return 'Chrome';
+  if (userAgent.indexOf('Firefox') > -1) return 'Firefox';
+  if (userAgent.indexOf('Safari') > -1) return 'Safari';
+  if (userAgent.indexOf('Edge') > -1) return 'Edge';
+  return 'Unknown';
+};
+
 const route = useRoute();
 const router = useRouter();
 const courseId = ref(null);
@@ -341,6 +392,7 @@ const pptLoading = ref(false);
 const wordLoading = ref(false);
 const pptError = ref('');
 const wordError = ref('');
+const videoError = ref(false); // 视频播放错误状态
 const documentSize = ref(''); // 文档大小信息
 let heartbeatTimer = null;
 let lastHeartbeatTime = 0;
@@ -655,6 +707,14 @@ const initVideoPlayer = () => {
 
   nextTick(() => {
     if (videoPlayerRef.value && currentCourseware.type === 'video') {
+      // 重置错误状态
+      videoError.value = false;
+      
+      // 检测浏览器兼容性
+      const browser = detectBrowser();
+      const support = checkVideoSupport();
+      console.log(`当前浏览器: ${browser}`, support);
+      
       // 优化视频播放器配置，解决抖动问题
       player.value = videojs(videoPlayerRef.value, {
         controls: true,
@@ -664,7 +724,36 @@ const initVideoPlayer = () => {
         fill: true,   // 开启填充模式，填满父容器
         playbackRates: [0.5, 1, 1.5, 2],
         language: 'zh-CN',
-        sources: [{ src: currentCourseware.url, type: currentCourseware.mimeType }],
+        html5: {
+          vhs: {
+            overrideNative: true,
+          },
+          nativeVideoTracks: false,
+          nativeAudioTracks: false,
+          nativeTextTracks: false,
+        },
+        sources: [{ 
+          src: currentCourseware.url, 
+          type: currentCourseware.mimeType || 'video/mp4' 
+        }],
+        techOrder: ['html5'], // 优先使用HTML5播放器
+      });
+
+      // 错误处理
+      player.value.on('error', () => {
+        console.error('视频播放错误:', player.value.error());
+        videoError.value = true;
+        
+        // 根据浏览器类型给出具体建议
+        const browser = detectBrowser();
+        let suggestion = '建议使用Chrome浏览器获得最佳播放体验';
+        if (browser === 'Firefox' && support.mp4 === '') {
+          suggestion = 'Firefox可能不支持此MP4编码，建议使用Chrome或转换视频格式';
+        } else if (browser === 'Safari' && support.webm === 'probably') {
+          suggestion = 'Safari建议使用MP4格式';
+        }
+        
+        ElMessage.warning(`视频播放失败: ${suggestion}`);
       });
 
       // 监听 loadedmetadata 事件
@@ -687,6 +776,9 @@ const initVideoPlayer = () => {
           ElMessage.success('恭喜你完成本小节学习！');
         }
       });
+      
+      // 视频加载完成后应用防护
+      setTimeout(disableVideoContextMenu, 50);
     }
   });
 };
@@ -713,6 +805,10 @@ const initAudioPlayer = () => {
       audioEl.addEventListener('play', onPlay);
       audioEl.addEventListener('pause', onPause);
       audioEl.addEventListener('ended', onEnded);
+      
+      // 为音频元素添加防护
+      audioEl.addEventListener('contextmenu', e => e.preventDefault());
+      audioEl.addEventListener('dragstart', e => e.preventDefault());
 
       player.value = audioEl;
     }
@@ -1069,6 +1165,10 @@ onMounted(() => {
   }
 
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+  
+  // 启用防护措施
+  disableContextMenu();
+  setTimeout(disableVideoContextMenu, 100); // 延迟执行确保视频元素已渲染
 });
 
 onBeforeUnmount(() => {
@@ -1078,6 +1178,43 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 防护措施 - 禁用文本选择和触摸调用 */
+.details-page-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 允许输入框等需要选择的元素 */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* 视频兼容性提示 */
+.video-compatibility-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  margin-top: 8px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.video-compatibility-notice .el-icon {
+  color: #ef4444;
+}
+
 /* .details-page-container {
   max-width: 100%;
   margin: 20px auto;
@@ -1240,6 +1377,14 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: contain;
   background-color: #000;
+  
+  /* 禁用图片拖拽 - 使用标准属性 */
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  
+  /* 禁用图片长按保存 */
+  -webkit-touch-callout: none;
 }
 
 /* 6. 错误/下载提示容器 */

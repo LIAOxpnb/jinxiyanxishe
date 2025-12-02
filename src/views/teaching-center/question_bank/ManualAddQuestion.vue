@@ -316,6 +316,7 @@ const createBaseQuestion = (type) => ({
   attachmentRequired: 'no',
   fileName: '',
   filePath: '',
+  fileUpload: 0,
 });
 
 const addQuestion = (type) => {
@@ -478,9 +479,9 @@ const onSubmit = async () => {
         difficulty: q.difficulty,
         analysis: q.analysisType === 'HAS_ANALYSIS' ? q.analysisContent : '',
         wordLimit: 0,
-        fileUpload: 0,
-        fileName: "",
-        filePath: ""
+        fileUpload: q.fileUpload || 0,
+        fileName: q.fileName || '',
+        filePath: q.filePath || ''
       };
       
       switch (q.questionType) {

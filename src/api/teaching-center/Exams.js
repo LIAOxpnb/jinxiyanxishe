@@ -1,4 +1,5 @@
 import request from '../../utils/request';
+import axios from 'axios';
 
 /**
  * @description 获取考试列表
@@ -228,5 +229,76 @@ export function copyExam(params) {
  * @param {object} params - 查询参数
  */
 export function getUserList(params) {
-  return request.post('/admin/user/list', params);
+  return request({
+    url: '/admin/user/list',
+    method: 'post',
+    data: params
+  });
+}
+
+/**
+ * @description 导出考题详情
+ * @param {object} data - 导出参数
+ * @param {number} data.examId - 考试ID (必填)
+ * @param {Array<number>} data.questionIds - 题目ID列表 (必填)
+ */
+export function exportExamQuestionDetail(data) {
+  const token = sessionStorage.getItem('token');
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
+  
+  return axios.post(`${baseURL}/teacher/exam/getExamQuestionDetail`, data, {
+    responseType: 'blob',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : ''
+    }
+  }).then(response => response.data);
+}
+
+/**
+ * @description 导出考生考题详情
+ * @param {object} params - 查询参数
+ * @param {string} params.examId - 考试ID (必填)
+ */
+export function exportStudentExamQuestionDetail(params) {
+  const token = sessionStorage.getItem('token');
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
+  
+  return axios.get(`${baseURL}/teacher/exam/getExamQuestionStatistics`, {
+    responseType: 'blob',
+    params: params,
+    headers: {
+      Authorization: token ? `Bearer ${token}` : ''
+    }
+  }).then(response => response.data);
+}
+
+/**
+ * @description 导出考生错题详情
+ * @param {object} params - 查询参数
+ * @param {string} params.examId - 考试ID (可选)
+ */
+export function exportStudentWrongQuestionDetail(params) {
+  const token = sessionStorage.getItem('token');
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api';
+  
+  return axios.get(`${baseURL}/teacher/exam/getExamErrorQuestionDetail`, {
+    responseType: 'blob',
+    params: params,
+    headers: {
+      Authorization: token ? `Bearer ${token}` : ''
+    }
+  }).then(response => response.data);
+}
+
+/**
+ * @description 查看考试情况
+ * @param {object} params - 查询参数
+ * @param {string} params.examId - 考试ID (必填)
+ */
+export function getExamProgressInfo(params) {
+  return request({
+    url: '/teacher/exam/getExamProgressInfo',
+    method: 'get',
+    params: params
+  });
 }

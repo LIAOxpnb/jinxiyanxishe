@@ -144,6 +144,49 @@
       </el-carousel>
     </div>
 
+    <!-- 工具下载区域 -->
+    <div class="tools-section">
+      <div class="section-header">
+        <div>
+          <h2>工具下载</h2>
+          <p>提供专业工具软件，助力您的学习和工作</p>
+        </div>
+        <div class="more-link-wrapper">
+          <!-- <el-link type="primary" @click="navigateTo('System-ToolManagement')">更多工具 <el-icon><ArrowRight /></el-icon></el-link> -->
+        </div>
+      </div>
+
+      <div v-if="loadingTools" class="loading-state">
+        <el-skeleton :rows="3" animated />
+      </div>
+
+      <div v-else class="tools-grid">
+        <div 
+          v-for="tool in toolsList" 
+          :key="tool.id"
+          class="tool-card"
+          @click="downloadTool(tool)"
+        >
+          <div class="tool-icon">
+            <el-icon size="32"><Document /></el-icon>
+          </div>
+          <div class="tool-info">
+            <h4 class="tool-name">{{ tool.name }}</h4>
+            <p class="tool-desc">点击下载工具文件</p>
+          </div>
+          <div class="tool-action">
+            <el-button type="primary" size="small" :icon="Download">
+              下载
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!loadingTools && toolsList.length === 0" class="empty-state">
+        <el-empty description="暂无工具" />
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -151,13 +194,15 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { School, Edit, Reading, TrendCharts, User, VideoCamera, ArrowRight, ArrowLeft } from '@element-plus/icons-vue';
+import { School, Edit, Reading, TrendCharts, User, VideoCamera, ArrowRight, ArrowLeft, Document, Download } from '@element-plus/icons-vue';
 
 // --- API 导入 ---
 import { getStudentCourseList } from '@/api/classroom.js'; 
 import { previewFile } from '@/api/common/PreviewFile.js';
+import { downloadFile } from '@/api/common/FileDownload.js';
 import { getUserList } from '@/api/system-management/User.js'; 
 import { getDictByType } from '@/api/system-management/dictionary.js';
+import { getToolsList } from '@/api/system-management/Tool-Management.js';
 
 // --- 基础配置和路由 ---
 const router = useRouter();
@@ -285,6 +330,65 @@ const groupedLecturers = computed(() => {
 });
 
 
+// --- 工具下载模块逻辑 ---
+const toolsList = ref([]);
+const loadingTools = ref(true);
+
+const fetchTools = async () => {
+  loadingTools.value = true;
+  try {
+    const params = {
+      page: 1,
+      size: 6, // 首页显示6个工具
+      name: ''
+    };
+    const res = await getToolsList(params);
+    if (res.code === 200 && res.data) {
+      toolsList.value = res.data.records || [];
+    } else {
+      ElMessage.error(res.message || '获取工具列表失败');
+    }
+  } catch (error) {
+    console.error('获取工具列表失败:', error);
+    ElMessage.error('获取工具列表失败');
+  } finally {
+    loadingTools.value = false;
+  }
+};
+
+const downloadTool = async (tool) => {
+  try {
+    if (!tool.urlPath) {
+      ElMessage.warning('工具文件路径不存在');
+      return;
+    }
+    
+    ElMessage.info('正在获取下载链接...');
+    
+    console.log('工具数据:', tool); // 调试日志
+    console.log('urlPath:', tool.urlPath); // 调试日志
+    
+    // 使用 previewFile 获取下载链接（与 ExamQuestionCard.vue 保持一致）
+    const downloadUrl = await previewFile(tool.urlPath);
+    
+    console.log('下载链接:', downloadUrl); // 调试日志
+    
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = tool.name || '工具文件'; // 使用工具名称作为下载文件名
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    ElMessage.success('开始下载');
+  } catch (error) {
+    console.error('下载工具失败:', error);
+    ElMessage.error('获取下载链接失败，请重试');
+  }
+};
+
+
 const fetchLecturers = async () => {
   loadingLecturers.value = true;
   try {
@@ -341,6 +445,7 @@ onMounted(() => {
   fetchCategories();
   fetchHotCourses();
   fetchLecturers();
+  fetchTools();
 });
 
 </script>
@@ -998,6 +1103,101 @@ onMounted(() => {
   }
   
   .course-meta {
+    font-size: 15px;
+  }
+}
+
+/* 工具下载区域样式 */
+.tools-section {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 60px 20px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.tool-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #e8eaf6;
+}
+
+.tool-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(91, 111, 216, 0.15);
+  border-color: #5B6FD8;
+}
+
+.tool-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #f0f3ff 0%, #e8eaf6 100%);
+  border-radius: 12px;
+  color: #5B6FD8;
+  flex-shrink: 0;
+}
+
+.tool-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-desc {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.tool-action {
+  flex-shrink: 0;
+}
+
+.empty-state {
+  margin-top: 40px;
+  text-align: center;
+}
+
+/* 响应式适配 */
+@media screen and (max-width: 768px) {
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .tool-card {
+    padding: 20px;
+  }
+  
+  .tool-icon {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .tool-name {
     font-size: 15px;
   }
 }

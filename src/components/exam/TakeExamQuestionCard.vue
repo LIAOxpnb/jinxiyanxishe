@@ -86,7 +86,7 @@
         </el-button>
         <template #tip>
           <div class="el-upload__tip">
-            单个文件小于100M，文档类只支持Word格式（.doc、.docx），不支持txt
+            单个文件小于100M，文档类不支持txt，多文件请上传压缩包 
           </div>
         </template>
       </el-upload>

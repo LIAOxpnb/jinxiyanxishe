@@ -50,6 +50,12 @@
           </el-menu-item>
         </el-menu-item-group>
 
+        <el-menu-item-group title="---工具管理---">
+          <el-menu-item index="/system-management/tool-management">
+            <template #title>工具管理</template>
+          </el-menu-item>
+        </el-menu-item-group>
+
         <el-menu-item-group title="---配置中心---">
           <el-menu-item index="/system-management/global-settings">
             <template #title>全局配置</template>

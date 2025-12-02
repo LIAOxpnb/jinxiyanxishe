@@ -93,6 +93,8 @@
               <el-descriptions-item label="查看考卷">{{ examDetails.viewPaper === 1 ? '开启' : '关闭' }}</el-descriptions-item>
               <el-descriptions-item label="禁止复制">{{ examDetails.disableCopy === 1 ? '开启' : '关闭'
               }}</el-descriptions-item>
+              <el-descriptions-item label="完整交卷">{{ examDetails.complete === 1 ? '是' : '否'
+              }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
 
@@ -228,6 +230,12 @@
             <el-radio :label="0">关闭</el-radio>
           </el-radio-group>
           <div class="form-hint">【备注】1. 试题乱序默认开启; 2. 查看考卷、禁止复制...</div>
+        </el-form-item>
+        <el-form-item label="完整交卷">
+          <el-radio-group v-model="editForm.complete">
+            <el-radio :label="1">是</el-radio>
+            <el-radio :label="0">否</el-radio>
+          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1044,6 +1052,10 @@ const openBasicInfoDialog = () => {
 
 const openExamSettingsDialog = async () => {
   editForm.value = JSON.parse(JSON.stringify(examDetails.value));
+  // 确保complete字段有默认值
+  if (editForm.value.complete === undefined || editForm.value.complete === null) {
+    editForm.value.complete = 1;
+  }
   selectedScopeItems.value = [];
   selectedScopeUsers.value = [];
   selectedScopeClasses.value = [];

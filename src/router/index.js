@@ -63,6 +63,7 @@ const routes = [
       { path: 'message-management', name: 'System-MessageManagement', component: () => import('../views/system-management/MessageManagement.vue') },
       { path: 'message-templates', name: 'System-MessageTemplates', component: () => import('../views/system-management/MessageTemplates.vue') },
       { path: 'global-settings', name: 'System-GlobalSettings', component: () => import('../views/system-management/GlobalSettings.vue') },
+      { path: 'tool-management', name: 'System-ToolManagement', component: () => import('../views/system-management/ToolManagement.vue') },
       { path: 'dictionary-management', name: 'System-DictionaryManagement', component: () => import('../views/system-management/DictionaryManagement.vue') },
       { path: 'operation-logs', name: 'System-OperationLogs', component: () => import('../views/system-management/OperationLogs.vue') },
       { path: 'back-end-permissions', name: 'System-BackEndPermissions', component: () => import('../views/system-management/Back-end-permissions.vue') }
@@ -94,8 +95,6 @@ const routes = [
   { path: '/shooting-range/detail/:id', name: 'ShootingRangeDetail', component: () => import('../views/shooting-rangePage/ShootingRangeDetail.vue') },
   { path: '/shooting-range/take/:id', name: 'TakeShootingRange', component: () => import('../views/shooting-rangePage/TakeShootingRange.vue') },
   { path: '/shooting-range/result/:id', name: 'ShootingRangeResult', component: () => import('../views/shooting-rangePage/ShootingRangeResult.vue') },
-  { path: '/ClassesPage', name: 'Classes', component: () => import('../views/ClassesPage.vue') },
-  { path: '/ClassesPage/:id', name: 'ClassDetails', component: () => import('../views/class/ClassDetail.vue') },
   
   // 教学中心 - 全屏独立页面（设置、配置、阅卷等，不显示左侧导航栏）
   { path: '/teaching-center/classes/settings/:id', name: 'TeachingCenter-ClassSettings', component: () => import('../views/teaching-center/classes/ClassSettings.vue') },

@@ -4,6 +4,9 @@
       <div class="exam-header">
         <div class="exam-title">{{ examDetails.name }}</div>
         <div class="exam-actions">
+          <div class="exam-time-info">
+            <span v-if="examDetails && examDetails.examDate === 1" class="time-item">结束时间: {{ examDetails.endTime }}</span>
+          </div>
           <span class="countdown">剩余时间: {{ formattedCountdown }}</span>
           <el-button type="primary" @click="confirmSubmit">交卷</el-button>
         </div>
@@ -23,7 +26,7 @@
                 <div class="group-title">{{ group.type }}</div>
                 <div class="question-nav-grid">
                   <div v-for="q in group.questions" :key="q.questionId" class="nav-item" :class="{
-                    'answered': isAnswered(q.question.id),
+                    'answered': isAnswered(q.question.id, q.question.questionType),
                     'current': currentQuestionIndex === q.originalIndex
                   }" @click="goToQuestion(q.originalIndex)">
                     {{ q.originalIndex + 1 }}
@@ -101,6 +104,18 @@ const isExamSubmitted = ref(false);
 const isRestoringAnswers = ref(false);
 let saveTimeout = null;
 const changedQuestionIds = new Set(); // 【新增】跟踪有变更的题目ID
+const visitedEssayQuestionIds = reactive(new Set()); // 跟踪已查看的论述题ID
+
+watch([currentQuestionIndex, questionList], () => {
+  const list = questionList.value;
+  const index = currentQuestionIndex.value;
+  if (list && list.length > 0 && index >= 0 && index < list.length) {
+    const q = list[index];
+    if (q.question.questionType === '论述') {
+      visitedEssayQuestionIds.add(q.question.id);
+    }
+  }
+}, { immediate: true });
 
 const groupedQuestions = computed(() => {
   const groups = {};
@@ -243,7 +258,7 @@ const startTimer = (durationMinutes) => {
   // 每10秒保存一次已使用时间
   saveTimeInterval = setInterval(() => {
     saveUsedTime();
-  }, 10000);
+  }, 30000);
 };
 
 // 
@@ -266,6 +281,21 @@ const saveUsedTime = async () => {
     });
     
     console.log('✅ 保存已使用时间成功');
+
+    // 保存成功后，立即获取服务器最新时间并更新展示
+    const serverUsedTime = await getUsedTime();
+    // 只有获取到有效数值才更新
+    if (typeof serverUsedTime === 'number') {
+      usedSeconds.value = serverUsedTime;
+      
+      // 如果是限时考试，同步更新剩余时间
+      if (examDetails.value && examDetails.value.duration > 0) {
+        const totalSeconds = examDetails.value.duration * 60;
+        const newRemaining = Math.max(0, totalSeconds - serverUsedTime);
+        remainingSeconds.value = newRemaining;
+      }
+      console.log('🔄 已同步服务器时间:', { used: usedSeconds.value, remaining: remainingSeconds.value });
+    }
   } catch (error) {
     // 静默处理错误
     console.error('❌ 保存已使用时间失败:', error);
@@ -365,18 +395,32 @@ const handleAnswerUpdate = (questionId, val) => {
 };
 
 const answeredCount = computed(() => {
-  return Object.values(answers).filter(ans => {
-    if (Array.isArray(ans)) return ans.some(item => item !== null && item !== '');
-    return !!ans;
-  }).length;
+  return questionList.value.filter(q => isAnswered(q.question.id, q.question.questionType)).length;
 });
 
-const isAnswered = (questionId) => {
+const isAnswered = (questionId, questionType) => {
+  // 如果是论述题且已查看，视为已答
+  if (!questionType) {
+    const q = questionList.value.find(item => item.question.id === questionId);
+    if (q) questionType = q.question.questionType;
+  }
+  if (questionType === '论述' && visitedEssayQuestionIds.has(questionId)) {
+    return true;
+  }
+
   const ans = answers[questionId];
   if (Array.isArray(ans)) {
     return ans.some(item => item !== null && item !== '');
   }
-  return !!ans; 
+  // 对于字符串类型的答案，检查是否不为空且不全是空格或HTML标签
+  if (ans === null || ans === undefined) return false;
+  const strAns = ans.toString().trim();
+  if (strAns === '') return false;
+  
+  // 检查富文本编辑器的空内容（如 <p><br></p> 等HTML标签）
+  // 移除HTML标签后检查是否还有实际内容
+  const textContent = strAns.replace(/<[^>]*>/g, '').trim();
+  return textContent !== '';
 };
 
 const goToQuestion = (index) => {
@@ -398,7 +442,21 @@ const nextQuestion = () => {
 };
 
 const confirmSubmit = () => {
-  const unansweredCount = questionList.value.length - answeredCount.value;
+  const unansweredQuestions = questionList.value.filter(q => !isAnswered(q.question.id, q.question.questionType));
+  const unansweredCount = unansweredQuestions.length;
+  
+  // 如果设置为完整交卷且还有未答题目，提示用户
+  if (examDetails.value.complete === 1 && unansweredCount > 0) {
+    // 检查未答题目中是否有非论述题
+    // 如果所有未答题目都是论述题，则允许提交
+    const hasUnansweredRequired = unansweredQuestions.some(q => q.question.questionType !== '论述');
+    
+    if (hasUnansweredRequired) {
+      ElMessage.warning('请做完全部题目再提交');
+      return;
+    }
+  }
+  
   ElMessageBox.confirm(`已答 ${answeredCount.value} 题,未答 ${unansweredCount} 题。确定要交卷吗?`, '交卷确认', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
@@ -824,6 +882,18 @@ onBeforeRouteLeave((to, from, next) => {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.exam-time-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.time-item {
+  font-size: 18px;
+  color: red  ;
+  font-weight: 500;
 }
 
 .countdown {

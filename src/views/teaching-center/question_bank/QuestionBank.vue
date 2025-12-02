@@ -429,6 +429,7 @@ const questionForm = reactive({
   answer: '',
   fileName: '',
   filePath: '',
+  fileUpload: 0,
 });
 const rules = reactive({});
 
@@ -928,6 +929,7 @@ const handleSubmit = async () => {
     
     // 如果是论述题或简答题，添加附件信息
     if (questionForm.questionType === '论述' || questionForm.questionType === '简答') {
+      dataToSubmit.fileUpload = questionForm.fileUpload || 0;
       dataToSubmit.fileName = questionForm.fileName || '';
       dataToSubmit.filePath = questionForm.filePath || '';
     }
@@ -1150,6 +1152,7 @@ const handleAttachmentChange = async (uploadFile) => {
   try {
     const response = await uploadFiles([uploadFile.raw]);
     if (response.code === 200) {
+      questionForm.fileUpload = 1; // 标记为已上传
       questionForm.fileName = uploadFile.name;
       questionForm.filePath = response.data;
       attachmentFileList.value = [{
@@ -1170,6 +1173,7 @@ const handleAttachmentChange = async (uploadFile) => {
 };
 
 const handleAttachmentRemove = () => {
+  questionForm.fileUpload = 0;
   questionForm.fileName = '';
   questionForm.filePath = '';
   attachmentFileList.value = [];

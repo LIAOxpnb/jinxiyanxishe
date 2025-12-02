@@ -23,7 +23,7 @@
           <section class="page-section">
             <div class="section-header">
               <h3>学习记录</h3>
-              <el-link type="primary">查看更多 <el-icon><ArrowRight /></el-icon></el-link>
+              <!-- <el-link type="primary">查看更多 <el-icon><ArrowRight /></el-icon></el-link> -->
             </div>
             <div v-if="learningProgress.length > 0">
               <el-scrollbar>
@@ -31,7 +31,7 @@
                   <div v-for="item in learningProgress" :key="item.id" class="progress-item" @click="goToCourseDetail(item.course.id)">
                     <div class="progress-card" :style="getProgressCardStyle(item.coverUrl)">
                       <div class="card-content">
-                        <h4>{{ item.course?.name }}</h4>
+                        <h4 class="course-title" :title="item.course?.name">{{ item.course?.name }}</h4>
                         <p>继续学习</p>
                       </div>
                     </div>
@@ -49,13 +49,13 @@
           <section class="page-section">
             <div class="section-header">
               <h3>课程收藏</h3>
-              <el-link type="primary">查看更多 <el-icon><ArrowRight /></el-icon></el-link>
+              <!-- <el-link type="primary">查看更多 <el-icon><ArrowRight /></el-icon></el-link> -->
             </div>
             <div v-if="collectedCourses.length > 0" class="course-grid">
               <el-card v-for="item in collectedCourses" :key="item.id" class="course-card" shadow="hover" :body-style="{ padding: '0px' }" @click="goToCourseDetail(item.course.id)">
                 <img :src="item.coverUrl" class="course-image" alt="课程封面"/>
                 <div class="course-info">
-                  <h4 class="course-title">{{ item.course.name }}</h4>
+                  <h4 class="course-title" :title="item.course.name">{{ item.course.name }}</h4>
                   <p class="course-summary">{{ item.course.summary }}</p>
                 </div>
               </el-card>
@@ -157,7 +157,7 @@
             >
               <img :src="course.coverUrl" class="course-image" alt="课程封面" />
               <div class="course-info">
-                <h4 class="course-title">{{ course.name }}</h4>
+                <h4 class="course-title" :title="course.name">{{ course.name }}</h4>
                 <p class="course-summary">{{ course.summary }}</p>
                 <el-tag :type="course.status === 1 ? 'success' : 'info'" size="small">
                   {{ course.status === 1 ? '已发布' : '未发布' }}
@@ -680,15 +680,31 @@ watch(() => route.query.tab, (newTab) => {
   position: relative;
   margin-bottom: 8px;
 }
-.progress-card h4 {
+.progress-card .card-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+.progress-card .course-title {
   font-size: 16px;
+  font-weight: 600;
+  color: #fff;
   margin: 0 0 5px 0;
-  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 200px;
 }
 .progress-card p {
   font-size: 13px;
   opacity: 0.8;
   margin: 0;
+  text-align: center;
 }
 .progress-bar-wrapper {
   display: flex;
@@ -769,6 +785,12 @@ watch(() => route.query.tab, (newTab) => {
   font-weight: 600;
   color: #303133;
   margin: 0 0 8px 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
 }
 .course-summary {
   font-size: 13px;
@@ -781,6 +803,7 @@ watch(() => route.query.tab, (newTab) => {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
+  text-align: left;
 }
 .certificate-grid {
   display: grid;
