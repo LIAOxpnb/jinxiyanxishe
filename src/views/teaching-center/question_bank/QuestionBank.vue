@@ -408,7 +408,8 @@ const questionFilterFields = ref([
 const createOptions = ref([
   { label: '手动新增', value: 'manual' },
   { label: '批量导入', value: 'batch-import' },
-  { label: 'AI新增', value: 'ai' }
+  
+  // label: 'AI新增', value: 'ai'
 ]);
 
 // --- 编辑弹窗的状态 ---

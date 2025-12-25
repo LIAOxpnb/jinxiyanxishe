@@ -15,7 +15,7 @@
             <div v-if="videoError" class="video-compatibility-notice">
               <el-icon :size="20"><WarningFilled /></el-icon>
               <span>当前浏览器可能不支持此视频格式，建议使用Chrome浏览器</span>
-              <el-button type="text" @click="downloadCourseware">下载视频</el-button>
+              <!-- <el-button type="text" @click="downloadCourseware">下载视频</el-button> -->
             </div>
           </div>
 
@@ -328,6 +328,7 @@ import {
   getCourseProgress
 } from '@/api/classroom.js';
 
+import { getVideoStreamUrl } from '@/api/common/VideoStream';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { previewFile } from '@/api/common/PreviewFile';
@@ -1083,7 +1084,15 @@ const handleSectionClick = async (section) => {
         try {
           const fileType = res.data.courseware.fileType;
           const coursewareType = getCoursewareType(fileType);
-          const coursewareUrl = await previewFile(res.data.courseware.fileName);
+          let coursewareUrl = '';
+
+          if (coursewareType === 'video') {
+            // 使用加密视频流接口
+            coursewareUrl = getVideoStreamUrl(res.data.courseware.fileName);
+          } else {
+            // 其他类型使用预览接口
+            coursewareUrl = await previewFile(res.data.courseware.fileName);
+          }
 
           currentCourseware.type = coursewareType;
           currentCourseware.url = coursewareUrl;

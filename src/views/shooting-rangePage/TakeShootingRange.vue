@@ -25,9 +25,9 @@
         </div>
         <div class="right-panel clues-content">
           <div class="info-bar">请仔细阅读线索后，开始进行案情研判</div>
-          <div v-for="clue in clues" :key="clue.id" class="clue-item">
-            <h4>{{ clue.title }}</h4>
-            <p v-if="clue.content">{{ clue.content }}</p>
+          <div v-for="clue in clues" :key="clue.id" class="clue-item" v-image-preview>
+            <div v-if="clue.title" v-html="clue.title" class="clue-title"></div>
+            <div v-if="clue.content" v-html="clue.content" class="clue-content"></div>
             <div v-if="clue.filePath" class="clue-attachment">
               <el-link :icon="Paperclip" type="primary" @click="previewClueFile(clue)">{{ clue.fileName }}</el-link>
             </div>
@@ -89,7 +89,10 @@
               :key="questions[currentQuestionIndex].id" 
               :question-data="questions[currentQuestionIndex]"
               :index="currentQuestionIndex" 
-              v-model="answers[questions[currentQuestionIndex].id]"
+              :model-value="answers[questions[currentQuestionIndex].id]"
+              @update:model-value="(val) => handleAnswerUpdate(questions[currentQuestionIndex].id, val)"
+              :attachment="attachments[questions[currentQuestionIndex].id] || {}"
+              @update:attachment="handleAttachmentUpdate"
             />
             
             <!-- 答题操作按钮 -->
@@ -148,6 +151,7 @@ const detail = ref(null);
 const clues = ref([]);
 const questions = ref([]);
 const answers = reactive({});
+const attachments = reactive({}); // 存储每个题目的附件信息
 const activeTab = ref('clues');
 const currentQuestionIndex = ref(0);
 
@@ -166,6 +170,7 @@ const rangeRecordId = ref(null); // 答题记录ID
 const isRangeSubmitted = ref(false); // 是否已交卷
 const isRestoringAnswers = ref(false); // 是否正在恢复答案
 const isInitializing = ref(true); // 添加初始化标志
+const changedQuestionIds = new Set(); // 追踪已变更的题目ID
 
 let timerInterval = null;
 let saveTimeInterval = null; // 保存时间的定时器
@@ -347,6 +352,39 @@ const nextQuestion = () => {
   }
 };
 
+// 处理附件更新
+const handleAttachmentUpdate = (attachmentInfo) => {
+  if (isRestoringAnswers.value) return;
+  
+  const { questionId, fileName, filePath } = attachmentInfo;
+  attachments[questionId] = { fileName, filePath };
+  
+  // 标记题目为已变更
+  changedQuestionIds.add(questionId);
+  
+  console.log('📎 附件更新:', { questionId, fileName, filePath });
+  
+  // 闯关模式不自动保存，只有点击下一题时才保存
+  if (detail.value?.challengeMode === 1) {
+    return;
+  }
+  debounceSaveRangeRecord();
+};
+
+// 处理答案更新
+const handleAnswerUpdate = (questionId, val) => {
+  if (isRestoringAnswers.value) return;
+  
+  answers[questionId] = val;
+  changedQuestionIds.add(questionId);
+  
+  // 闯关模式不自动保存，只有点击下一题时才保存
+  if (detail.value?.challengeMode === 1) {
+    return;
+  }
+  debounceSaveRangeRecord();
+};
+
 // 判断题目是否已答
 const isQuestionAnswered = (index) => {
   const questionId = questions.value[index]?.id;
@@ -377,7 +415,13 @@ const submitCurrentAnswer = async () => {
     // 闯关模式下只传当前题目的答案
     let userAnswer = answer;
     if (Array.isArray(userAnswer)) {
-      userAnswer = userAnswer.sort().join('#@#');
+      // 只对多选题排序，填空题不排序（顺序很重要）
+      if (question.questionType === '多选') {
+        userAnswer = userAnswer.sort().join('#@#');
+      } else {
+        // 填空题保持原始顺序
+        userAnswer = userAnswer.join('#@#');
+      }
     }
     
     const shootingRangeSubmitRecordList = [
@@ -519,15 +563,44 @@ const previewClueFile = async (clue) => {
 const saveRangeRecord = async () => {
   console.log('开始暂存答题记录...');
   
+  // 如果没有变更的题目，不需要保存
+  if (changedQuestionIds.size === 0) {
+    console.log('没有变更的题目，无需保存');
+    return;
+  }
+
+  // 获取当前需要保存的题目ID快照
+  const idsToSave = Array.from(changedQuestionIds);
+  
+  // 筛选出需要保存的题目
+  const questionsToSave = questions.value.filter(q => idsToSave.includes(q.id));
+  
+  if (questionsToSave.length === 0) {
+    console.log('没有找到需要保存的题目');
+    return;
+  }
+  
   // 构建答题记录列表
-  const shootingRangeSubmitRecordList = questions.value.map(q => {
+  const shootingRangeSubmitRecordList = questionsToSave.map(q => {
     let userAnswer = answers[q.id];
     if (Array.isArray(userAnswer)) {
-      userAnswer = userAnswer.sort().join('#@#');
+      // 只对多选题排序，填空题不排序（顺序很重要）
+      if (q.questionType === '多选') {
+        userAnswer = userAnswer.sort().join('#@#');
+      } else {
+        // 填空题保持原始顺序
+        userAnswer = userAnswer.join('#@#');
+      }
     }
+    
+    // 添加附件信息
+    const attachment = attachments[q.id] || {};
+    
     return {
       questionId: q.id,
-      userAnswer: userAnswer || ''
+      userAnswer: userAnswer || '',
+      fileName: attachment.fileName || '',
+      filePath: attachment.filePath || ''
     };
   });
 
@@ -562,6 +635,11 @@ const saveRangeRecord = async () => {
         // 某些情况下后端可能返回200但没有data.id，这时不抛出错误
         // 因为数据可能已经保存成功
       }
+      
+      // 保存成功后，从变更集合中移除已保存的ID
+      const idsToSave = Array.from(changedQuestionIds);
+      idsToSave.forEach(id => changedQuestionIds.delete(id));
+      console.log('已清除保存的题目追踪，剩余未保存:', changedQuestionIds.size);
     } else {
       console.error('暂存失败，响应:', res);
       const errorMsg = res.msg || '暂存失败';
@@ -650,15 +728,31 @@ const confirmSubmit = () => {
 const submitReport = async () => {
   console.log('开始提交报告，rangeRecordId:', rangeRecordId.value);
   
-  // 提交前先尝试暂存一次（确保最新答案已保存）
+  // 提交前强制保存所有已答题目（确保所有答案都被保存）
   try {
-    console.log('提交前暂存答案...');
+    console.log('提交前保存所有答案...');
+    
+    // 找出所有有答案的题目
+    const answeredQuestionIds = questions.value
+      .filter(q => {
+        const ans = answers[q.id];
+        if (Array.isArray(ans)) {
+          return ans.length > 0 && ans.some(item => item);
+        }
+        return !!ans;
+      })
+      .map(q => q.id);
+    
+    // 临时将所有已答题目添加到变更集合
+    answeredQuestionIds.forEach(id => changedQuestionIds.add(id));
+    
+    console.log('需要保存的题目数:', changedQuestionIds.size);
     await saveRangeRecord();
-    console.log('暂存完成，rangeRecordId:', rangeRecordId.value);
+    console.log('保存完成，rangeRecordId:', rangeRecordId.value);
   } catch (error) {
-    console.error('暂存失败:', error);
-    // 暂存失败也继续提交，因为可能之前已经保存过
-    console.warn('暂存失败但继续提交流程');
+    console.error('保存失败:', error);
+    // 保存失败也继续提交，因为可能之前已经保存过
+    console.warn('保存失败但继续提交流程');
   }
   
   // 提交前保存一次已使用时间
@@ -909,9 +1003,23 @@ onMounted(async () => {
       }
     }
 
-    // 处理线索
+    // 处理线索 - 转换图片URL
     if (cluesRes.code === 200) {
-      clues.value = cluesRes.data || [];
+      const processedClues = await Promise.all(
+        (cluesRes.data || []).map(async (clue) => {
+          // 转换线索标题中的图片（如果有）
+          if (clue.title) {
+            clue.title = await convertImagesToPreviewUrls(clue.title);
+          }
+          // 转换线索内容中的图片
+          if (clue.content) {
+            clue.content = await convertImagesToPreviewUrls(clue.content);
+          }
+          return clue;
+        })
+      );
+      clues.value = processedClues;
+      console.log('线索处理完成:', clues.value);
     }
 
     // 处理题目列表
@@ -979,6 +1087,20 @@ onMounted(async () => {
               answers[questionId] = userAnswer;
             }
           }
+          
+          // 恢复附件信息（学生提交的附件，不是题目附件）
+          if (!isRestart) {
+            // 学生答题附件使用 studentFileName 和 studentFilePath 字段
+            const studentFileName = q.studentFileName || q.userFileName || '';
+            const studentFilePath = q.studentFilePath || q.userFilePath || '';
+            
+            if (studentFileName || studentFilePath) {
+              attachments[questionId] = {
+                fileName: studentFileName,
+                filePath: studentFilePath
+              };
+            }
+          }
         });
         
         // 设置已答题数
@@ -1041,6 +1163,10 @@ onMounted(async () => {
 .question-actions { margin-top: auto; padding-top: 20px; border-top: 1px solid #dcdfe6; text-align: center; }
 .info-bar { background-color: #ecf5ff; color: #409eff; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; }
 .clue-item { border-bottom: 1px solid #f0f2f5; padding-bottom: 16px; margin-bottom: 16px; }
+.clue-title { color: #303133; font-size: 15px; font-weight: 500; margin-bottom: 10px; line-height: 1.6; }
+.clue-title :deep(img) { max-width: 100%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
+.clue-content { color: #606266; font-size: 14px; line-height: 1.6; }
+.clue-content :deep(img) { max-width: 100%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
 .clue-attachment { margin-top: 10px; }
 .clue-attachment .el-link { font-size: 14px; }
 .clues-content { overflow-y: auto; }
@@ -1048,6 +1174,8 @@ onMounted(async () => {
 .nav-item { border: 1px solid #dcdfe6; border-radius: 4px; text-align: center; padding: 8px 0; cursor: pointer; }
 .nav-item.answered { background-color: #409eff; color: #fff; border-color: #409eff; }
 .nav-item.current { border-color: #f56c6c; background-color: #f56c6c; color: #fff; }
+.clue-content { color: #606266; font-size: 14px; line-height: 1.6; }
+.clue-content :deep(img) { max-width: 100%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
 .pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 20px; border-top: 1px solid #dcdfe6; }
 .question-progress { font-size: 16px; font-weight: 500; color: #606266; }
 </style>

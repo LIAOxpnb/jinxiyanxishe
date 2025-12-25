@@ -101,7 +101,7 @@
         <el-form-item label="学生答题附件">
           <el-radio-group v-model="localQuestion.attachmentRequired">
             <el-radio label="no">无需上传</el-radio>
-            <el-radio label="yes">需上传 (仅支持doc、docx、xls、xlsx)</el-radio>
+            <el-radio label="yes">需上传 (单个文件小于100M，不支持txt，多文件请上传压缩包)</el-radio>
           </el-radio-group>
         </el-form-item>
         <!-- 题目附件：老师出题时上传的参考资料，一直显示 -->
@@ -114,11 +114,10 @@
             :on-remove="handleAttachmentRemove"
             :auto-upload="false"
             :limit="1"
-            accept=".doc,.docx,.xls,.xlsx"
           >
             <el-button type="primary">选择文件</el-button>
             <template #tip>
-              <div class="el-upload__tip">仅支持doc、docx、xls、xlsx格式，文件大小不超过10MB</div>
+              <div class="el-upload__tip">单个文件小于100M，不支持txt，多文件请上传压缩包</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -488,24 +487,16 @@ watch(() => [localQuestion.value.fileName, localQuestion.value.filePath], ([file
 
 // 论述题附件上传相关函数
 const beforeAttachmentUpload = (file) => {
-  const validTypes = [
-    'application/msword', 
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel', 
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ];
-  const validExtensions = ['.doc', '.docx', '.xls', '.xlsx'];
-  
   const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-  const isValidType = validTypes.includes(file.type) || validExtensions.includes(fileExtension);
-  const isValidSize = file.size / 1024 / 1024 < 10; // 10MB
-
-  if (!isValidType) {
-    ElMessage.error('只能上传 doc、docx、xls、xlsx 格式的文件!');
+  const isValidSize = file.size / 1024 / 1024 < 100; // 100MB
+  const isTxtFile = fileExtension === '.txt';
+  
+  if (isTxtFile) {
+    ElMessage.error('不支持上传txt格式的文件!');
     return false;
   }
   if (!isValidSize) {
-    ElMessage.error('文件大小不能超过 10MB!');
+    ElMessage.error('文件大小不能超过100MB!');
     return false;
   }
   return true;

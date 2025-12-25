@@ -39,6 +39,16 @@
             <span class="tool-name">{{ row.name || '-' }}</span>
           </template>
         </el-table-column>
+        <!-- <el-table-column prop="sort" label="排序" width="100" align="center">
+          <template #default="{ row }">
+            <span>{{ row.sort || '-' }}</span>
+          </template>
+        </el-table-column> -->
+        <el-table-column prop="remarks" label="备注" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.remarks || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
@@ -95,6 +105,17 @@
           <el-form-item label="工具名称" prop="name">
             <el-input v-model="formData.name" placeholder="请输入工具名称" />
           </el-form-item>
+          <el-form-item label="排序" prop="sort">
+            <el-input-number v-model="formData.sort" :min="0" :controls="true" placeholder="请输入排序号" style="width: 100%;" />
+          </el-form-item>
+          <el-form-item label="备注" prop="remarks">
+            <el-input 
+              v-model="formData.remarks" 
+              placeholder="请输入备注" 
+              type="textarea"
+              :rows="3"
+            />
+          </el-form-item>
         </el-form>
         <el-upload
           ref="uploadRef"
@@ -127,6 +148,17 @@
           </el-form-item>
           <el-form-item label="URL路径" prop="urlPath">
             <el-input v-model="formData.urlPath" placeholder="请输入URL路径" />
+          </el-form-item>
+          <el-form-item label="排序" prop="sort">
+            <el-input-number v-model="formData.sort" :min="0" :controls="true" placeholder="请输入排序号" style="width: 100%;" />
+          </el-form-item>
+          <el-form-item label="备注" prop="remarks">
+            <el-input 
+              v-model="formData.remarks" 
+              placeholder="请输入备注" 
+              type="textarea"
+              :rows="3"
+            />
           </el-form-item>
         </el-form>
       </div>
@@ -196,7 +228,9 @@ const pagination = reactive({
 const formData = reactive({
   id: null,
   name: '',
-  urlPath: ''
+  urlPath: '',
+  sort: 0,
+  remarks: ''
 })
 
 // 表单验证规则
@@ -206,7 +240,23 @@ const formRules = {
   ],
   urlPath: [
     { required: true, message: '请输入URL路径', trigger: 'blur' }
-  ]
+  ],
+  sort: [
+    { required: true, message: '请输入排序号', trigger: ['blur', 'change'] },
+    { validator: (rule, value, callback) => {
+        const num = Number(value)
+        if (value === '' || value === null || value === undefined) {
+          callback(new Error('请输入排序号'))
+        } else if (Number.isNaN(num)) {
+          callback(new Error('排序必须是数字'))
+        } else if (num < 0) {
+          callback(new Error('排序不能为负数'))
+        } else {
+          callback()
+        }
+      }, trigger: ['blur', 'change'] }
+  ],
+  remarks: []
 }
 
 // 获取工具列表
@@ -338,7 +388,8 @@ const handleSubmit = async () => {
       await formRef.value.validate()
       submitLoading.value = true
       
-      const response = await updateTool(formData)
+      const payload = Object.assign({}, formData, { sort: Number(formData.sort) >= 0 ? Number(formData.sort) : 0 })
+      const response = await updateTool(payload)
       
       if (response.code === 200) {
         ElMessage.success('修改成功')
@@ -402,7 +453,9 @@ const handleSubmit = async () => {
       // 调用工具保存接口，使用用户输入的名称
       const toolData = {
         name: formData.name, // 使用用户输入的名称
-        urlPath: filePath
+        urlPath: filePath,
+        sort: Number(formData.sort) >= 0 ? Number(formData.sort) : 0,
+        remarks: formData.remarks
       }
       
       const response = await addTool(toolData)
@@ -443,7 +496,9 @@ const resetForm = () => {
   Object.assign(formData, {
     id: null,
     name: '',
-    urlPath: ''
+    urlPath: '',
+    sort: 0,
+    remarks: ''
   })
   fileList.value = []
   uploadProgress.value = 0

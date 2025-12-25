@@ -110,9 +110,9 @@ const getNavItemClass = (item) => {
   }
   if (item.userAnswer !== null && item.userAnswer !== '') {
     if (item.isCorrect === 1) {
-      return 'correct';
+      return 'incorrect';
     }
-    return 'incorrect';
+    return 'correct';
   }
   return 'unanswered';
 };

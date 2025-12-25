@@ -69,7 +69,7 @@
                     {{ scope.row.status === 1 ? '取消发布' : '发布' }}
                   </el-dropdown-item>
                   <!-- <el-dropdown-item command="entry">入口</el-dropdown-item> -->
-                  <el-dropdown-item command="quoteClass">引用班级</el-dropdown-item>
+                  <!-- <el-dropdown-item command="quoteClass">引用班级</el-dropdown-item> -->
                   <el-dropdown-item command="copy">复制</el-dropdown-item>
                   <el-dropdown-item command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
                 </el-dropdown-menu>

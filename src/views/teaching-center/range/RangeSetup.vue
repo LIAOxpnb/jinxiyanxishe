@@ -20,6 +20,7 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item command="ADD_CLUE">添加线索</el-dropdown-item>
+                        <el-dropdown-item command="DATA_SETTING">数据设置</el-dropdown-item>
                         <el-dropdown-item command="SINGLE_CHOICE" divided>单选题</el-dropdown-item>
                         <el-dropdown-item command="MULTIPLE_CHOICE">多选题</el-dropdown-item>
                         <el-dropdown-item command="TRUE_FALSE">判断题</el-dropdown-item>
@@ -183,11 +184,12 @@
             <Toolbar
               style="border-bottom: 1px solid #ccc"
               :editor="editorRef"
-              :defaultConfig="{}"
+              :defaultConfig="{ toolbarKeys: ['headerSelect', 'blockquote', '|', 'bold', 'underline', 'italic', 'color', 'bgColor', '|', 'fontSize', 'fontFamily', '|', 'bulletedList', 'numberedList', '|', 'justifyLeft', 'justifyCenter', 'justifyRight', '|', 'emotion', 'insertLink', { key: 'group-image', title: '图片', menuKeys: ['insertImage', 'uploadImage'] }, 'insertTable', '|', 'undo', 'redo' ] }"
             />
             <Editor
               style="height: 300px; overflow-y: hidden;"
               v-model="clueForm.title"
+              :defaultConfig="clueEditorConfig"
               @onCreated="handleClueEditorCreated"
             />
           </div>
@@ -780,6 +782,56 @@ const getQuestionTypeName = (type) => {
   return typeMap[type] || type;
 };
 
+// 统一的图片上传处理函数
+const handleImageUpload = (file, insertFn) => {
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过5MB');
+    return;
+  }
+  
+  uploadFiles([file]).then(async (uploadRes) => {
+    if (uploadRes && uploadRes.code === 200 && uploadRes.data) {
+      const relativePath = Array.isArray(uploadRes.data) ? uploadRes.data[0] : uploadRes.data;
+      const previewUrl = await previewFile(relativePath);
+      insertFn(previewUrl, file.name, previewUrl);
+      ElMessage.success('图片上传成功');
+    } else {
+      ElMessage.error(uploadRes.msg || '图片上传失败');
+    }
+  }).catch((error) => {
+    console.error('上传或预览过程中出错:', error);
+    ElMessage.error(error.message || '图片上传失败');
+  });
+};
+
+// 线索编辑器配置
+const clueEditorConfig = {
+  placeholder: '请输入线索内容...',
+  MENU_CONF: {
+    uploadImage: {
+      fieldName: 'file',
+      maxFileSize: 5 * 1024 * 1024, // 5M
+      allowedFileTypes: ['image/*'],
+      // 自定义上传（处理粘贴、拖拽上传）
+      customUpload(file, insertFn) {
+        handleImageUpload(file, insertFn);
+      },
+      // 自定义浏览（处理按钮点击上传）
+      customBrowseAndUpload(insertFn) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          handleImageUpload(file, insertFn);
+        };
+        input.click();
+      }
+    }
+  }
+};
+
 const handleClueEditorCreated = (editor) => { editorRef.value = editor; };
 const destroyClueEditor = () => {
   const editor = editorRef.value;
@@ -825,6 +877,45 @@ const convertImagesToPreviewUrls = async (htmlContent) => {
   return doc.body.innerHTML;
 };
 
+// 将HTML内容中的图片URL转换为相对路径格式（保存到数据库时使用）
+const convertImagesToRelativePaths = (htmlContent) => {
+  if (!htmlContent) return '';
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img');
+  
+  Array.from(images).forEach((img) => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    
+    try {
+      // 如果是预览URL（/api/minio/file/preview?fileName=...），提取 fileName 参数
+      if (src.includes('/api/minio/file/preview')) {
+        const url = new URL(src, window.location.origin);
+        const fileName = url.searchParams.get('fileName');
+        if (fileName) {
+          img.setAttribute('src', decodeURIComponent(fileName));
+        }
+      } else if (src.startsWith('http://') || src.startsWith('https://')) {
+        // 如果是完整URL（未转换的），提取相对路径
+        const url = new URL(src);
+        let pathname = decodeURIComponent(url.pathname);
+        const pathParts = pathname.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          img.setAttribute('src', '/' + pathParts.slice(1).join('/'));
+        } else {
+          img.setAttribute('src', pathname);
+        }
+      }
+    } catch (error) {
+      console.error('转换图片路径失败:', src, error);
+    }
+  });
+  
+  return doc.body.innerHTML;
+};
+
 const transformBackendToFrontend = (backendQuestions = []) => {
   const typeMapReverse = {
     '单选': 'SINGLE_CHOICE', '多选': 'MULTIPLE_CHOICE', '判断': 'TRUE_FALSE',
@@ -837,6 +928,7 @@ const transformBackendToFrontend = (backendQuestions = []) => {
       uid: uuidv4(),
       id: q.id,
       title: q.title,
+      details: q.details || '',
       questionType: questionType,
       difficulty: q.difficulty || 1,
       analysisContent: q.analysis || '',
@@ -846,6 +938,13 @@ const transformBackendToFrontend = (backendQuestions = []) => {
       options: [],
       answer: null,
       showEditor: true, // 从后端加载的题目默认展开
+      // 论述题相关字段
+      answerLimit: q.wordLimit > 0 ? 'limited' : 'unlimited',
+      wordCountRange: q.wordLimit || '',
+      attachmentRequired: q.fileUpload === 1 ? 'yes' : 'no',
+      fileName: q.fileName || '',
+      filePath: q.filePath || '',
+      fileUpload: q.fileUpload || 0,
     };
 
     try {
@@ -869,6 +968,8 @@ const transformBackendToFrontend = (backendQuestions = []) => {
         frontendQuestion.answer = q.answer;
       } else if (questionType === 'FILL_IN_BLANK') {
         frontendQuestion.answer = q.answer ? q.answer.split('#@#') : [];
+      } else if (questionType === 'ESSAY') {
+        frontendQuestion.answer = q.answer || '';
       } else {
         frontendQuestion.answer = q.answer;
       }
@@ -949,18 +1050,23 @@ const saveCluesAndQuestions = async () => {
     const backendQuestions = questionList.value.map((q, i) => {
       const backendQuestion = {
         questionType: questionTypeMap[q.questionType] || '',
-        title: q.title,
+        title: convertImagesToRelativePaths(q.title),
         details: '',
         answer: '',
-        analysis: q.analysisType === 'HAS_ANALYSIS' ? q.analysisContent : '',
+        analysis: q.analysisType === 'HAS_ANALYSIS' ? convertImagesToRelativePaths(q.analysisContent) : '',
         score: q.score,
         sort: i + 1,
+        difficulty: q.difficulty || 1,
+        wordLimit: 0,
+        fileUpload: 0,
+        fileName: '',
+        filePath: '',
       };
 
       if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE'].includes(q.questionType)) {
         backendQuestion.details = JSON.stringify(q.options.map((opt, i) => ({
           option: String.fromCharCode(65 + i),
-          value: opt.content
+          value: convertImagesToRelativePaths(opt.content)
         })));
         if (q.questionType === 'SINGLE_CHOICE' && q.answer !== null) {
           backendQuestion.answer = String.fromCharCode(65 + q.answer);
@@ -972,6 +1078,23 @@ const saveCluesAndQuestions = async () => {
         backendQuestion.details = ''; // 判断题不需要details
       } else if (q.questionType === 'FILL_IN_BLANK') {
         backendQuestion.answer = q.answer ? q.answer.join('#@#') : '';
+      } else if (q.questionType === 'ESSAY') {
+        // 论述题的详情字段
+        backendQuestion.details = convertImagesToRelativePaths(q.details) || '';
+        // 处理论述题的答题限制
+        if (q.answerLimit === 'limited') {
+          backendQuestion.wordLimit = parseInt(q.wordCountRange) || 0;
+        }
+        // 处理论述题的附件上传
+        if (q.attachmentRequired === 'yes') {
+          backendQuestion.fileUpload = 1;
+          backendQuestion.fileName = q.fileName || '';
+          backendQuestion.filePath = q.filePath || '';
+        } else {
+          backendQuestion.fileUpload = 0;
+          backendQuestion.fileName = '';
+          backendQuestion.filePath = '';
+        }
       } else {
         backendQuestion.answer = q.answer;
       }
@@ -981,7 +1104,7 @@ const saveCluesAndQuestions = async () => {
     const payload = {
       id: rangeId.value,
       clues: clues.value.map((c, i) => ({
-        title: c.title,
+        title: convertImagesToRelativePaths(c.title),
         fileName: c.fileName,
         filePath: c.filePath,
         sort: i + 1

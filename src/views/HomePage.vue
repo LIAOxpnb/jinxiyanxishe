@@ -166,16 +166,18 @@
           :key="tool.id"
           class="tool-card"
           @click="downloadTool(tool)"
+          :title="tool.name"
         >
           <div class="tool-icon">
             <el-icon size="32"><Document /></el-icon>
           </div>
           <div class="tool-info">
-            <h4 class="tool-name">{{ tool.name }}</h4>
-            <p class="tool-desc">点击下载工具文件</p>
+            <h4 class="tool-name" :title="tool.name">{{ tool.name }}</h4>
+            <p class="tool-remarks" v-if="tool.remarks" :title="tool.remarks">{{ tool.remarks }}</p>
+            <p class="tool-desc" v-else>点击下载工具文件</p>
           </div>
           <div class="tool-action">
-            <el-button type="primary" size="small" :icon="Download">
+            <el-button type="primary" size="small" :icon="Download" @click.stop="downloadTool(tool)">
               下载
             </el-button>
           </div>
@@ -1112,11 +1114,12 @@ onMounted(() => {
   max-width: 1800px;
   margin: 0 auto;
   padding: 60px 20px;
+  background: transparent;
 }
 
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 24px;
   margin-top: 40px;
 }
@@ -1124,14 +1127,17 @@ onMounted(() => {
 .tool-card {
   background: #fff;
   border-radius: 12px;
-  padding: 24px;
+  padding: 20px 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
   border: 1px solid #e8eaf6;
+  text-align: center;
+  min-height: 200px;
 }
 
 .tool-card:hover {
@@ -1155,20 +1161,32 @@ onMounted(() => {
 .tool-info {
   flex: 1;
   min-width: 0;
+  width: 100%;
 }
 
 .tool-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: #1f2937;
   margin: 0 0 4px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.tool-remarks {
+  font-size: 13px;
+  color: #909399;
+  margin: 0;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tool-desc {
-  font-size: 14px;
+  font-size: 13px;
   color: #6b7280;
   margin: 0;
 }
@@ -1183,13 +1201,25 @@ onMounted(() => {
 }
 
 /* 响应式适配 */
+@media screen and (max-width: 1400px) {
+  .tools-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  .tools-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media screen and (max-width: 768px) {
   .tools-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .tool-card {
-    padding: 20px;
+    padding: 16px;
   }
   
   .tool-icon {
@@ -1198,7 +1228,13 @@ onMounted(() => {
   }
   
   .tool-name {
-    font-size: 15px;
+    font-size: 14px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .tools-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
