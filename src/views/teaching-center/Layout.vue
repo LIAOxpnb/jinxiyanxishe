@@ -36,6 +36,10 @@
           <el-menu-item index="/teaching-center/range">
             <template #title>靶场管理</template>
           </el-menu-item>
+          <el-menu-item index="/teaching-center/adjustment-data">
+            <template #title>调证数据</template>
+          </el-menu-item>
+         
         </el-menu-item-group>
 
         <el-menu-item-group title="---帮助---">

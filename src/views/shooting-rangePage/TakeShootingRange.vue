@@ -39,6 +39,23 @@
       <div v-show="activeTab === 'questions'" class="question-panel">
         <div class="left-panel">
           <h4>研判内容</h4>
+          <div class="progress-info">
+            <span>已答进度</span>
+            <span>{{ answeredCount }}/{{ totalQuestionCount }}</span>
+          </div>
+          
+          <!-- 调证和核查按钮 -->
+          <div class="action-buttons">
+            <div class="action-btn" @click="openInvestigateDialog">
+              <el-icon :size="24"><Search /></el-icon>
+              <span>我要调证</span>
+            </div>
+            <div class="action-btn" @click="openOfflineCheckDialog">
+              <el-icon :size="24"><ChatLineSquare /></el-icon>
+              <span>线下核查</span>
+            </div>
+          </div>
+          
           <div class="status-info">
             <div class="status-item">
               <span>已答</span>
@@ -131,6 +148,193 @@
         </div>
       </div>
     </div>
+    
+    <!-- 调证弹窗 -->
+    <el-dialog 
+      v-model="investigateDialogVisible" 
+      title="调证" 
+      width="700px"
+      :close-on-click-modal="false"
+    >
+      <template #header>
+        <div class="dialog-header">
+          <span class="dialog-title">调证</span>
+          <!-- <span class="dialog-subtitle">【备注】抽屉组件</span> -->
+        </div>
+      </template>
+      
+      <div class="investigate-content">
+        <div class="quota-info">
+          您共有{{ investigateQuota.total }}次调证机会，还剩{{ investigateQuota.remaining }}次
+        </div>
+        
+        <el-form label-width="80px">
+          <el-form-item label="数据类型" required>
+            <el-select v-model="investigateForm.dataType" placeholder="选择" style="width: 100%">
+              <el-option v-for="item in dataTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="筛选项">
+            <div class="filter-list">
+              <div v-for="(filter, index) in investigateForm.filters" :key="index" class="filter-row">
+                <el-select v-model="filter.field" placeholder="选择" style="width: 150px">
+                  <el-option v-for="item in filterFieldOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+                <el-input v-if="filter.inputType === 'input'" v-model="filter.value" placeholder="" style="width: 200px; margin-left: 10px" />
+                <el-select v-else v-model="filter.value" placeholder="选择" style="width: 200px; margin-left: 10px">
+                  <el-option v-for="item in filter.options || []" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+                <el-button :icon="Delete" circle @click="removeInvestigateFilter(index)" style="margin-left: 10px" />
+              </div>
+              <div class="add-filter" @click="addInvestigateFilter">
+                <el-icon><Plus /></el-icon>
+                <span class="add-note">【备注】支持重复添加选项，比如多个账户筛选</span>
+              </div>
+            </div>
+          </el-form-item>
+        </el-form>
+        
+        <el-button type="primary" @click="submitInvestigate">立即调证</el-button>
+        
+        <div class="history-section">
+          <div class="history-title">历史调证</div>
+          <div class="history-list">
+            <div v-for="item in investigateHistory" :key="item.id" class="history-item">
+              <el-link type="primary">{{ item.fileName }}</el-link>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="investigateDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+    
+    <!-- 线下核查弹窗 -->
+    <el-dialog 
+      v-model="offlineCheckDialogVisible" 
+      title="线下核查" 
+      width="900px"
+      :close-on-click-modal="false"
+    >
+      <template #header>
+        <div class="dialog-header">
+          <span class="dialog-title">线下核查</span>
+          <span class="dialog-subtitle">【备注】抽屉组件</span>
+        </div>
+      </template>
+      
+      <el-tabs v-model="offlineCheckTab">
+        <el-tab-pane label="核查" name="check">
+          <div class="offline-check-content">
+            <div class="quota-info">
+              您共有{{ offlineCheckQuota.total }}次核查条数，还剩{{ offlineCheckQuota.remaining }}次
+            </div>
+            
+            <!-- 第一步：选择数据类型和筛选条件 -->
+            <div v-if="offlineCheckStep === 1">
+              <el-form label-width="80px">
+                <el-form-item label="数据类型" required>
+                  <el-select v-model="offlineCheckForm.dataType" placeholder="选择" style="width: 100%">
+                    <el-option v-for="item in dataTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </el-form-item>
+                
+                <el-form-item label="转出账户">
+                  <div class="filter-list">
+                    <div v-for="(filter, index) in offlineCheckForm.filters" :key="index" class="filter-row">
+                      <el-select v-model="filter.field" placeholder="选择" style="width: 150px">
+                        <el-option v-for="item in filterFieldOptions" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                      <el-input v-if="filter.inputType === 'input'" v-model="filter.value" placeholder="" style="width: 200px; margin-left: 10px" />
+                      <el-select v-else v-model="filter.value" placeholder="选择" style="width: 200px; margin-left: 10px">
+                        <el-option v-for="item in filter.options || []" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                      <el-button :icon="Delete" circle @click="removeOfflineCheckFilter(index)" style="margin-left: 10px" />
+                    </div>
+                    <div class="add-filter-btn" @click="addOfflineCheckFilter">
+                      <el-icon><Plus /></el-icon>
+                    </div>
+                  </div>
+                </el-form-item>
+              </el-form>
+              
+              <div class="step-actions">
+                <el-button type="primary" @click="offlineCheckStep = 2">下一步</el-button>
+              </div>
+            </div>
+            
+            <!-- 第二步：选择核查数据 -->
+            <div v-if="offlineCheckStep === 2">
+              <el-table 
+                :data="offlineCheckData" 
+                style="width: 100%"
+                @selection-change="handleOfflineCheckSelectionChange"
+              >
+                <el-table-column type="selection" width="55" />
+                <el-table-column prop="fromAccount" label="转出账户" />
+                <el-table-column prop="amount" label="金额" />
+                <el-table-column prop="toAccount" label="转入账户" />
+                <el-table-column prop="type" label="类型" />
+                <el-table-column prop="transactionTime" label="交易时间" />
+              </el-table>
+              
+              <div class="table-footer">
+                <el-pagination 
+                  v-model:current-page="offlineCheckPagination.page" 
+                  v-model:page-size="offlineCheckPagination.size"
+                  :page-sizes="[10, 20, 50, 100]" 
+                  layout="total, prev, pager, next, sizes" 
+                  :total="offlineCheckPagination.total"
+                />
+              </div>
+              
+              <div class="step-actions">
+                <el-button @click="offlineCheckStep = 1">上一步</el-button>
+                <el-button type="primary" @click="submitOfflineCheck">立即核查</el-button>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane label="历史记录" name="history">
+          <div class="offline-check-history">
+            <div class="quota-info">
+              您共有{{ offlineCheckQuota.total }}次核查条数，还剩{{ offlineCheckQuota.remaining }}次
+            </div>
+            
+            <el-table :data="offlineCheckHistoryData" style="width: 100%">
+              <el-table-column prop="fromAccount" label="转出账户" />
+              <el-table-column prop="amount" label="金额" />
+              <el-table-column prop="toAccount" label="转入账户" />
+              <el-table-column prop="type" label="类型" />
+              <el-table-column prop="transactionTime" label="交易时间" />
+              <el-table-column prop="checkResult" label="核查结果">
+                <template #default="scope">
+                  <el-link type="primary">{{ scope.row.checkResult || '核查结果' }}</el-link>
+                </template>
+              </el-table-column>
+            </el-table>
+            
+            <div class="table-footer">
+              <el-pagination 
+                v-model:current-page="offlineCheckHistoryPagination.page" 
+                v-model:page-size="offlineCheckHistoryPagination.size"
+                :page-sizes="[10, 20, 50, 100]" 
+                layout="total, prev, pager, next, sizes" 
+                :total="offlineCheckHistoryPagination.total"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+      
+      <template #footer>
+        <el-button @click="offlineCheckDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -138,7 +342,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Paperclip, Document, CircleCheck, CircleClose } from '@element-plus/icons-vue';
+import { Paperclip, Document, CircleCheck, CircleClose, Search, ChatLineSquare, Delete, Plus } from '@element-plus/icons-vue';
 import { getShootingRangeDetail, getShootingRangeClues, getShootingRangeQuestions, submitShootingRangePaper, submitShootingRangeRecord, getShootingRangeResult } from '@/api/shooting-range.js';
 import { saveRecordUseTime, getRecordUseTime } from '@/api/exams.js';
 import { previewFile } from '@/api/common/PreviewFile.js';
@@ -171,6 +375,53 @@ const isRangeSubmitted = ref(false); // 是否已交卷
 const isRestoringAnswers = ref(false); // 是否正在恢复答案
 const isInitializing = ref(true); // 添加初始化标志
 const changedQuestionIds = new Set(); // 追踪已变更的题目ID
+
+// 调证弹窗相关状态
+const investigateDialogVisible = ref(false);
+const investigateQuota = reactive({ total: 5, remaining: 4 });
+const investigateForm = reactive({
+  dataType: '',
+  filters: [
+    { field: '', value: '', inputType: 'input' },
+    { field: '', value: '', inputType: 'select', options: [] }
+  ]
+});
+const investigateHistory = ref([
+  { id: 1, fileName: '类型+账户名+调证时间.CSV' }
+]);
+
+// 线下核查弹窗相关状态
+const offlineCheckDialogVisible = ref(false);
+const offlineCheckTab = ref('check');
+const offlineCheckStep = ref(1);
+const offlineCheckQuota = reactive({ total: 5, remaining: 4 });
+const offlineCheckForm = reactive({
+  dataType: '',
+  filters: [
+    { field: '', value: '', inputType: 'input' },
+    { field: '', value: '', inputType: 'select', options: [] }
+  ]
+});
+const offlineCheckData = ref([]);
+const offlineCheckSelectedData = ref([]);
+const offlineCheckPagination = reactive({ page: 1, size: 10, total: 102 });
+const offlineCheckHistoryData = ref([]);
+const offlineCheckHistoryPagination = reactive({ page: 1, size: 10, total: 102 });
+
+// 数据类型选项
+const dataTypeOptions = ref([
+  { label: '银行流水', value: 'bank' },
+  { label: '通讯记录', value: 'communication' },
+  { label: '交易记录', value: 'transaction' }
+]);
+
+// 筛选字段选项
+const filterFieldOptions = ref([
+  { label: '转出账户', value: 'fromAccount' },
+  { label: '转入账户', value: 'toAccount' },
+  { label: '金额', value: 'amount' },
+  { label: '类型', value: 'type' }
+]);
 
 let timerInterval = null;
 let saveTimeInterval = null; // 保存时间的定时器
@@ -350,6 +601,167 @@ const nextQuestion = () => {
     currentQuestionIndex.value++;
     showFeedback.value = false; // 切换题目时隐藏反馈
   }
+};
+
+// 打开调证弹窗
+const openInvestigateDialog = () => {
+  investigateDialogVisible.value = true;
+};
+
+// 打开线下核查弹窗
+const openOfflineCheckDialog = () => {
+  offlineCheckDialogVisible.value = true;
+  offlineCheckStep.value = 1;
+  offlineCheckTab.value = 'check';
+  // 加载模拟数据
+  loadOfflineCheckData();
+};
+
+// 添加调证筛选条件
+const addInvestigateFilter = () => {
+  investigateForm.filters.push({ field: '', value: '', inputType: 'input' });
+};
+
+// 移除调证筛选条件
+const removeInvestigateFilter = (index) => {
+  if (investigateForm.filters.length > 1) {
+    investigateForm.filters.splice(index, 1);
+  }
+};
+
+// 提交调证
+const submitInvestigate = () => {
+  if (!investigateForm.dataType) {
+    ElMessage.warning('请选择数据类型');
+    return;
+  }
+  
+  // 获取数据类型名称
+  const dataTypeLabel = dataTypeOptions.value.find(item => item.value === investigateForm.dataType)?.label || '';
+  
+  // 获取筛选条件中的账户名
+  const accountNames = investigateForm.filters
+    .filter(f => f.field && f.value)
+    .map(f => f.value)
+    .join('_') || '全部';
+  
+  // 生成文件名：类型+账户名+调证时间
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const fileName = `${dataTypeLabel}+${accountNames}+${timestamp}.CSV`;
+  
+  // TODO: 实际应该调用后端API获取数据，这里先用模拟数据生成CSV
+  // 模拟CSV数据
+  const csvData = generateMockCSVData(dataTypeLabel);
+  
+  // 下载CSV文件
+  downloadCSV(csvData, fileName);
+  
+  // 更新剩余次数
+  investigateQuota.remaining--;
+  
+  // 添加到历史记录
+  investigateHistory.value.unshift({
+    id: Date.now(),
+    fileName: fileName
+  });
+  
+  ElMessage.success('调证成功，文件已下载');
+};
+
+// 生成模拟CSV数据
+const generateMockCSVData = (dataType) => {
+  // CSV表头
+  const headers = ['转出账户', '金额', '转入账户', '类型', '交易时间'];
+  
+  // 模拟数据行
+  const rows = Array.from({ length: 10 }, (_, i) => [
+    `账户${i + 1}`,
+    (Math.random() * 1000).toFixed(2),
+    `账户${i + 100}`,
+    dataType,
+    new Date().toLocaleString()
+  ]);
+  
+  // 组合CSV内容
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.join(','))
+  ].join('\n');
+  
+  return csvContent;
+};
+
+// 下载CSV文件
+const downloadCSV = (csvContent, fileName) => {
+  // 添加BOM以支持中文
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', fileName);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  URL.revokeObjectURL(url);
+};
+
+// 添加线下核查筛选条件
+const addOfflineCheckFilter = () => {
+  offlineCheckForm.filters.push({ field: '', value: '', inputType: 'input' });
+};
+
+// 移除线下核查筛选条件
+const removeOfflineCheckFilter = (index) => {
+  if (offlineCheckForm.filters.length > 1) {
+    offlineCheckForm.filters.splice(index, 1);
+  }
+};
+
+// 加载线下核查数据
+const loadOfflineCheckData = () => {
+  // 模拟数据
+  offlineCheckData.value = Array.from({ length: 8 }, (_, i) => ({
+    id: i + 1,
+    fromAccount: '转出账户',
+    amount: '122.99',
+    toAccount: '转出账户',
+    type: '银行流水',
+    transactionTime: 'YY-MM-DD HH:mm:ss'
+  }));
+  
+  offlineCheckHistoryData.value = Array.from({ length: 4 }, (_, i) => ({
+    id: i + 1,
+    fromAccount: '转出账户',
+    amount: '122.99',
+    toAccount: '转出账户',
+    type: '银行流水',
+    transactionTime: 'YY-MM-DD HH:mm:ss',
+    checkResult: '核查结果'
+  }));
+};
+
+// 线下核查选择变化
+const handleOfflineCheckSelectionChange = (selection) => {
+  offlineCheckSelectedData.value = selection;
+};
+
+// 提交线下核查
+const submitOfflineCheck = () => {
+  if (offlineCheckSelectedData.value.length === 0) {
+    ElMessage.warning('请选择要核查的数据');
+    return;
+  }
+  // TODO: 调用实际的核查API
+  ElMessage.success('核查请求已提交');
+  offlineCheckQuota.remaining -= offlineCheckSelectedData.value.length;
+  offlineCheckDialogVisible.value = false;
 };
 
 // 处理附件更新
@@ -1178,4 +1590,149 @@ onMounted(async () => {
 .clue-content :deep(img) { max-width: 100%; height: auto; display: block; margin: 10px 0; border-radius: 4px; }
 .pagination-controls { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 20px; border-top: 1px solid #dcdfe6; }
 .question-progress { font-size: 16px; font-weight: 500; color: #606266; }
+
+/* 进度信息 */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #606266;
+}
+
+/* 调证和核查按钮 */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #409eff;
+  font-size: 15px;
+}
+.action-btn:hover {
+  background-color: #ecf5ff;
+}
+.action-btn .el-icon {
+  color: #409eff;
+}
+
+/* 弹窗样式 */
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+.dialog-subtitle {
+  font-size: 14px;
+  color: #e6a23c;
+}
+
+/* 调证弹窗内容 */
+.investigate-content {
+  padding: 10px 0;
+}
+.quota-info {
+  background-color: #fdf6ec;
+  color: #e6a23c;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+.filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+}
+.add-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #606266;
+  font-size: 14px;
+}
+.add-filter .el-icon {
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+  padding: 4px;
+}
+.add-note {
+  color: #e6a23c;
+  font-size: 13px;
+}
+.add-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.add-filter-btn .el-icon {
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+  padding: 4px;
+  color: #606266;
+}
+.history-section {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+.history-title {
+  font-size: 14px;
+  color: #909399;
+  margin-bottom: 12px;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-item {
+  font-size: 14px;
+}
+
+/* 线下核查弹窗内容 */
+.offline-check-content {
+  padding: 10px 0;
+}
+.step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ebeef5;
+}
+.table-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.offline-check-history {
+  padding: 10px 0;
+}
 </style>

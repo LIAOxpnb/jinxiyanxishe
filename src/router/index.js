@@ -41,6 +41,7 @@ const routes = [
       { path: 'exams', name: 'TeachingCenter-Exams', component: () => import('../views/teaching-center/exams/Exams.vue') },
       { path: 'question-bank', name: 'TeachingCenter-QuestionBank', component: () => import('../views/teaching-center/question_bank/QuestionBank.vue') },
       { path: 'range', name: 'TeachingCenter-ShootingRange', component: () => import('../views/teaching-center/range/ShootingRange.vue') },
+      { path: 'adjustment-data', name: 'TeachingCenter-AdjustmentData', component: () => import('../views/teaching-center/adjustment-data/AdjustmentData.vue') },
       { path: 'courseware', name: 'TeachingCenter-Courseware', component: () => import('../views/teaching-center/courseware/CoursewareManagement.vue') },
       { path: 'help', name: 'TeachingCenter-Help', component: () => import('../views/teaching-center/Help.vue') }
     ]
@@ -110,6 +111,7 @@ const routes = [
   { path: '/teaching-center/range/rangesetup/:id', name: 'TeachingCenter-ShootingRangeSetup', component: () => import('../views/teaching-center/range/RangeSetup.vue') },
   { path: '/teaching-center/range/rangemarking/:id', name: 'TeachingCenter-ShootingRangeMarking', component: () => import('../views/teaching-center/range/RangeMarking.vue') },
   { path: '/teaching-center/range/rangegradepaper/:id', name: 'TeachingCenter-ShootingRangeGradePaper', component: () => import('../views/teaching-center/range/RangeGradePaper.vue') },
+  { path: '/teaching-center/adjustment-data/manage/:id', name: 'TeachingCenter-DataManagement', component: () => import('../views/teaching-center/adjustment-data/DataManagement.vue') },
   
   // 系统管理 - 全屏独立页面（证书设置等，不显示左侧导航栏）
   { path: '/system-management/certificate-settings', name: 'System-CertificateSettings', component: () => import('../views/system-management/CertificateManagement/CertificateSettings.vue') },

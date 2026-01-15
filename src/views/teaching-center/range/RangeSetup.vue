@@ -79,6 +79,42 @@
               
               <el-divider />
 
+              <div class="section-title">数据关联</div>
+              <el-empty v-if="dataRelations.length === 0" description="暂无数据关联" :image-size="80" />
+              <div v-for="(dataRelation, index) in dataRelations" :key="dataRelation.uid" class="item-card">
+                 <div class="card-header">
+                    <span class="item-index">数据关联 {{ index + 1 }}</span>
+                    <div class="item-actions">
+                        <el-button :icon="Edit" circle plain size="small" @click="editDataRelation(index)" title="编辑" />
+                        <el-button :icon="Delete" circle plain type="danger" size="small" @click="deleteDataRelation(index)" title="删除" />
+                    </div>
+                 </div>
+                 <div class="item-body">
+                    <div class="item-info">
+                        <div class="info-row">
+                            <span class="label">数据名称：</span>
+                            <span class="value">{{ dataRelation.dataName }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">错证次数：</span>
+                            <span class="value">{{ dataRelation.errorCount }} 次</span>
+                            <span class="hint">{{ dataRelation.errorCount === 0 ? '错证次数不限制' : '' }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">核查次数：</span>
+                            <span class="value">{{ dataRelation.checkCount }} 次</span>
+                            <span class="hint">{{ dataRelation.checkCount === 0 ? '核查次数不限制' : '' }}</span>
+                        </div>
+                        <div class="info-row" v-if="dataRelation.relatedData && dataRelation.relatedData.length > 0">
+                            <span class="label">关联数据：</span>
+                            <span class="value">{{ dataRelation.relatedData.join('、') }}</span>
+                        </div>
+                    </div>
+                 </div>
+              </div>
+              
+              <el-divider />
+
               <div class="section-title">靶场试题</div>
               <div v-for="(question, index) in questionList" :key="question.uid" class="item-card">
                 <div class="card-header">
@@ -380,6 +416,38 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="dataSettingDialogVisible" title="数据设置" width="500px">
+      <el-form :model="dataSettingForm" label-width="80px">
+        <el-form-item label="数据名称">
+          <el-input v-model="dataSettingForm.dataName" placeholder="请输入数据名称" maxlength="50" show-word-limit />
+        </el-form-item>
+        <el-form-item label="错证次数">
+          <el-input-number v-model="dataSettingForm.errorCount" :min="0" controls-position="right" style="width: 120px;" />
+          <span style="margin-left: 10px;">次</span>
+          <span style="margin-left: 10px; color: #999;">*值为0时不限制</span>
+        </el-form-item>
+        <el-form-item label="核查条数">
+          <el-input-number v-model="dataSettingForm.checkCount" :min="0" controls-position="right" style="width: 120px;" />
+          <span style="margin-left: 10px;">次</span>
+          <span style="margin-left: 10px; color: #999;">*值为0时不限制</span>
+        </el-form-item>
+        <el-form-item label="关联数据">
+          <el-select v-model="dataSettingForm.relatedData" placeholder="选择数据" multiple style="width: 100%;">
+            <el-option label="数据选项1" value="option1" />
+            <el-option label="数据选项2" value="option2" />
+            <el-option label="数据选项3" value="option3" />
+          </el-select>
+          <div style="margin-top: 8px; color: #f56c6c; font-size: 14px;">
+            【开发备注】数据支持多选
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dataSettingDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitDataSetting">确定</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog 
       v-model="userSelectionDialogVisible" 
       title="选择人员" 
@@ -539,6 +607,7 @@ const loading = ref(true);
 const rangeId = ref(null);
 const shootingRangeDetails = ref(null);
 const clues = ref([]);
+const dataRelations = ref([]);
 const questionList = ref([]);
 const editDialogVisible = ref(false);
 const editQuestionId = ref(null);
@@ -591,6 +660,14 @@ const batchScoreForm = ref({
 const setPassingScoreDialogVisible = ref(false);
 const passingScoreForm = ref({
   qualified: 60
+});
+
+// 数据设置相关
+const dataSettingDialogVisible = ref(false);
+const dataSettingForm = ref({
+  errorCount: 5,
+  checkCount: 5,
+  relatedData: []
 });
 
 const totalQuestions = computed(() => questionList.value.length);
@@ -665,6 +742,7 @@ const saveDraft = () => {
     
     const draftData = {
       clues: clues.value,
+      dataRelations: dataRelations.value,
       questionList: questionList.value,
       timestamp: Date.now()
     };
@@ -699,6 +777,7 @@ const loadDraft = () => {
           }
         ).then(() => {
           if (draftData.clues) clues.value = draftData.clues;
+          if (draftData.dataRelations) dataRelations.value = draftData.dataRelations;
           if (draftData.questionList) questionList.value = draftData.questionList;
           lastSaveTime.value = savedTime;
           hasUnsavedChanges.value = false;
@@ -752,7 +831,7 @@ const formatSaveTime = (time) => {
 
 // 监听数据变化，自动保存
 watch(
-  [clues, questionList],
+  [clues, dataRelations, questionList],
   () => {
     debouncedSave();
   },
@@ -995,6 +1074,9 @@ const fetchShootingRangeDetails = async () => {
         }))
       );
       
+      // 加载数据关联
+      dataRelations.value = res.data.dataRelations || [];
+      
       // 转换题目
       const transformedQuestions = transformBackendToFrontend(res.data.questions);
       questionList.value = await Promise.all(
@@ -1109,6 +1191,7 @@ const saveCluesAndQuestions = async () => {
         filePath: c.filePath,
         sort: i + 1
       })),
+      dataRelations: dataRelations.value,
       questions: backendQuestions,
     };
 
@@ -1125,6 +1208,8 @@ const saveCluesAndQuestions = async () => {
 const handleAddItem = (command) => {
   if (command === 'ADD_CLUE') {
     addClue();
+  } else if (command === 'DATA_SETTING') {
+    openDataSettingDialog();
   } else if (['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_IN_BLANK', 'ESSAY'].includes(command)) {
     addQuestion(command);
   }
@@ -1264,6 +1349,84 @@ const handleScoreCommands = (command) => {
 const openPassingScoreDialog = () => {
   passingScoreForm.value.qualified = shootingRangeDetails.value?.qualified || 60;
   setPassingScoreDialogVisible.value = true;
+};
+
+const openDataSettingDialog = () => {
+  // 初始化表单数据为新增模式
+  dataSettingForm.value = {
+    uid: null,
+    dataName: '数据名称',
+    errorCount: 5,
+    checkCount: 5,
+    relatedData: [],
+    isEdit: false,
+    editIndex: undefined
+  };
+  dataSettingDialogVisible.value = true;
+};
+
+const editDataRelation = (index) => {
+  const dataRelation = dataRelations.value[index];
+  dataSettingForm.value = {
+    uid: dataRelation.uid,
+    dataName: dataRelation.dataName,
+    errorCount: dataRelation.errorCount,
+    checkCount: dataRelation.checkCount,
+    relatedData: [...dataRelation.relatedData],
+    isEdit: true,
+    editIndex: index
+  };
+  dataSettingDialogVisible.value = true;
+};
+
+const deleteDataRelation = (index) => {
+  ElMessageBox.confirm('确定要删除这个数据关联吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    dataRelations.value.splice(index, 1);
+    ElMessage.success('删除成功');
+    debouncedSave();
+  }).catch(() => {});
+};
+
+const submitDataSetting = async () => {
+  try {
+    const newDataRelation = {
+      uid: dataSettingForm.value.uid || uuidv4(),
+      dataName: dataSettingForm.value.dataName || '数据名称',
+      errorCount: dataSettingForm.value.errorCount,
+      checkCount: dataSettingForm.value.checkCount,
+      relatedData: dataSettingForm.value.relatedData
+    };
+    
+    if (dataSettingForm.value.isEdit && dataSettingForm.value.editIndex !== undefined) {
+      // 编辑模式
+      dataRelations.value[dataSettingForm.value.editIndex] = newDataRelation;
+    } else {
+      // 新增模式
+      dataRelations.value.push(newDataRelation);
+    }
+    
+    // 更新本地数据
+    if (shootingRangeDetails.value) {
+      shootingRangeDetails.value.dataRelations = dataRelations.value;
+    }
+    
+    // TODO: 这里需要调用后端API保存数据设置
+    // await saveDataSetting({
+    //   id: rangeId.value,
+    //   dataRelations: dataRelations.value
+    // });
+    
+    dataSettingDialogVisible.value = false;
+    ElMessage.success('数据设置成功！');
+    debouncedSave();
+  } catch (error) {
+    console.error('数据设置失败:', error);
+    ElMessage.error('数据设置失败');
+  }
 };
 
 const submitBatchScores = async () => {
@@ -2350,5 +2513,37 @@ onBeforeUnmount(() => {
   width: 100vw !important;
   height: 100vh !important;
   background-color: #fff;
+}
+
+/* 数据关联卡片样式 */
+.item-info {
+  padding: 8px 0;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-row .label {
+  color: #606266;
+  font-weight: 500;
+  min-width: 90px;
+}
+
+.info-row .value {
+  color: #303133;
+}
+
+.info-row .hint {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 8px;
 }
 </style>
