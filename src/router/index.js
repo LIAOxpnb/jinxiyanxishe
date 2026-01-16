@@ -85,6 +85,22 @@ const routes = [
     ]
   },
 
+  // -----------------------------------------------------------
+  // 实时监控大屏模块 (全屏沉浸式，不显示 Header 和侧边栏)
+  // -----------------------------------------------------------
+  { 
+    path: '/visual/exam-monitor', 
+    name: 'Visual-ExamMonitor', 
+    component: () => import('@/views/visual/ExamMonitor.vue'),
+    meta: { fullScreen: true, title: '考试实时监控' } 
+  },
+  { 
+    path: '/visual/range-monitor', 
+    name: 'Visual-RangeMonitor', 
+    component: () => import('@/views/visual/RangeMonitor.vue'),
+    meta: { fullScreen: true, title: '靶场实战监控' } 
+  },
+
   // 顶级页面 (懒加载)
   { path: '/ClassRoomPage', name: 'Courses', component: () => import('../views/class-room/ClassRoomPage.vue') },
   { path: '/classroom/details/:id', name: 'ClassRoomDetails', component: () => import('../views/class-room/ClassRoomDetails.vue') },

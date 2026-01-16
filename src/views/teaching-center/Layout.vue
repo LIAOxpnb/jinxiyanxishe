@@ -42,6 +42,15 @@
          
         </el-menu-item-group>
 
+        <el-menu-item-group title="---实时监控---">
+          <el-menu-item index="/visual/exam-monitor">
+            <template #title>考试实时大屏</template>
+          </el-menu-item>
+          <el-menu-item index="/visual/range-monitor">
+            <template #title>靶场实战大屏</template>
+          </el-menu-item>
+        </el-menu-item-group>
+
         <el-menu-item-group title="---帮助---">
           <el-menu-item index="/teaching-center/help">
             <template #title>帮助文档</template>

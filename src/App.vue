@@ -1,10 +1,12 @@
 <template>
   <div id="app">
-    <Header v-if="!isLoginPage" />
-    <main class="app-main-content" :class="{ 'login-page': isLoginPage }">
+    <Header v-if="!isLoginPage && !route.meta.fullScreen" />
+    
+    <main class="app-main-content" :class="{ 'login-page': isLoginPage, 'full-screen-main': route.meta.fullScreen }">
       <router-view />
     </main>
-    <PageFooter v-if="!isLoginPage" />
+    
+    <PageFooter v-if="!isLoginPage && !route.meta.fullScreen" />
     <!-- 水印组件 -->
     <Watermark v-if="showWatermark" :text="watermarkText" />
     <!-- 全局图片预览组件 -->
@@ -175,6 +177,14 @@ html, body {
 
 .app-main-content.login-page {
   padding: 0;
+}
+
+/* 确保大屏容器能填满整个视口 */
+.full-screen-main {
+  height: 100vh !important;
+  width: 100vw !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 /* 全屏固定页面容器 - 用于设置、阅卷等页面，防止双重滚动条 */
